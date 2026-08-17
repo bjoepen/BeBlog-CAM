@@ -47,7 +47,9 @@
   <main class="workspace">
     <section class="viewport">
       {#if importSummary}
-        <GeometryView summary={importSummary} />
+        {#key importSummary.kind}
+          <GeometryView summary={importSummary} />
+        {/key}
         <div class="view-label">Part → Stock → WCS</div>
       {:else}
         <div class="empty-state">
