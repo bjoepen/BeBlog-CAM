@@ -32,9 +32,6 @@ fn ensure_dev_icon() {
 }
 
 fn main() {
-    // Tauri's generated context expects the default desktop icon even when
-    // bundling is disabled. Keep development and CI reproducible until the
-    // final BeBlog CAM application icon is committed as a proper icon set.
     ensure_dev_icon();
     tauri_build::build();
 
@@ -61,6 +58,14 @@ fn main() {
         .compile("beblog_occt_bridge");
 
     println!("cargo:rustc-link-search=native={}", lib.display());
+
+    // macOS: make the development binary self-sufficient. Tauri/Node may not
+    // preserve DYLD_LIBRARY_PATH consistently when spawning the Rust binary,
+    // so embed the OCCT install directory as an rpath in native builds.
+    if cfg!(target_os = "macos") {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib.display());
+    }
+
     for library in [
         "TKernel", "TKMath", "TKG2d", "TKG3d", "TKGeomBase", "TKBRep",
         "TKGeomAlgo", "TKTopAlgo", "TKMesh", "TKXSBase", "TKDE", "TKDESTEP",
