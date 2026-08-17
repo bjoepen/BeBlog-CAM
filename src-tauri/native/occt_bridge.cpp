@@ -3,10 +3,12 @@
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <Poly_Triangle.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Reader.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopLoc_Location.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -27,6 +29,11 @@ std::size_t count_subshapes(const TopoDS_Shape& shape, TopAbs_ShapeEnum type) {
   std::size_t count = 0;
   for (TopExp_Explorer it(shape, type); it.More(); it.Next()) ++count;
   return count;
+}
+void append_point(std::ostringstream& out, const gp_Pnt& point, bool& first) {
+  if (!first) out << ',';
+  out << std::setprecision(12) << point.X() << ',' << point.Y() << ',' << point.Z();
+  first = false;
 }
 }
 
@@ -67,11 +74,22 @@ extern "C" char* beblog_occt_inspect_step(const char* path) {
 
     BRepMesh_IncrementalMesh mesher(shape, 0.1, false, 0.5, true);
     std::size_t triangles=0;
+    std::ostringstream mesh_vertices;
+    bool first_vertex=true;
     if (mesher.IsDone()) {
       for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) {
         TopLoc_Location location;
         auto triangulation=BRep_Tool::Triangulation(TopoDS::Face(it.Current()),location);
-        if (!triangulation.IsNull()) triangles += static_cast<std::size_t>(triangulation->NbTriangles());
+        if (triangulation.IsNull()) continue;
+        triangles += static_cast<std::size_t>(triangulation->NbTriangles());
+        const gp_Trsf transform = location.Transformation();
+        for (int index=1; index<=triangulation->NbTriangles(); ++index) {
+          int n1=0,n2=0,n3=0;
+          triangulation->Triangle(index).Get(n1,n2,n3);
+          append_point(mesh_vertices, triangulation->Node(n1).Transformed(transform), first_vertex);
+          append_point(mesh_vertices, triangulation->Node(n2).Transformed(transform), first_vertex);
+          append_point(mesh_vertices, triangulation->Node(n3).Transformed(transform), first_vertex);
+        }
       }
     }
 
@@ -82,6 +100,7 @@ extern "C" char* beblog_occt_inspect_step(const char* path) {
         << "},{\"kind\":\"cone\",\"count\":"<<cones<<"},{\"kind\":\"sphere\",\"count\":"<<spheres
         << "},{\"kind\":\"torus\",\"count\":"<<tori<<"},{\"kind\":\"other\",\"count\":"<<other<<"}]"
         << ",\"cylinderRadiiMm\":["<<radii.str()<<"],\"displayTriangles\":"<<triangles
+        << ",\"displayVertices\":["<<mesh_vertices.str()<<"]"
         << ",\"note\":\"Exaktes BRep bleibt Source of Truth; Triangulation dient ausschließlich der Darstellung.\"}";
     return copy_result(out.str());
   } catch (...) {
