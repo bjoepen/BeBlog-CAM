@@ -8,7 +8,10 @@
     "dev": "vite",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "native:setup": "bash scripts/build-occt-macos.sh",
+    "native:dev": "bash scripts/dev-macos-native.sh",
+    "native:test": "bash scripts/test-occt-macos.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
