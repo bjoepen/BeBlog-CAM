@@ -42,7 +42,7 @@
   <main class="workspace">
     <section class="viewport">
       {#if importSummary}
-        {#key `${importSummary.kind}:${stock.width}:${stock.height}:${stock.thickness}:${placement.horizontal}:${placement.vertical}:${placement.offsetX}:${placement.offsetY}:${placement.offsetZ}`}
+        {#key `${importSummary.kind}:${stock.width}:${stock.height}:${stock.thickness}:${placement.horizontal}:${placement.vertical}:${placement.offsetX}:${placement.offsetY}:${placement.offsetZ}:${wcs.x}:${wcs.y}:${wcs.z}`}
           <GeometryView summary={importSummary} {stock} {placement} {wcs} />
         {/key}
         <div class="view-label">Aufspannebene → Rohling → Bauteil → WCS</div>
@@ -75,7 +75,7 @@
           <div class="placement-grid"><button class:active={wcs.x === 'left'} onclick={() => wcs = {...wcs, x:'left'}}>Links</button><button class:active={wcs.x === 'center'} onclick={() => wcs = {...wcs, x:'center'}}>Mitte</button><button class:active={wcs.x === 'right'} onclick={() => wcs = {...wcs, x:'right'}}>Rechts</button></div>
           <div class="placement-grid"><button class:active={wcs.y === 'front'} onclick={() => wcs = {...wcs, y:'front'}}>Vorne</button><button class:active={wcs.y === 'center'} onclick={() => wcs = {...wcs, y:'center'}}>Mitte</button><button class:active={wcs.y === 'back'} onclick={() => wcs = {...wcs, y:'back'}}>Hinten</button></div>
           <div class="placement-grid two"><button class:active={wcs.z === 'top'} onclick={() => wcs = {...wcs, z:'top'}}>Oberseite</button><button class:active={wcs.z === 'bottom'} onclick={() => wcs = {...wcs, z:'bottom'}}>Unterseite</button></div>
-          <p class="note">Das ist der Punkt, den du später am realen Rohling antastest. Maschinenkoordinaten entstehen separat durch die Referenzfahrt.</p>
+          <p class="note"><strong>Aktiver WCS:</strong> {wcs.x === 'left' ? 'links' : wcs.x === 'center' ? 'mittig' : 'rechts'} · {wcs.y === 'front' ? 'vorne' : wcs.y === 'center' ? 'mittig' : 'hinten'} · {wcs.z === 'top' ? 'Oberseite' : 'Unterseite'}. Das ist der Punkt, den du später am realen Rohling antastest. Maschinenkoordinaten entstehen separat durch die Referenzfahrt.</p>
         </div>
       {:else}
         <p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p><h2>Noch ruhig.</h2><p>Dieser Bereich wird in einem späteren Build aktiviert.</p>
