@@ -37,7 +37,9 @@
   <main class="workspace">
     <section class="viewport">
       {#if importSummary}
-        {#key importSummary.kind}<GeometryView summary={importSummary} {stock} {placement} {wcs} />{/key}
+        {#key `${importSummary.kind}:${stock.width}:${stock.height}:${stock.thickness}`}
+          <GeometryView summary={importSummary} {stock} {placement} {wcs} />
+        {/key}
         <div class="view-label">Aufspannebene → Rohling → Bauteil → WCS</div>
       {:else}
         <div class="empty-state"><div class="mark">B</div><h1>Ein Bauteil öffnen</h1><p>STEP für exakte 3D-BRep-Geometrie oder DXF für planare Konturen.</p><button class="primary" onclick={importPart}>STEP oder DXF öffnen</button></div>
