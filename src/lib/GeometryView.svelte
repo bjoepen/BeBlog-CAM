@@ -22,6 +22,8 @@
   let lastX = 0;
   let lastY = 0;
   let stepPath = '';
+  let inputEvents = 0;
+  let lastInput = 'keins';
 
   function isFinitePoint(point: Projected): boolean {
     return Number.isFinite(point.x) && Number.isFinite(point.y);
@@ -95,12 +97,8 @@
   function meshPath(source: ImportSummary, view: ViewState): string {
     const values = source.brep?.displayVertices ?? [];
     if (source.kind !== 'step' || values.length < 9) return '';
-
     const projected: Projected[] = [];
-    for (let i = 0; i + 2 < values.length; i += 3) {
-      projected.push(project3d(values[i], values[i + 1], values[i + 2], view));
-    }
-
+    for (let i = 0; i + 2 < values.length; i += 3) projected.push(project3d(values[i], values[i + 1], values[i + 2], view));
     const map = fit(projected, view.zoom, view.panX, view.panY);
     const fitted = projected.map(map).filter(isFinitePoint);
     let path = '';
@@ -111,52 +109,41 @@
     return path;
   }
 
+  function markInput(name: string) { inputEvents += 1; lastInput = name; }
+
   function pointerDown(event: PointerEvent) {
     if (summary.kind !== 'step') return;
+    markInput(`pointerdown ${event.button}`);
     dragging = true;
     dragMode = event.shiftKey || event.button === 1 || event.button === 2 ? 'pan' : 'orbit';
-    lastX = event.clientX;
-    lastY = event.clientY;
+    lastX = event.clientX; lastY = event.clientY;
     viewport.setPointerCapture(event.pointerId);
   }
 
   function pointerMove(event: PointerEvent) {
     if (!dragging || summary.kind !== 'step') return;
-    const dx = event.clientX - lastX;
-    const dy = event.clientY - lastY;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    if (dragMode === 'orbit') {
-      yaw += dx * 0.008;
-      pitch = Math.max(-1.5, Math.min(1.5, pitch - dy * 0.008));
-    } else {
-      panX += dx;
-      panY -= dy;
-    }
+    const dx = event.clientX - lastX; const dy = event.clientY - lastY;
+    lastX = event.clientX; lastY = event.clientY;
+    if (dragMode === 'orbit') { yaw += dx * 0.008; pitch = Math.max(-1.5, Math.min(1.5, pitch - dy * 0.008)); }
+    else { panX += dx; panY -= dy; }
   }
 
   function pointerUp(event: PointerEvent) {
+    if (summary.kind === 'step') markInput('pointerup');
     dragging = false;
     if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
   }
 
   function wheel(event: WheelEvent) {
     if (summary.kind !== 'step') return;
-    event.preventDefault();
+    event.preventDefault(); markInput('wheel');
     zoom = Math.max(0.35, Math.min(4, zoom * Math.exp(-event.deltaY * 0.0012)));
   }
 
-  function contextMenu(event: MouseEvent) {
-    if (summary.kind === 'step') event.preventDefault();
-  }
-
-  function resetView() {
-    yaw = -0.72;
-    pitch = 0.48;
-    zoom = 1;
-    panX = 0;
-    panY = 0;
-  }
+  function contextMenu(event: MouseEvent) { if (summary.kind === 'step') { event.preventDefault(); markInput('contextmenu'); } }
+  function rotate(delta: number) { yaw += delta; markInput('button orbit'); }
+  function zoomBy(factor: number) { zoom = Math.max(0.35, Math.min(4, zoom * factor)); markInput('button zoom'); }
+  function resetView() { yaw = -0.72; pitch = 0.48; zoom = 1; panX = 0; panY = 0; markInput('reset'); }
 
   onMount(() => {
     const el = viewport;
@@ -166,14 +153,10 @@
     el.addEventListener('pointercancel', pointerUp);
     el.addEventListener('wheel', wheel, { passive: false });
     el.addEventListener('contextmenu', contextMenu);
-
     return () => {
-      el.removeEventListener('pointerdown', pointerDown);
-      el.removeEventListener('pointermove', pointerMove);
-      el.removeEventListener('pointerup', pointerUp);
-      el.removeEventListener('pointercancel', pointerUp);
-      el.removeEventListener('wheel', wheel);
-      el.removeEventListener('contextmenu', contextMenu);
+      el.removeEventListener('pointerdown', pointerDown); el.removeEventListener('pointermove', pointerMove);
+      el.removeEventListener('pointerup', pointerUp); el.removeEventListener('pointercancel', pointerUp);
+      el.removeEventListener('wheel', wheel); el.removeEventListener('contextmenu', contextMenu);
     };
   });
 
@@ -182,18 +165,10 @@
 </script>
 
 <div class="geometry-view">
-  <svg
-    bind:this={viewport}
-    viewBox={`0 0 ${width} ${height}`}
-    role="img"
-    aria-label={`${summary.kind.toUpperCase()} Geometrievorschau`}
-    class:interactive={summary.kind === 'step'}
-  >
+  <svg bind:this={viewport} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${summary.kind.toUpperCase()} Geometrievorschau`} class:interactive={summary.kind === 'step'}>
     <rect x="22" y="22" width={width - 44} height={height - 44} rx="24" class="stock-frame" />
     {#if summary.kind === 'dxf' && dxfPaths.length}
-      {#each dxfPaths as pathData}
-        <path d={pathData} class="dxf-geometry" />
-      {/each}
+      {#each dxfPaths as pathData}<path d={pathData} class="dxf-geometry" />{/each}
     {:else if summary.kind === 'step' && stepPath}
       <path d={stepPath} class="step-geometry" />
     {:else}
@@ -203,10 +178,15 @@
   <div class="geometry-caption">
     <strong>{summary.kind === 'step' ? 'BRep · Display-Mesh' : '2D-Geometrie'}</strong>
     {#if summary.kind === 'step'}
-      <span class="view-help">Ziehen: Orbit · ⇧ Ziehen/Rechtsklick: Pan · Scrollen: Zoom · <button onclick={resetView}>Ansicht zurücksetzen</button></span>
-    {:else}
-      <span>{summary.planarGeometry?.curves.length ?? 0} Konturelemente</span>
-    {/if}
+      <span class="view-help">
+        <button onclick={() => rotate(-0.3)} title="Diagnose: links drehen">↺</button>
+        <button onclick={() => rotate(0.3)} title="Diagnose: rechts drehen">↻</button>
+        <button onclick={() => zoomBy(1.2)} title="Diagnose: vergrößern">+</button>
+        <button onclick={() => zoomBy(1 / 1.2)} title="Diagnose: verkleinern">−</button>
+        <button onclick={resetView}>Reset</button>
+        <span class="diagnostic">Input {inputEvents} · {lastInput}</span>
+      </span>
+    {:else}<span>{summary.planarGeometry?.curves.length ?? 0} Konturelemente</span>{/if}
   </div>
 </div>
 
@@ -221,6 +201,7 @@
   .waiting { fill: #737b77; font-size: 24px; pointer-events: none; }
   .geometry-caption { display: flex; justify-content: space-between; gap: 24px; padding: 0 5% 12px; color: #65706b; font-size: 12px; align-items: center; }
   .geometry-caption strong { color: #34423c; font-weight: 600; }
-  .view-help { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-  .view-help button { border: 0; background: transparent; padding: 0; color: #34423c; text-decoration: underline; cursor: pointer; font: inherit; }
+  .view-help { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+  .view-help button { min-width: 28px; border: 1px solid rgba(52,66,60,.22); border-radius: 7px; background: rgba(255,255,255,.55); padding: 3px 7px; color: #34423c; cursor: pointer; font: inherit; }
+  .diagnostic { font-variant-numeric: tabular-nums; opacity: .78; }
 </style>
