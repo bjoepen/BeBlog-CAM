@@ -13,6 +13,12 @@
   let wcs: WorkCoordinateSystem = { ...defaultWcs };
   let error = '';
 
+  function updateStock(field: 'width' | 'height' | 'thickness', event: Event) {
+    const value = Number((event.currentTarget as HTMLInputElement).value);
+    if (!Number.isFinite(value) || value <= 0) return;
+    stock = { ...stock, [field]: value };
+  }
+
   async function importPart() {
     error = '';
     const path = await open({ multiple: false, directory: false, filters: [{ name: 'CAD', extensions: ['step', 'stp', 'dxf'] }] });
@@ -26,7 +32,7 @@
 </script>
 
 <div class="app-shell">
-  <header class="topbar"><div><strong>BeBlog CAM</strong><span class="build">001C</span></div><div class="project-name">{importSummary?.fileName ?? 'Neues Projekt'}</div></header>
+  <header class="topbar"><div><strong>BeBlog CAM</strong><span class="build">001D</span></div><div class="project-name">{importSummary?.fileName ?? 'Neues Projekt'}</div></header>
   <aside class="rail" aria-label="Arbeitsablauf">{#each steps as step, i}<button class:active={activeStep === step} onclick={() => (activeStep = step)}><span>{String(i + 1).padStart(2, '0')}</span>{step}</button>{/each}</aside>
   <main class="workspace">
     <section class="viewport">
@@ -48,7 +54,11 @@
         {:else}<p>Das CAD-Modell ist die Quelle für alle späteren Bearbeitungen.</p><button class="primary" onclick={importPart}>Bauteil öffnen</button>{/if}
       {:else if activeStep === 'Rohling'}
         <p class="eyebrow">02 · Rohling</p><h2>Rohling</h2>
-        <label>Breite <input type="number" bind:value={stock.width} /> mm</label><label>Länge <input type="number" bind:value={stock.height} /> mm</label><label>Dicke <input type="number" bind:value={stock.thickness} /> mm</label>
+        <label>Breite <input type="number" min="0.1" step="0.1" value={stock.width} oninput={(e) => updateStock('width', e)} /> mm</label>
+        <label>Länge <input type="number" min="0.1" step="0.1" value={stock.height} oninput={(e) => updateStock('height', e)} /> mm</label>
+        <label>Dicke <input type="number" min="0.1" step="0.1" value={stock.thickness} oninput={(e) => updateStock('thickness', e)} /> mm</label>
+        <p class="note">001D Gate 2: Rohlingabmessungen aktualisieren die Geometrie live. Bauteilposition und WCS folgen erst nach diesem Gate.</p>
+
         <div class="placement-section"><p class="placement-title">Bauteil im Rohling</p>
           <div class="placement-grid"><button class:active={placement.horizontal === 'left'} onclick={() => placement = {...placement, horizontal:'left'}}>Links</button><button class:active={placement.horizontal === 'center'} onclick={() => placement = {...placement, horizontal:'center'}}>Zentriert</button><button class:active={placement.horizontal === 'right'} onclick={() => placement = {...placement, horizontal:'right'}}>Rechts</button></div>
           <div class="placement-grid"><button class:active={placement.vertical === 'front'} onclick={() => placement = {...placement, vertical:'front'}}>Vorne</button><button class:active={placement.vertical === 'center'} onclick={() => placement = {...placement, vertical:'center'}}>Mitte</button><button class:active={placement.vertical === 'back'} onclick={() => placement = {...placement, vertical:'back'}}>Hinten</button></div>
