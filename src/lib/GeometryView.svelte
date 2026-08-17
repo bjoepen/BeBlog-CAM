@@ -149,7 +149,17 @@
   }
 
   $: dxfPaths = planarPaths();
-  $: stepPath = meshPath();
+  $: {
+    // Explicit dependencies are intentional. Svelte's legacy reactive analysis
+    // does not follow values read only inside meshPath()/project3d()/fit().
+    yaw;
+    pitch;
+    zoom;
+    panX;
+    panY;
+    summary;
+    stepPath = meshPath();
+  }
 </script>
 
 <div class="geometry-view">
