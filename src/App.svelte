@@ -2,13 +2,14 @@
   import { invoke } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
   import GeometryView from './lib/GeometryView.svelte';
-  import type { ImportSummary, StockDefinition } from './lib/types';
-  import { defaultStock } from './lib/types';
+  import type { ImportSummary, StockDefinition, PartPlacement } from './lib/types';
+  import { defaultStock, defaultPartPlacement } from './lib/types';
 
   const steps = ['Bauteil', 'Rohling', 'Werkzeuge', 'Bearbeiten', 'Prüfen', 'Fräsen'];
   let activeStep = 'Bauteil';
   let importSummary: ImportSummary | null = null;
   let stock: StockDefinition = { ...defaultStock };
+  let placement: PartPlacement = { ...defaultPartPlacement };
   let error = '';
 
   async function importPart() {
@@ -21,6 +22,7 @@
     if (!path || Array.isArray(path)) return;
     try {
       importSummary = await invoke<ImportSummary>('inspect_import', { path });
+      placement = { ...defaultPartPlacement };
     } catch (e) {
       error = String(e);
     }
@@ -48,7 +50,7 @@
     <section class="viewport">
       {#if importSummary}
         {#key importSummary.kind}
-          <GeometryView summary={importSummary} {stock} />
+          <GeometryView summary={importSummary} {stock} {placement} />
         {/key}
         <div class="view-label">Aufspannebene → Rohling → Bauteil → WCS</div>
       {:else}
@@ -90,15 +92,31 @@
         {/if}
       {:else if activeStep === 'Rohling'}
         <p class="eyebrow">02 · Rohling</p>
-        <h2>Abmessungen</h2>
+        <h2>Rohling</h2>
         <label>Breite <input type="number" bind:value={stock.width} /> mm</label>
         <label>Länge <input type="number" bind:value={stock.height} /> mm</label>
         <label>Dicke <input type="number" bind:value={stock.thickness} /> mm</label>
-        <details><summary>Position im Rohling</summary>
-          <label>X-Rand <input type="number" bind:value={stock.offsetX} /> mm</label>
-          <label>Y-Rand <input type="number" bind:value={stock.offsetY} /> mm</label>
-        </details>
-        <p class="note">Die Aufspannebene ist nur die räumliche Referenz. BeBlog CAM modelliert keine Maschine.</p>
+
+        <div class="placement-section">
+          <p class="placement-title">Bauteil im Rohling</p>
+          <div class="placement-grid" aria-label="Horizontale Position">
+            <button class:active={placement.horizontal === 'left'} onclick={() => placement = {...placement, horizontal:'left'}}>Links</button>
+            <button class:active={placement.horizontal === 'center'} onclick={() => placement = {...placement, horizontal:'center'}}>Zentriert</button>
+            <button class:active={placement.horizontal === 'right'} onclick={() => placement = {...placement, horizontal:'right'}}>Rechts</button>
+          </div>
+          <div class="placement-grid" aria-label="Position in Y">
+            <button class:active={placement.vertical === 'front'} onclick={() => placement = {...placement, vertical:'front'}}>Vorne</button>
+            <button class:active={placement.vertical === 'center'} onclick={() => placement = {...placement, vertical:'center'}}>Mitte</button>
+            <button class:active={placement.vertical === 'back'} onclick={() => placement = {...placement, vertical:'back'}}>Hinten</button>
+          </div>
+          <details>
+            <summary>Feinkorrektur</summary>
+            <label>X <input type="number" bind:value={placement.offsetX} /> mm</label>
+            <label>Y <input type="number" bind:value={placement.offsetY} /> mm</label>
+            <label>Z <input type="number" bind:value={placement.offsetZ} /> mm</label>
+          </details>
+        </div>
+        <p class="note">Aufspannebene und XYZ sind nur Referenzen. Rohling und Bauteillage sind echte CAM-Geometrie.</p>
       {:else}
         <p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p>
         <h2>Noch ruhig.</h2>
