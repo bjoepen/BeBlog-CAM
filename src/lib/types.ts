@@ -1,17 +1,43 @@
 export type ImportKind = 'step' | 'dxf';
 
-export interface Bounds3 {
-  min: [number, number, number];
-  max: [number, number, number];
+export interface Point2 { x: number; y: number; }
+export interface Bounds2 { min: Point2; max: Point2; }
+
+export type Curve2 =
+  | { kind: 'line'; start: Point2; end: Point2 }
+  | { kind: 'circle'; center: Point2; radius: number }
+  | { kind: 'arc'; center: Point2; radius: number; startAngleDeg: number; endAngleDeg: number }
+  | { kind: 'polyline'; points: Point2[]; closed: boolean }
+  | { kind: 'unsupported'; sourceKind: string };
+
+export interface PlanarGeometry {
+  curves: Curve2[];
+  bounds?: Bounds2;
+}
+
+export interface SurfaceTypeSummary { kind: string; count: number; }
+export interface BrepSummary {
+  backend: string;
+  nativeBrep: boolean;
+  faces: number;
+  edges: number;
+  vertices: number;
+  solids: number;
+  surfaceTypes: SurfaceTypeSummary[];
+  cylinderRadiiMm: number[];
+  displayTriangles: number;
+  displayVertices: number[];
+  note: string;
 }
 
 export interface ImportSummary {
   kind: ImportKind;
   fileName: string;
   backend: string;
-  status: 'ready' | 'adapter-pending';
+  status: 'ready' | 'native-adapter-pending';
   entities: Record<string, number>;
-  bounds?: Bounds3;
+  planarGeometry?: PlanarGeometry;
+  brep?: BrepSummary;
   note?: string;
 }
 
