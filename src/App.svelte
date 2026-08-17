@@ -48,9 +48,9 @@
     <section class="viewport">
       {#if importSummary}
         {#key importSummary.kind}
-          <GeometryView summary={importSummary} />
+          <GeometryView summary={importSummary} {stock} />
         {/key}
-        <div class="view-label">Part → Stock → WCS</div>
+        <div class="view-label">Aufspannebene → Rohling → Bauteil → WCS</div>
       {:else}
         <div class="empty-state">
           <div class="mark">B</div>
@@ -98,6 +98,7 @@
           <label>X-Rand <input type="number" bind:value={stock.offsetX} /> mm</label>
           <label>Y-Rand <input type="number" bind:value={stock.offsetY} /> mm</label>
         </details>
+        <p class="note">Die Aufspannebene ist nur die räumliche Referenz. BeBlog CAM modelliert keine Maschine.</p>
       {:else}
         <p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p>
         <h2>Noch ruhig.</h2>
