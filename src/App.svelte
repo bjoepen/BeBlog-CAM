@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
+  import GeometryView from './lib/GeometryView.svelte';
   import type { ImportSummary, StockDefinition } from './lib/types';
   import { defaultStock } from './lib/types';
 
@@ -30,7 +31,7 @@
   <header class="topbar">
     <div>
       <strong>BeBlog CAM</strong>
-      <span class="build">001A</span>
+      <span class="build">001B</span>
     </div>
     <div class="project-name">{importSummary?.fileName ?? 'Neues Projekt'}</div>
   </header>
@@ -46,16 +47,13 @@
   <main class="workspace">
     <section class="viewport">
       {#if importSummary}
-        <div class="part-card">
-          <div class="stock-shape"></div>
-          <div class="part-shape">{importSummary.kind.toUpperCase()}</div>
-        </div>
+        <GeometryView summary={importSummary} />
         <div class="view-label">Part → Stock → WCS</div>
       {:else}
         <div class="empty-state">
           <div class="mark">B</div>
           <h1>Ein Bauteil öffnen</h1>
-          <p>STEP für 3D-Geometrie oder DXF für planare Konturen.</p>
+          <p>STEP für exakte 3D-BRep-Geometrie oder DXF für planare Konturen.</p>
           <button class="primary" onclick={importPart}>STEP oder DXF öffnen</button>
         </div>
       {/if}
@@ -70,7 +68,7 @@
             <div><dt>Datei</dt><dd>{importSummary.fileName}</dd></div>
             <div><dt>Format</dt><dd>{importSummary.kind.toUpperCase()}</dd></div>
             <div><dt>Backend</dt><dd>{importSummary.backend}</dd></div>
-            <div><dt>Status</dt><dd>{importSummary.status === 'ready' ? 'Bereit' : 'Adapter folgt'}</dd></div>
+            <div><dt>Status</dt><dd>{importSummary.status === 'ready' ? 'Bereit' : 'Native STEP-Anbindung fehlt in diesem Build'}</dd></div>
           </dl>
           {#if Object.keys(importSummary.entities).length}
             <div class="entity-list">
@@ -78,6 +76,9 @@
                 <span>{name} <b>{count}</b></span>
               {/each}
             </div>
+          {/if}
+          {#if importSummary.brep?.cylinderRadiiMm.length}
+            <p class="note">Erkannte Zylinderradien: {importSummary.brep.cylinderRadiiMm.map((r) => `${r.toFixed(3)} mm`).join(' · ')}</p>
           {/if}
           {#if importSummary.note}<p class="note">{importSummary.note}</p>{/if}
           <button class="secondary" onclick={importPart}>Anderes Bauteil öffnen</button>
