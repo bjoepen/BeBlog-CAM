@@ -4,6 +4,8 @@
   export let summary: ImportSummary;
 
   type Projected = { x: number; y: number };
+  type ViewState = { yaw: number; pitch: number; zoom: number; panX: number; panY: number };
+
   const width = 1000;
   const height = 650;
   const pad = 54;
@@ -17,12 +19,13 @@
   let dragMode: 'orbit' | 'pan' = 'orbit';
   let lastX = 0;
   let lastY = 0;
+  let stepPath = '';
 
   function isFinitePoint(point: Projected): boolean {
     return Number.isFinite(point.x) && Number.isFinite(point.y);
   }
 
-  function fit(points: Projected[]): (point: Projected) => Projected {
+  function fit(points: Projected[], viewZoom = 1, viewPanX = 0, viewPanY = 0): (point: Projected) => Projected {
     const finite = points.filter(isFinitePoint);
     if (!finite.length) return (point) => point;
     const xs = finite.map((p) => p.x);
@@ -31,10 +34,10 @@
     const minY = Math.min(...ys), maxY = Math.max(...ys);
     const spanX = Math.max(maxX - minX, 1e-9);
     const spanY = Math.max(maxY - minY, 1e-9);
-    const scale = Math.min((width - 2 * pad) / spanX, (height - 2 * pad) / spanY) * zoom;
+    const scale = Math.min((width - 2 * pad) / spanX, (height - 2 * pad) / spanY) * viewZoom;
     const usedW = spanX * scale, usedH = spanY * scale;
-    const ox = (width - usedW) / 2 + panX;
-    const oy = (height - usedH) / 2 + panY;
+    const ox = (width - usedW) / 2 + viewPanX;
+    const oy = (height - usedH) / 2 + viewPanY;
     return (point) => ({ x: ox + (point.x - minX) * scale, y: height - (oy + (point.y - minY) * scale) });
   }
 
@@ -77,9 +80,9 @@
     }).filter(Boolean);
   }
 
-  function project3d(x: number, y: number, z: number): Projected {
-    const cy = Math.cos(yaw), sy = Math.sin(yaw);
-    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  function project3d(x: number, y: number, z: number, view: ViewState): Projected {
+    const cy = Math.cos(view.yaw), sy = Math.sin(view.yaw);
+    const cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
     const x1 = x * cy - y * sy;
     const y1 = x * sy + y * cy;
     const y2 = y1 * cp - z * sp;
@@ -87,14 +90,16 @@
     return { x: x1, y: z2 + y2 * 0.08 };
   }
 
-  function meshPath(): string {
-    const values = summary.brep?.displayVertices ?? [];
-    if (values.length < 9) return '';
+  function meshPath(source: ImportSummary, view: ViewState): string {
+    const values = source.brep?.displayVertices ?? [];
+    if (source.kind !== 'step' || values.length < 9) return '';
+
     const projected: Projected[] = [];
     for (let i = 0; i + 2 < values.length; i += 3) {
-      projected.push(project3d(values[i], values[i + 1], values[i + 2]));
+      projected.push(project3d(values[i], values[i + 1], values[i + 2], view));
     }
-    const map = fit(projected);
+
+    const map = fit(projected, view.zoom, view.panX, view.panY);
     const fitted = projected.map(map).filter(isFinitePoint);
     let path = '';
     for (let i = 0; i + 2 < fitted.length; i += 3) {
@@ -149,17 +154,7 @@
   }
 
   $: dxfPaths = planarPaths();
-  $: {
-    // Explicit dependencies are intentional. Svelte's legacy reactive analysis
-    // does not follow values read only inside meshPath()/project3d()/fit().
-    yaw;
-    pitch;
-    zoom;
-    panX;
-    panY;
-    summary;
-    stepPath = meshPath();
-  }
+  $: stepPath = meshPath(summary, { yaw, pitch, zoom, panX, panY });
 </script>
 
 <div class="geometry-view">
