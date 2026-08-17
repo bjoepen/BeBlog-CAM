@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OCCT_TAG="${OCCT_TAG:-V8_0_0}"
+OCCT_TAG="${OCCT_TAG:-V8_0_1}"
 ROOT="${BEBLOG_OCCT_WORKDIR:-$PWD/.cache/occt}"
 SRC="$ROOT/src"
 BUILD="$ROOT/build"
