@@ -8,7 +8,7 @@ pub struct Point2 {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum Curve2 {
     Line { start: Point2, end: Point2 },
     Circle { center: Point2, radius: f64 },
