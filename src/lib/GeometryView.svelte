@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Curve2, ImportSummary, Point2 } from './types';
 
   export let summary: ImportSummary;
@@ -10,6 +11,7 @@
   const height = 650;
   const pad = 54;
 
+  let viewport: SVGSVGElement;
   let yaw = -0.72;
   let pitch = 0.48;
   let zoom = 1;
@@ -115,7 +117,7 @@
     dragMode = event.shiftKey || event.button === 1 || event.button === 2 ? 'pan' : 'orbit';
     lastX = event.clientX;
     lastY = event.clientY;
-    (event.currentTarget as Element).setPointerCapture(event.pointerId);
+    viewport.setPointerCapture(event.pointerId);
   }
 
   function pointerMove(event: PointerEvent) {
@@ -135,14 +137,17 @@
 
   function pointerUp(event: PointerEvent) {
     dragging = false;
-    const target = event.currentTarget as Element;
-    if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
+    if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
   }
 
   function wheel(event: WheelEvent) {
     if (summary.kind !== 'step') return;
     event.preventDefault();
     zoom = Math.max(0.35, Math.min(4, zoom * Math.exp(-event.deltaY * 0.0012)));
+  }
+
+  function contextMenu(event: MouseEvent) {
+    if (summary.kind === 'step') event.preventDefault();
   }
 
   function resetView() {
@@ -153,22 +158,36 @@
     panY = 0;
   }
 
+  onMount(() => {
+    const el = viewport;
+    el.addEventListener('pointerdown', pointerDown);
+    el.addEventListener('pointermove', pointerMove);
+    el.addEventListener('pointerup', pointerUp);
+    el.addEventListener('pointercancel', pointerUp);
+    el.addEventListener('wheel', wheel, { passive: false });
+    el.addEventListener('contextmenu', contextMenu);
+
+    return () => {
+      el.removeEventListener('pointerdown', pointerDown);
+      el.removeEventListener('pointermove', pointerMove);
+      el.removeEventListener('pointerup', pointerUp);
+      el.removeEventListener('pointercancel', pointerUp);
+      el.removeEventListener('wheel', wheel);
+      el.removeEventListener('contextmenu', contextMenu);
+    };
+  });
+
   $: dxfPaths = planarPaths();
   $: stepPath = meshPath(summary, { yaw, pitch, zoom, panX, panY });
 </script>
 
 <div class="geometry-view">
   <svg
+    bind:this={viewport}
     viewBox={`0 0 ${width} ${height}`}
     role="img"
     aria-label={`${summary.kind.toUpperCase()} Geometrievorschau`}
     class:interactive={summary.kind === 'step'}
-    onpointerdown={pointerDown}
-    onpointermove={pointerMove}
-    onpointerup={pointerUp}
-    onpointercancel={pointerUp}
-    onwheel={wheel}
-    oncontextmenu={(event) => summary.kind === 'step' && event.preventDefault()}
   >
     <rect x="22" y="22" width={width - 44} height={height - 44} rx="24" class="stock-frame" />
     {#if summary.kind === 'dxf' && dxfPaths.length}
@@ -193,13 +212,13 @@
 
 <style>
   .geometry-view { width: min(92%, 1100px); margin: auto; }
-  svg { width: 100%; display: block; touch-action: none; }
+  svg { width: 100%; display: block; touch-action: none; user-select: none; }
   svg.interactive { cursor: grab; }
   svg.interactive:active { cursor: grabbing; }
   .stock-frame { fill: rgba(255,255,255,.18); stroke: rgba(60,66,63,.16); stroke-width: 2; }
   .dxf-geometry { fill: none; stroke: #26342e; stroke-width: 2.4; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
-  .step-geometry { fill: rgba(72,94,84,.18); stroke: rgba(38,52,46,.48); stroke-width: .75; vector-effect: non-scaling-stroke; }
-  .waiting { fill: #737b77; font-size: 24px; }
+  .step-geometry { fill: rgba(72,94,84,.18); stroke: rgba(38,52,46,.48); stroke-width: .75; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .waiting { fill: #737b77; font-size: 24px; pointer-events: none; }
   .geometry-caption { display: flex; justify-content: space-between; gap: 24px; padding: 0 5% 12px; color: #65706b; font-size: 12px; align-items: center; }
   .geometry-caption strong { color: #34423c; font-weight: 600; }
   .view-help { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
