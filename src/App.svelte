@@ -31,7 +31,7 @@
   <header class="topbar">
     <div>
       <strong>BeBlog CAM</strong>
-      <span class="build">001B</span>
+      <span class="build">001C</span>
     </div>
     <div class="project-name">{importSummary?.fileName ?? 'Neues Projekt'}</div>
   </header>
