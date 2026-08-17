@@ -1,5 +1,7 @@
 mod domain;
+mod geometry;
 mod import;
+mod occt;
 
 use domain::Project;
 use import::ImportSummary;
