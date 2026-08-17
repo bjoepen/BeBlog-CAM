@@ -8,9 +8,15 @@
   const height = 650;
   const pad = 54;
 
+  function isFinitePoint(point: Projected): boolean {
+    return Number.isFinite(point.x) && Number.isFinite(point.y);
+  }
+
   function fit(points: Projected[]): (point: Projected) => Projected {
-    const xs = points.map((p) => p.x);
-    const ys = points.map((p) => p.y);
+    const finite = points.filter(isFinitePoint);
+    if (!finite.length) return (point) => point;
+    const xs = finite.map((p) => p.x);
+    const ys = finite.map((p) => p.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs);
     const minY = Math.min(...ys), maxY = Math.max(...ys);
     const spanX = Math.max(maxX - minX, 1e-9);
@@ -33,6 +39,7 @@
     if (curve.kind === 'arc') {
       let start = curve.startAngleDeg;
       let end = curve.endAngleDeg;
+      if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(curve.radius)) return [];
       while (end < start) end += 360;
       return Array.from({ length: 33 }, (_, i) => {
         const a = (start + ((end - start) * i) / 32) * Math.PI / 180;
@@ -42,20 +49,21 @@
     return [];
   }
 
-  function planarPath(): string {
+  function planarPaths(): string[] {
     const curves = summary.planarGeometry?.curves ?? [];
-    const samples = curves.map(sampleCurve);
-    const all = samples.flat();
-    if (!all.length) return '';
+    const sampled = curves.map((curve) => sampleCurve(curve).filter(isFinitePoint));
+    const all = sampled.flat();
+    if (!all.length) return [];
     const map = fit(all);
-    return samples.map((points, i) => {
+    return sampled.map((points, i) => {
       if (!points.length) return '';
-      const projected = points.map(map);
+      const projected = points.map(map).filter(isFinitePoint);
+      if (!projected.length) return '';
       const curve = curves[i];
       const commands = projected.map((p, j) => `${j === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
       const closed = curve.kind === 'circle' || (curve.kind === 'polyline' && curve.closed);
       return commands + (closed ? ' Z' : '');
-    }).join(' ');
+    }).filter(Boolean);
   }
 
   function meshPath(): string {
@@ -67,7 +75,7 @@
       projected.push({ x: x - y * 0.62, y: z + (x + y) * 0.26 });
     }
     const map = fit(projected);
-    const fitted = projected.map(map);
+    const fitted = projected.map(map).filter(isFinitePoint);
     let path = '';
     for (let i = 0; i + 2 < fitted.length; i += 3) {
       const a = fitted[i], b = fitted[i + 1], c = fitted[i + 2];
@@ -76,15 +84,17 @@
     return path;
   }
 
-  $: dxfPath = planarPath();
+  $: dxfPaths = planarPaths();
   $: stepPath = meshPath();
 </script>
 
 <div class="geometry-view">
   <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${summary.kind.toUpperCase()} Geometrievorschau`}>
     <rect x="22" y="22" width={width - 44} height={height - 44} rx="24" class="stock-frame" />
-    {#if summary.kind === 'dxf' && dxfPath}
-      <path d={dxfPath} class="dxf-geometry" />
+    {#if summary.kind === 'dxf' && dxfPaths.length}
+      {#each dxfPaths as pathData}
+        <path d={pathData} class="dxf-geometry" />
+      {/each}
     {:else if summary.kind === 'step' && stepPath}
       <path d={stepPath} class="step-geometry" />
     {:else}
@@ -92,8 +102,8 @@
     {/if}
   </svg>
   <div class="geometry-caption">
-    <strong>{summary.kind === 'step' ? 'BRep · Display-Mesh' : 'Planare BeBlog-Geometrie'}</strong>
-    <span>{summary.kind === 'step' && summary.brep ? `${summary.brep.displayTriangles} Dreiecke · nur Darstellung` : `${summary.planarGeometry?.curves.length ?? 0} Kurven`}</span>
+    <strong>{summary.kind === 'step' ? 'BRep · Display-Mesh' : '2D-Geometrie'}</strong>
+    <span>{summary.kind === 'step' && summary.brep ? `${summary.brep.displayTriangles} Dreiecke · nur Darstellung` : `${summary.planarGeometry?.curves.length ?? 0} Konturelemente`}</span>
   </div>
 </div>
 
@@ -101,7 +111,7 @@
   .geometry-view { width: min(92%, 1100px); margin: auto; }
   svg { width: 100%; display: block; }
   .stock-frame { fill: rgba(255,255,255,.18); stroke: rgba(60,66,63,.16); stroke-width: 2; }
-  .dxf-geometry { fill: none; stroke: #26342e; stroke-width: 2.4; vector-effect: non-scaling-stroke; }
+  .dxf-geometry { fill: none; stroke: #26342e; stroke-width: 2.4; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
   .step-geometry { fill: rgba(72,94,84,.18); stroke: rgba(38,52,46,.48); stroke-width: .75; vector-effect: non-scaling-stroke; }
   .waiting { fill: #737b77; font-size: 24px; }
   .geometry-caption { display: flex; justify-content: space-between; gap: 24px; padding: 0 5% 12px; color: #65706b; font-size: 12px; }
