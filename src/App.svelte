@@ -18,6 +18,11 @@
     if (!Number.isFinite(value) || value <= 0) return;
     stock = { ...stock, [field]: value };
   }
+  function updatePlacementOffset(field: 'offsetX' | 'offsetY' | 'offsetZ', event: Event) {
+    const value = Number((event.currentTarget as HTMLInputElement).value);
+    if (!Number.isFinite(value)) return;
+    placement = { ...placement, [field]: value };
+  }
 
   async function importPart() {
     error = '';
@@ -37,7 +42,7 @@
   <main class="workspace">
     <section class="viewport">
       {#if importSummary}
-        {#key `${importSummary.kind}:${stock.width}:${stock.height}:${stock.thickness}`}
+        {#key `${importSummary.kind}:${stock.width}:${stock.height}:${stock.thickness}:${placement.horizontal}:${placement.vertical}:${placement.offsetX}:${placement.offsetY}:${placement.offsetZ}`}
           <GeometryView summary={importSummary} {stock} {placement} {wcs} />
         {/key}
         <div class="view-label">Aufspannebene → Rohling → Bauteil → WCS</div>
@@ -59,12 +64,12 @@
         <label>Breite <input type="number" min="0.1" step="0.1" value={stock.width} oninput={(e) => updateStock('width', e)} /> mm</label>
         <label>Länge <input type="number" min="0.1" step="0.1" value={stock.height} oninput={(e) => updateStock('height', e)} /> mm</label>
         <label>Dicke <input type="number" min="0.1" step="0.1" value={stock.thickness} oninput={(e) => updateStock('thickness', e)} /> mm</label>
-        <p class="note">001D Gate 2: Rohlingabmessungen aktualisieren die Geometrie live. Bauteilposition und WCS folgen erst nach diesem Gate.</p>
+        <p class="note">Rohlingabmessungen und Bauteillage aktualisieren die Geometrie live.</p>
 
         <div class="placement-section"><p class="placement-title">Bauteil im Rohling</p>
           <div class="placement-grid"><button class:active={placement.horizontal === 'left'} onclick={() => placement = {...placement, horizontal:'left'}}>Links</button><button class:active={placement.horizontal === 'center'} onclick={() => placement = {...placement, horizontal:'center'}}>Zentriert</button><button class:active={placement.horizontal === 'right'} onclick={() => placement = {...placement, horizontal:'right'}}>Rechts</button></div>
           <div class="placement-grid"><button class:active={placement.vertical === 'front'} onclick={() => placement = {...placement, vertical:'front'}}>Vorne</button><button class:active={placement.vertical === 'center'} onclick={() => placement = {...placement, vertical:'center'}}>Mitte</button><button class:active={placement.vertical === 'back'} onclick={() => placement = {...placement, vertical:'back'}}>Hinten</button></div>
-          <details><summary>Feinkorrektur</summary><label>X <input type="number" bind:value={placement.offsetX} /> mm</label><label>Y <input type="number" bind:value={placement.offsetY} /> mm</label><label>Z <input type="number" bind:value={placement.offsetZ} /> mm</label></details>
+          <details><summary>Feinkorrektur</summary><label>X <input type="number" step="0.1" value={placement.offsetX} oninput={(e) => updatePlacementOffset('offsetX', e)} /> mm</label><label>Y <input type="number" step="0.1" value={placement.offsetY} oninput={(e) => updatePlacementOffset('offsetY', e)} /> mm</label><label>Z <input type="number" step="0.1" value={placement.offsetZ} oninput={(e) => updatePlacementOffset('offsetZ', e)} /> mm</label></details>
         </div>
         <div class="placement-section"><p class="placement-title">Werkstücknullpunkt / WCS</p>
           <div class="placement-grid"><button class:active={wcs.x === 'left'} onclick={() => wcs = {...wcs, x:'left'}}>Links</button><button class:active={wcs.x === 'center'} onclick={() => wcs = {...wcs, x:'center'}}>Mitte</button><button class:active={wcs.x === 'right'} onclick={() => wcs = {...wcs, x:'right'}}>Rechts</button></div>
