@@ -8,6 +8,16 @@
   const height = 650;
   const pad = 54;
 
+  let yaw = -0.72;
+  let pitch = 0.48;
+  let zoom = 1;
+  let panX = 0;
+  let panY = 0;
+  let dragging = false;
+  let dragMode: 'orbit' | 'pan' = 'orbit';
+  let lastX = 0;
+  let lastY = 0;
+
   function isFinitePoint(point: Projected): boolean {
     return Number.isFinite(point.x) && Number.isFinite(point.y);
   }
@@ -21,9 +31,10 @@
     const minY = Math.min(...ys), maxY = Math.max(...ys);
     const spanX = Math.max(maxX - minX, 1e-9);
     const spanY = Math.max(maxY - minY, 1e-9);
-    const scale = Math.min((width - 2 * pad) / spanX, (height - 2 * pad) / spanY);
+    const scale = Math.min((width - 2 * pad) / spanX, (height - 2 * pad) / spanY) * zoom;
     const usedW = spanX * scale, usedH = spanY * scale;
-    const ox = (width - usedW) / 2, oy = (height - usedH) / 2;
+    const ox = (width - usedW) / 2 + panX;
+    const oy = (height - usedH) / 2 + panY;
     return (point) => ({ x: ox + (point.x - minX) * scale, y: height - (oy + (point.y - minY) * scale) });
   }
 
@@ -66,13 +77,22 @@
     }).filter(Boolean);
   }
 
+  function project3d(x: number, y: number, z: number): Projected {
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const x1 = x * cy - y * sy;
+    const y1 = x * sy + y * cy;
+    const y2 = y1 * cp - z * sp;
+    const z2 = y1 * sp + z * cp;
+    return { x: x1, y: z2 + y2 * 0.08 };
+  }
+
   function meshPath(): string {
     const values = summary.brep?.displayVertices ?? [];
     if (values.length < 9) return '';
     const projected: Projected[] = [];
     for (let i = 0; i + 2 < values.length; i += 3) {
-      const x = values[i], y = values[i + 1], z = values[i + 2];
-      projected.push({ x: x - y * 0.62, y: z + (x + y) * 0.26 });
+      projected.push(project3d(values[i], values[i + 1], values[i + 2]));
     }
     const map = fit(projected);
     const fitted = projected.map(map).filter(isFinitePoint);
@@ -84,12 +104,67 @@
     return path;
   }
 
+  function pointerDown(event: PointerEvent) {
+    if (summary.kind !== 'step') return;
+    dragging = true;
+    dragMode = event.shiftKey || event.button === 1 || event.button === 2 ? 'pan' : 'orbit';
+    lastX = event.clientX;
+    lastY = event.clientY;
+    (event.currentTarget as Element).setPointerCapture(event.pointerId);
+  }
+
+  function pointerMove(event: PointerEvent) {
+    if (!dragging || summary.kind !== 'step') return;
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    if (dragMode === 'orbit') {
+      yaw += dx * 0.008;
+      pitch = Math.max(-1.5, Math.min(1.5, pitch - dy * 0.008));
+    } else {
+      panX += dx;
+      panY -= dy;
+    }
+  }
+
+  function pointerUp(event: PointerEvent) {
+    dragging = false;
+    const target = event.currentTarget as Element;
+    if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
+  }
+
+  function wheel(event: WheelEvent) {
+    if (summary.kind !== 'step') return;
+    event.preventDefault();
+    zoom = Math.max(0.35, Math.min(4, zoom * Math.exp(-event.deltaY * 0.0012)));
+  }
+
+  function resetView() {
+    yaw = -0.72;
+    pitch = 0.48;
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+  }
+
   $: dxfPaths = planarPaths();
   $: stepPath = meshPath();
 </script>
 
 <div class="geometry-view">
-  <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${summary.kind.toUpperCase()} Geometrievorschau`}>
+  <svg
+    viewBox={`0 0 ${width} ${height}`}
+    role="img"
+    aria-label={`${summary.kind.toUpperCase()} Geometrievorschau`}
+    class:interactive={summary.kind === 'step'}
+    onpointerdown={pointerDown}
+    onpointermove={pointerMove}
+    onpointerup={pointerUp}
+    onpointercancel={pointerUp}
+    onwheel={wheel}
+    oncontextmenu={(event) => summary.kind === 'step' && event.preventDefault()}
+  >
     <rect x="22" y="22" width={width - 44} height={height - 44} rx="24" class="stock-frame" />
     {#if summary.kind === 'dxf' && dxfPaths.length}
       {#each dxfPaths as pathData}
@@ -103,17 +178,25 @@
   </svg>
   <div class="geometry-caption">
     <strong>{summary.kind === 'step' ? 'BRep · Display-Mesh' : '2D-Geometrie'}</strong>
-    <span>{summary.kind === 'step' && summary.brep ? `${summary.brep.displayTriangles} Dreiecke · nur Darstellung` : `${summary.planarGeometry?.curves.length ?? 0} Konturelemente`}</span>
+    {#if summary.kind === 'step'}
+      <span class="view-help">Ziehen: Orbit · ⇧ Ziehen/Rechtsklick: Pan · Scrollen: Zoom · <button onclick={resetView}>Ansicht zurücksetzen</button></span>
+    {:else}
+      <span>{summary.planarGeometry?.curves.length ?? 0} Konturelemente</span>
+    {/if}
   </div>
 </div>
 
 <style>
   .geometry-view { width: min(92%, 1100px); margin: auto; }
-  svg { width: 100%; display: block; }
+  svg { width: 100%; display: block; touch-action: none; }
+  svg.interactive { cursor: grab; }
+  svg.interactive:active { cursor: grabbing; }
   .stock-frame { fill: rgba(255,255,255,.18); stroke: rgba(60,66,63,.16); stroke-width: 2; }
   .dxf-geometry { fill: none; stroke: #26342e; stroke-width: 2.4; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
   .step-geometry { fill: rgba(72,94,84,.18); stroke: rgba(38,52,46,.48); stroke-width: .75; vector-effect: non-scaling-stroke; }
   .waiting { fill: #737b77; font-size: 24px; }
-  .geometry-caption { display: flex; justify-content: space-between; gap: 24px; padding: 0 5% 12px; color: #65706b; font-size: 12px; }
+  .geometry-caption { display: flex; justify-content: space-between; gap: 24px; padding: 0 5% 12px; color: #65706b; font-size: 12px; align-items: center; }
   .geometry-caption strong { color: #34423c; font-weight: 600; }
+  .view-help { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .view-help button { border: 0; background: transparent; padding: 0; color: #34423c; text-decoration: underline; cursor: pointer; font: inherit; }
 </style>
