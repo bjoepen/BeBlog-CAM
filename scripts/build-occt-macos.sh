@@ -15,8 +15,14 @@ fi
 cmake -S "$SRC" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+  -DBUILD_MODULE_FoundationClasses=OFF \
+  -DBUILD_MODULE_ModelingData=OFF \
+  -DBUILD_MODULE_ModelingAlgorithms=OFF \
   -DBUILD_MODULE_Visualization=OFF \
+  -DBUILD_MODULE_ApplicationFramework=OFF \
+  -DBUILD_MODULE_DataExchange=OFF \
   -DBUILD_MODULE_Draw=OFF \
+  '-DBUILD_ADDITIONAL_TOOLKITS=TKDESTEP;TKMesh' \
   -DUSE_TK=OFF \
   -DUSE_FREETYPE=OFF \
   -DUSE_TBB=OFF \
@@ -26,5 +32,4 @@ cmake -S "$SRC" -B "$BUILD" \
 
 cmake --build "$BUILD" --parallel "$(sysctl -n hw.logicalcpu)"
 cmake --install "$BUILD"
-
 printf '%s\n' "$PREFIX"
