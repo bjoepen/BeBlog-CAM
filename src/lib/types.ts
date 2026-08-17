@@ -61,6 +61,16 @@ export interface PartPlacement {
   offsetZ: number;
 }
 
+export type WcsX = 'left' | 'center' | 'right';
+export type WcsY = 'front' | 'center' | 'back';
+export type WcsZ = 'top' | 'bottom';
+
+export interface WorkCoordinateSystem {
+  x: WcsX;
+  y: WcsY;
+  z: WcsZ;
+}
+
 export const defaultStock: StockDefinition = {
   width: 200,
   height: 80,
@@ -76,4 +86,12 @@ export const defaultPartPlacement: PartPlacement = {
   offsetX: 0,
   offsetY: 0,
   offsetZ: 0
+};
+
+// WCS is the planned probing location on the real stock. Machine coordinates
+// are established separately by the controller's homing/reference cycle.
+export const defaultWcs: WorkCoordinateSystem = {
+  x: 'left',
+  y: 'front',
+  z: 'top'
 };
