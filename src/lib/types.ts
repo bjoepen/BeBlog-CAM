@@ -50,11 +50,30 @@ export interface StockDefinition {
   offsetZ: number;
 }
 
+export type HorizontalPlacement = 'left' | 'center' | 'right';
+export type VerticalPlacement = 'front' | 'center' | 'back';
+
+export interface PartPlacement {
+  horizontal: HorizontalPlacement;
+  vertical: VerticalPlacement;
+  offsetX: number;
+  offsetY: number;
+  offsetZ: number;
+}
+
 export const defaultStock: StockDefinition = {
   width: 200,
   height: 80,
   thickness: 22,
   offsetX: 10,
   offsetY: 10,
+  offsetZ: 0
+};
+
+export const defaultPartPlacement: PartPlacement = {
+  horizontal: 'center',
+  vertical: 'center',
+  offsetX: 0,
+  offsetY: 0,
   offsetZ: 0
 };
