@@ -79,3 +79,19 @@ impl BrepBackend for Occt8Backend {
         }
     }
 }
+
+#[cfg(all(test, feature = "occt-native"))]
+mod tests {
+    use super::{BrepBackend, Occt8Backend};
+    use std::{env, path::Path};
+
+    #[test]
+    fn loads_real_step_as_brep() {
+        let fixture = env::var("BEBLOG_OCCT_TEST_STEP").expect("BEBLOG_OCCT_TEST_STEP must point to a real STEP fixture");
+        let summary = Occt8Backend.inspect_step(Path::new(&fixture)).expect("native OCCT STEP import must succeed");
+        assert!(summary.native_brep);
+        assert!(summary.faces > 0);
+        assert!(summary.edges > 0);
+        assert!(summary.display_triangles > 0);
+    }
+}
