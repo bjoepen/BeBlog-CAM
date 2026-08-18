@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ImportSummary, StockDefinition, StockMode, ContourOperation } from './types';
-  import { buildClosedChains, offsetPolygon, validateOffsetSegments, type OffsetValidation } from './contourMath';
+  import { buildClosedChains, offsetPolygon, validateOffsetSegments, buildSemanticContours, offsetSemanticContour, type OffsetValidation } from './contourMath';
   export let summary: ImportSummary;
   export let stock: StockDefinition;
   export let stockMode: StockMode;
@@ -8,7 +8,7 @@
 
   type Level='pass'|'warn'|'fail';
   type Check={level:Level;title:string;detail:string};
-  type PathCheck={validation:OffsetValidation;analyticCircle:boolean};
+  type PathCheck={validation:OffsetValidation;method:'circle'|'mixed'|'segmented'};
 
   function circleForContourId(contourId:number){
     let id=0;
@@ -29,16 +29,21 @@
     const circle=circleForContourId(contourId);
     if(circle){
       const toolRadius=circle.radius+correctionMm;
-      if(toolRadius<=0)return{analyticCircle:true,validation:{ok:false,expectedMm:Math.abs(correctionMm),measuredMinMm:NaN,measuredMaxMm:NaN,maxDeviationMm:Infinity,maxParallelError:0,segmentCount:2,sideOk:false}};
+      if(toolRadius<=0)return{method:'circle',validation:{ok:false,expectedMm:Math.abs(correctionMm),measuredMinMm:NaN,measuredMaxMm:NaN,maxDeviationMm:Infinity,maxParallelError:0,segmentCount:2,sideOk:false}};
       const measured=Math.abs(toolRadius-circle.radius),expected=Math.abs(correctionMm);
       const sideOk=correctionMm>0?toolRadius>circle.radius:correctionMm<0?toolRadius<circle.radius:true;
       const deviation=Math.abs(measured-expected);
-      return{analyticCircle:true,validation:{ok:deviation<=1e-9&&sideOk,expectedMm:expected,measuredMinMm:measured,measuredMaxMm:measured,maxDeviationMm:deviation,maxParallelError:0,segmentCount:2,sideOk}};
+      return{method:'circle',validation:{ok:deviation<=1e-9&&sideOk,expectedMm:expected,measuredMinMm:measured,measuredMaxMm:measured,maxDeviationMm:deviation,maxParallelError:0,segmentCount:2,sideOk}};
+    }
+    const semantic=buildSemanticContours(summary.planarGeometry?.curves??[]).find(c=>c.id===contourId);
+    if(semantic?.segments.some(s=>s.kind==='arc')){
+      const native=offsetSemanticContour(semantic,correctionMm,.002);
+      if(native)return{method:'mixed',validation:native.validation};
     }
     const chains=buildClosedChains(summary.planarGeometry?.curves??[]);
     const selected=chains.find(c=>c.id===contourId);if(!selected)return null;
     const actualToolpath=offsetPolygon(selected.points,correctionMm);
-    return{analyticCircle:false,validation:validateOffsetSegments(selected.points,actualToolpath,correctionMm,.002)};
+    return{method:'segmented',validation:validateOffsetSegments(selected.points,actualToolpath,correctionMm,.002)};
   }
 
   $: radius=operation.tool.diameterMm/2;
@@ -62,7 +67,7 @@
       if(!pathValidation){
         out.push({level:'fail',title:'Bahnvermessung',detail:'Die tatsächlich erzeugte Werkzeugbahn konnte nicht gegen die Sollkontur vermessen werden.'});
       }else if(pathValidation.ok){
-        const method=pathCheck?.analyticCircle?'analytischer CAD-Kreis · native G2/G3-Bahn':'segmentierte CAM-Bahn';
+        const method=pathCheck?.method==='circle'?'analytischer CAD-Kreis · native G2/G3-Bahn':pathCheck?.method==='mixed'?'analytische DXF-Linien/Bögen · gemischte G1/G2/G3-Bahn':'segmentierte CAM-Bahn';
         out.push({level:'pass',title:'Bahnvermessung',detail:`Soll ${pathValidation.expectedMm.toFixed(3)} mm · Ist ${pathValidation.measuredMinMm.toFixed(3)}–${pathValidation.measuredMaxMm.toFixed(3)} mm · max. Abweichung ${pathValidation.maxDeviationMm.toFixed(4)} mm · ${method}.`});
       }else{
         const side=pathValidation.sideOk?'Seite korrekt':'FALSCHE SEITE';
@@ -89,7 +94,7 @@
 <div class="truth"><strong>Geometrische Wahrheit</strong><span>Sollkontur aus CAD-Koordinaten</span><span>Werkzeugradius {radius.toFixed(3)} mm</span><span>Bahnkorrektur {correctionLabel}</span><span>Fertigmaß unverändert</span></div>
 <div class="overall" class:pass={overall==='pass'} class:warn={overall==='warn'} class:fail={overall==='fail'}><strong>{overall.toUpperCase()}</strong><span>{overall==='pass'?'Bearbeitung ist für die aktuellen Prüfregeln freigegeben.':overall==='warn'?'Bearbeitung ist plausibel, enthält aber Hinweise.':'Bearbeitung ist noch nicht freigegeben.'}</span></div>
 <div class="checks">{#each checks as check}<div class="check"><span class="status" class:pass={check.level==='pass'} class:warn={check.level==='warn'} class:fail={check.level==='fail'}>{check.level.toUpperCase()}</span><div><strong>{check.title}</strong><p>{check.detail}</p></div></div>{/each}</div>
-<p class="note"><strong>Grundregel:</strong> Werkzeugwege dürfen die Sollkontur niemals neu definieren. In 001G werden echte DXF-Kreise analytisch gegen die tatsächlich ausgegebene native G2/G3-Kreisbahn geprüft; andere Konturen bleiben auf der bewährten segmentweisen Prüfung.</p>
+<p class="note"><strong>Grundregel:</strong> Werkzeugwege dürfen die Sollkontur niemals neu definieren. In 001G werden native Kreise sowie freigabefähige gemischte DXF-Linien/Bögen gegen genau die analytische Werkzeugbahn geprüft, die anschließend als G1/G2/G3 ausgegeben wird.</p>
 
 <style>
   .eyebrow{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:#7a7d78;margin:0 0 .5rem}.truth{display:grid;gap:5px;padding:12px 14px;margin:12px 0 16px;background:#f3f3f0;border-left:2px solid #727b75;font-size:.8rem;color:#656a66}.truth strong{color:#333b37}.overall{border-left:2px solid #aaa;background:#f3f3f0;padding:12px 14px;margin:16px 0;display:grid;gap:4px}.overall strong,.status{font-size:.72rem;letter-spacing:.08em}.overall.pass strong,.status.pass{color:#2f6b4d}.overall.warn strong,.status.warn{color:#9a6a19}.overall.fail strong,.status.fail{color:#a13f38}.checks{border-top:1px solid #deded8}.check{display:grid;grid-template-columns:52px 1fr;gap:10px;padding:12px 0;border-bottom:1px solid #deded8}.check strong{font-size:.86rem}.check p{margin:3px 0 0;color:#666b66;font-size:.82rem;line-height:1.35}.status{padding-top:2px}.note{margin-top:16px;padding:11px 12px;background:#f3f3f0;color:#666b66;font-size:.8rem;line-height:1.4}
