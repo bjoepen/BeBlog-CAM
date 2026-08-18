@@ -79,8 +79,6 @@ export interface WorkCoordinateSystem {
   z: WcsZ;
 }
 
-// One project may later contain multiple setups. The UI still presents a
-// single simple setup today, while the data model no longer assumes that.
 export interface SetupDefinition {
   id: string;
   name: string;
@@ -90,6 +88,36 @@ export interface SetupDefinition {
   wcsReference: WcsReference;
   wcs: WorkCoordinateSystem;
 }
+
+// 001F starts the CAM-operation layer. Operations remain controller-neutral;
+// postprocessors translate them to Estlcam/LinuxCNC compatible G-code later.
+export type OperationKind = 'contour';
+export type ToolpathSide = 'outside' | 'inside' | 'on-line';
+export type CutDirection = 'conventional' | 'climb';
+
+export interface ToolDefinition {
+  id: string;
+  name: string;
+  diameterMm: number;
+}
+
+export interface ContourOperation {
+  id: string;
+  kind: 'contour';
+  name: string;
+  enabled: boolean;
+  tool: ToolDefinition;
+  side: ToolpathSide;
+  direction: CutDirection;
+  totalDepthMm: number;
+  stepDownMm: number;
+  feedMmMin: number;
+  plungeMmMin: number;
+  spindleRpm: number;
+  safeZMm: number;
+}
+
+export type CamOperation = ContourOperation;
 
 export const defaultStock: StockDefinition = {
   width: 200,
@@ -114,8 +142,6 @@ export const defaultPartOrientation: PartOrientation = {
   rotationZDeg: 0
 };
 
-// WCS is the planned probing location on the real stock/part. Machine
-// coordinates are established separately by the controller's homing cycle.
 export const defaultWcs: WorkCoordinateSystem = {
   x: 'left',
   y: 'front',
@@ -130,4 +156,20 @@ export const defaultSetup: SetupDefinition = {
   placement: { ...defaultPartPlacement },
   wcsReference: 'stock',
   wcs: { ...defaultWcs }
+};
+
+export const defaultContourOperation: ContourOperation = {
+  id: 'op-contour-1',
+  kind: 'contour',
+  name: 'Kontur 1',
+  enabled: true,
+  tool: { id: 'tool-1', name: 'Schaftfräser 3 mm', diameterMm: 3 },
+  side: 'outside',
+  direction: 'climb',
+  totalDepthMm: 3,
+  stepDownMm: 1,
+  feedMmMin: 600,
+  plungeMmMin: 200,
+  spindleRpm: 12000,
+  safeZMm: 5
 };
