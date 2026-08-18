@@ -71,7 +71,8 @@
         out.push({level:'pass',title:'Bahnvermessung',detail:`Soll ${pathValidation.expectedMm.toFixed(3)} mm · Ist ${pathValidation.measuredMinMm.toFixed(3)}–${pathValidation.measuredMaxMm.toFixed(3)} mm · max. Abweichung ${pathValidation.maxDeviationMm.toFixed(4)} mm · ${method}.`});
       }else{
         const side=pathValidation.sideOk?'Seite korrekt':'FALSCHE SEITE';
-        out.push({level:'fail',title:'Bahnvermessung',detail:`Soll ${pathValidation.expectedMm.toFixed(3)} mm · Ist ${Number.isFinite(pathValidation.measuredMinMm)?pathValidation.measuredMinMm.toFixed(3):'—'}–${Number.isFinite(pathValidation.measuredMaxMm)?pathValidation.measuredMaxMm.toFixed(3):'—'} mm · max. Abweichung ${Number.isFinite(pathValidation.maxDeviationMm)?pathValidation.maxDeviationMm.toFixed(4):'—'} mm · ${side}.`});
+        const diagnostic=pathValidation.diagnostic?` ${pathValidation.diagnostic}`:'';
+        out.push({level:'fail',title:'Bahnvermessung',detail:`Soll ${pathValidation.expectedMm.toFixed(3)} mm · Ist ${Number.isFinite(pathValidation.measuredMinMm)?pathValidation.measuredMinMm.toFixed(3):'—'}–${Number.isFinite(pathValidation.measuredMaxMm)?pathValidation.measuredMaxMm.toFixed(3):'—'} mm · max. Abweichung ${Number.isFinite(pathValidation.maxDeviationMm)?pathValidation.maxDeviationMm.toFixed(4):'—'} mm · ${side}.${diagnostic}`});
       }
     }
 
