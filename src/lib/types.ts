@@ -41,6 +41,7 @@ export interface ImportSummary {
   note?: string;
 }
 
+export type StockMode = 'manual' | 'part-bounds' | 'none';
 export interface StockDefinition {
   width: number;
   height: number;
@@ -52,7 +53,6 @@ export interface StockDefinition {
 
 export type HorizontalPlacement = 'left' | 'center' | 'right';
 export type VerticalPlacement = 'front' | 'center' | 'back';
-
 export interface PartPlacement {
   horizontal: HorizontalPlacement;
   vertical: VerticalPlacement;
@@ -61,14 +61,34 @@ export interface PartPlacement {
   offsetZ: number;
 }
 
+// Part orientation is CAM geometry, not camera orientation. 001E exposes Z
+// rotation first; X/Y are already part of the model for future flipped setups.
+export interface PartOrientation {
+  rotationXDeg: number;
+  rotationYDeg: number;
+  rotationZDeg: number;
+}
+
 export type WcsX = 'left' | 'center' | 'right';
 export type WcsY = 'front' | 'center' | 'back';
 export type WcsZ = 'top' | 'bottom';
-
+export type WcsReference = 'stock' | 'part';
 export interface WorkCoordinateSystem {
   x: WcsX;
   y: WcsY;
   z: WcsZ;
+}
+
+// One project may later contain multiple setups. The UI still presents a
+// single simple setup today, while the data model no longer assumes that.
+export interface SetupDefinition {
+  id: string;
+  name: string;
+  stockMode: StockMode;
+  orientation: PartOrientation;
+  placement: PartPlacement;
+  wcsReference: WcsReference;
+  wcs: WorkCoordinateSystem;
 }
 
 export const defaultStock: StockDefinition = {
@@ -88,10 +108,26 @@ export const defaultPartPlacement: PartPlacement = {
   offsetZ: 0
 };
 
-// WCS is the planned probing location on the real stock. Machine coordinates
-// are established separately by the controller's homing/reference cycle.
+export const defaultPartOrientation: PartOrientation = {
+  rotationXDeg: 0,
+  rotationYDeg: 0,
+  rotationZDeg: 0
+};
+
+// WCS is the planned probing location on the real stock/part. Machine
+// coordinates are established separately by the controller's homing cycle.
 export const defaultWcs: WorkCoordinateSystem = {
   x: 'left',
   y: 'front',
   z: 'top'
+};
+
+export const defaultSetup: SetupDefinition = {
+  id: 'setup-1',
+  name: 'Aufspannung 1',
+  stockMode: 'manual',
+  orientation: { ...defaultPartOrientation },
+  placement: { ...defaultPartPlacement },
+  wcsReference: 'stock',
+  wcs: { ...defaultWcs }
 };
