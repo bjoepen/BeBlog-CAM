@@ -79,7 +79,7 @@
     return[...result,result[0]];
   }
 
-  function buildScene(){
+  function buildScene(..._deps: unknown[]){
     const curves=summary.planarGeometry?.curves??[];if(summary.kind!=='dxf'||!curves.length)return null;
     const all=curves.flatMap(c=>sample(c).map(rotate));if(!all.length)return null;const partB=bounds(all);
     const dx=stockMode==='none'?-partB.minX:placement.horizontal==='left'?-partB.minX+placement.offsetX:placement.horizontal==='right'?stock.width-(partB.maxX-partB.minX)-partB.minX+placement.offsetX:(stock.width-(partB.maxX-partB.minX))/2-partB.minX+placement.offsetX;
@@ -96,7 +96,19 @@
     return{chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,tool:tool?tool.map(map):null};
   }
 
-  $: scene=buildScene();
+  $: scene=buildScene(
+    operation.contourId,
+    operation.tool.diameterMm,
+    operation.side,
+    stockMode,
+    stock.width,
+    stock.height,
+    placement.horizontal,
+    placement.vertical,
+    placement.offsetX,
+    placement.offsetY,
+    orientation.rotationZDeg
+  );
 </script>
 
 {#if scene}
@@ -119,9 +131,8 @@
   .contour-overlay{position:absolute;left:50%;top:50%;z-index:3;width:min(92%,1100px);transform:translate(-50%,-50%);pointer-events:auto}
   svg{width:100%;display:block;overflow:visible;pointer-events:auto}
   .caption-spacer{height:30px;pointer-events:none}
-  .candidate{fill:none;stroke:rgba(194,117,40,.12);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none}
+  .candidate{fill:none;stroke:rgba(194,117,40,.10);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}
   .pick{fill:none;stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
-  .pick:hover{stroke:rgba(194,117,40,.18)}
-  .selected{fill:none;stroke:rgba(194,117,40,.78);stroke-width:3.2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
-  .toolpath{fill:none;stroke:#b1453b;stroke-width:3.2;vector-effect:non-scaling-stroke;pointer-events:none}
+  .selected{fill:none;stroke:rgba(194,117,40,.9);stroke-width:2.2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
+  .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
 </style>
