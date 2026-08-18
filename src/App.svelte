@@ -4,6 +4,7 @@
   import GeometryView from './lib/GeometryView.svelte';
   import ContourOverlay from './lib/ContourOverlay.svelte';
   import PreflightPanel from './lib/PreflightPanel.svelte';
+  import GCodePanel from './lib/GCodePanel.svelte';
   import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ContourOperation } from './lib/types';
   import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultContourOperation } from './lib/types';
 
@@ -156,6 +157,9 @@
 
       {:else if activeStep==='Prüfen'}
         {#if importSummary}<PreflightPanel summary={importSummary} {stock} {stockMode} operation={contour}/>{:else}<p class="eyebrow">05 · Prüfen</p><h2>Preflight</h2><p>Öffne zuerst ein Bauteil.</p>{/if}
+
+      {:else if activeStep==='Fräsen'}
+        {#if importSummary}<GCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={contour}/>{:else}<p class="eyebrow">06 · Fräsen</p><h2>G-Code</h2><p>Öffne zuerst ein Bauteil.</p>{/if}
 
       {:else}
         <p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p><h2>Noch ruhig.</h2><p>Dieser Bereich wird in einem späteren Build aktiviert.</p>
