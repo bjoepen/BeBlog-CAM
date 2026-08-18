@@ -39,12 +39,29 @@ Der externe Simulator fährt pro Zustellung exakt zwei Halbkreise ab. Die zuvor 
 
 **Gate 1 = PASS.**
 
-## Gate 2 — gemischte Konturen
+## Gate 2 — gemischte Konturen: IMPLEMENTIERT / TEST AUSSTEHEND
 
-Als nächster Schritt werden geschlossene Konturen aus echten DXF-Linien und DXF-Bögen semantisch erhalten:
+Geschlossene Konturen aus echten DXF-Linien und DXF-Bögen werden nun als semantische Primitive durch die CAM-Kette geführt.
+
+Regeln:
 
 - Gerade → `G1`
 - echter Kreisbogen → `G2/G3`
 - keine nachträgliche Bogen-Erkennung aus G1-Punktwolken
-- native Ausgabe nur, wenn die analytisch radiuskorrigierten Primitive kontinuierlich und geometrisch konsistent verbunden werden können
-- bei nicht eindeutig unterstützbarer Geometrie bleibt die mathematisch geprüfte G1-Referenzbahn als sicherer Fallback bestehen
+- Linien und Bögen werden analytisch um den Werkzeugradius versetzt
+- benachbarte Offset-Primitive werden geometrisch verbunden
+- die resultierende gemischte Bahn wird im Preflight gegen die CAD-Sollkontur geprüft
+- native Ausgabe erfolgt nur bei bestandener analytischer Prüfung
+- bei nicht eindeutig freigabefähiger Geometrie bleibt die mathematisch geprüfte G1-Referenzbahn als sicherer Fallback bestehen
+
+Unter `06 · Fräsen` wird der aktive Modus ausdrücklich angezeigt:
+
+- `Native Kreisinterpolation`
+- `Gemischte native Kontur · G1-Linien + G2/G3-Bögen`
+- oder `G1-Referenzbahn`, wenn die native Semantik nicht sicher freigegeben werden kann.
+
+### Gate-2-Testziel
+
+Für die bekannte Außenkontur der Mini-OX-Seitenwange muss der erzeugte G-Code innerhalb derselben Zustellung sowohl `G1` für echte Geraden als auch `G2/G3` für echte DXF-Bögen enthalten. Der Simulator muss die Rundungen als kontinuierliche Kreisbögen und die Geraden linear abfahren.
+
+**Gate 2 bleibt bis zur realen Simulator-Verifikation offen.**
