@@ -37,15 +37,9 @@ fn inspect_step(path: &Path, file_name: String) -> Result<ImportSummary, String>
             entities.insert("Volumenkörper".into(), brep.solids);
             let note = brep.note.clone();
             let backend = brep.backend.clone();
-            Ok(ImportSummary {
-                kind: "step".into(), file_name, backend, status: "ready".into(), entities,
-                planar_geometry: None, brep: Some(brep), note: Some(note),
-            })
+            Ok(ImportSummary { kind: "step".into(), file_name, backend, status: "ready".into(), entities, planar_geometry: None, brep: Some(brep), note: Some(note) })
         }
-        Err(note) => Ok(ImportSummary {
-            kind: "step".into(), file_name, backend: "OCCT 8 / BRep".into(), status: "native-adapter-pending".into(),
-            entities: BTreeMap::new(), planar_geometry: None, brep: None, note: Some(note),
-        }),
+        Err(note) => Ok(ImportSummary { kind: "step".into(), file_name, backend: "OCCT 8 / BRep".into(), status: "native-adapter-pending".into(), entities: BTreeMap::new(), planar_geometry: None, brep: None, note: Some(note) }),
     }
 }
 
@@ -69,7 +63,14 @@ fn inspect_dxf(path: &Path, file_name: String) -> Result<ImportSummary, String> 
             }
             EntityType::LwPolyline(polyline) => {
                 *counts.entry("Polylinien".into()).or_insert(0) += 1;
-                curves.push(Curve2::Polyline { points: polyline.vertices.iter().map(|p| Point2 { x: p.x, y: p.y }).collect(), closed: polyline.is_closed() });
+                let bulges: Vec<f64> = polyline.vertices.iter().map(|p| p.bulge).collect();
+                let bulged = bulges.iter().filter(|b| b.abs() > 1e-12).count();
+                if bulged > 0 { *counts.entry("Polyline-Bögen".into()).or_insert(0) += bulged; }
+                curves.push(Curve2::Polyline {
+                    points: polyline.vertices.iter().map(|p| Point2 { x: p.x, y: p.y }).collect(),
+                    bulges,
+                    closed: polyline.is_closed(),
+                });
             }
             other => {
                 let source_kind = format!("{other:?}").split([' ', '{', '(']).next().unwrap_or("Entity").to_string();
@@ -81,6 +82,6 @@ fn inspect_dxf(path: &Path, file_name: String) -> Result<ImportSummary, String> 
     Ok(ImportSummary {
         kind: "dxf".into(), file_name, backend: "dxf-rs → BeBlog Geometry".into(), status: "ready".into(),
         entities: counts, planar_geometry: Some(PlanarGeometry::from_curves(curves)), brep: None,
-        note: Some("DXF-Elemente wurden in das interne planare BeBlog-Geometriemodell normalisiert. Der CAM-Core bleibt dadurch vom DXF-Parser entkoppelt.".into()),
+        note: Some("DXF-Elemente einschließlich LWPOLYLINE-Bulges wurden in das interne planare BeBlog-Geometriemodell normalisiert. Der CAM-Core bleibt dadurch vom DXF-Parser entkoppelt.".into()),
     })
 }
