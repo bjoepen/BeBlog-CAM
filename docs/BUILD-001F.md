@@ -7,7 +7,7 @@
 
 Build 001F erreicht erstmals eine vollständige, nachvollziehbare CAM-Kette für eine reale DXF-Konturbearbeitung:
 
-`DXF → Sollkontur → Werkzeugradiuskorrektur → mathematische Bahnprüfung → Zustellungen → WCS-Transformation → G-Code → externer NC-Viewer`
+`DXF → Sollkontur → Werkzeugradiuskorrektur → mathematische Bahnprüfung → Zustellungen → WCS-Transformation → G-Code → externer NC-Viewer → dynamische Simulation`
 
 ## Verbindlicher Geometriegrundsatz
 
@@ -54,6 +54,14 @@ Die ausgegebene Außenbahn erreicht unter anderem X -2.000 mm bzw. Y -2.000 mm u
 
 Die drei Zustellungen fahren dieselbe XY-Werkzeugmittelbahn auf unterschiedlichen Z-Tiefen. Der externe NC-Viewer stellte die resultierende Kontur und die Tiefenbahnen plausibel und deckungsgleich dar.
 
+### Dynamische Simulator-Verifikation
+
+Der erzeugte G-Code wurde zusätzlich im Simulator vollständig abgespielt. Die Maschine folgt dort der erwarteten Kontur und fährt die erzeugten Zustellungen in der vorgesehenen Reihenfolge vollständig ab.
+
+Damit ist Gate 5 nicht nur durch statische G-Code-Inspektion und Plotdarstellung bestätigt, sondern zusätzlich durch die dynamische Ausführung des erzeugten Bewegungsprogramms.
+
+Die derzeitige `G1`-Segmentierung der Rundungen ist im Simulator deutlich sichtbar. Das wird ausdrücklich **nicht** als Fehler von 001F gewertet: Die segmentierte Bahn ist der bewusst einfache, bereits mathematisch validierte Referenzpfad dieses Builds. Native Kreis- und Bogeninterpolation wird erst im Folgebuild eingeführt.
+
 ## Sicherheitsprinzip
 
 `05 · Prüfen` bleibt ein verbindliches Preflight-Gate vor `06 · Fräsen`.
@@ -70,8 +78,22 @@ Ein geometrischer FAIL darf keine G-Code-Erzeugung freigeben. WARN bleibt für b
 - Mehrere Bearbeitungsoperationen und Werkzeugwechsel sind noch nicht Bestandteil dieses Meilensteins.
 - Der konservative Schnittdaten-Assistent für Hobby-CNCs ist als späterer Ausbau von `03 · Werkzeuge` vorgesehen und gehört nicht zum 001F-Gate.
 
+## Übergang zum Folgebuild
+
+001F wird nach erfolgreicher Gate-5- und Simulator-Verifikation als Referenzstand eingefroren. Der nächste Build darf die bewährte segmentierte Referenzbahn nicht durch nachträgliches Erraten von Bögen verändern.
+
+Für native Kreis- und Bogeninterpolation gilt künftig der Datenfluss:
+
+`CAD-Geometrie → Werkzeugbahn mit erhaltener Linien-/Bogen-Semantik → G-Code`
+
+und ausdrücklich nicht:
+
+`CAD → segmentierte Polylinie → nachträgliches Arc-Fitting`
+
+Geraden werden als `G1`, echte Kreisbögen als `G2/G3` ausgegeben. Segmentierung bleibt nur dort zulässig, wo die Quellgeometrie bzw. die mathematische Offset-Geometrie nicht exakt als native Linie oder Kreisbogen dargestellt werden kann.
+
 ## Bedeutung des Meilensteins
 
 001F ist der erste Build, in dem BeBlog CAM nicht nur Geometrie importiert und darstellt, sondern aus einer realen CAD-Kontur eine radiuskorrigierte und mathematisch geprüfte Werkzeugbahn ableitet, diese in Zustellungen überführt und daraus extern nachvollziehbaren G-Code erzeugt.
 
-Damit ist erstmals die grundlegende CAM-Kette vom CAD-Element bis zur Maschinenbewegung geschlossen.
+Mit der erfolgreichen dynamischen Simulator-Verifikation ist erstmals die grundlegende CAM-Kette vom CAD-Element bis zur ausgeführten Maschinenbewegung geschlossen.
