@@ -37,9 +37,15 @@ fn inspect_step(path: &Path, file_name: String) -> Result<ImportSummary, String>
             entities.insert("Volumenkörper".into(), brep.solids);
             let note = brep.note.clone();
             let backend = brep.backend.clone();
-            Ok(ImportSummary { kind: "step".into(), file_name, backend, status: "ready".into(), entities, planar_geometry: None, brep: Some(brep), note: Some(note) })
+            Ok(ImportSummary {
+                kind: "step".into(), file_name, backend, status: "ready".into(), entities,
+                planar_geometry: None, brep: Some(brep), note: Some(note),
+            })
         }
-        Err(note) => Ok(ImportSummary { kind: "step".into(), file_name, backend: "OCCT 8 / BRep".into(), status: "native-adapter-pending".into(), entities: BTreeMap::new(), planar_geometry: None, brep: None, note: Some(note) }),
+        Err(note) => Ok(ImportSummary {
+            kind: "step".into(), file_name, backend: "OCCT 8 / BRep".into(), status: "native-adapter-pending".into(),
+            entities: BTreeMap::new(), planar_geometry: None, brep: None, note: Some(note),
+        }),
     }
 }
 
@@ -47,10 +53,17 @@ fn inspect_dxf(path: &Path, file_name: String) -> Result<ImportSummary, String> 
     let drawing = dxf::Drawing::load_file(path).map_err(|e| format!("DXF konnte nicht gelesen werden: {e}"))?;
     let mut counts = BTreeMap::new();
     let mut curves = Vec::new();
+    let mut ignored_zero_lines = 0usize;
     for entity in drawing.entities() {
         match &entity.specific {
             EntityType::Line(line) => {
                 *counts.entry("Linien".into()).or_insert(0) += 1;
+                let dx = line.p2.x - line.p1.x;
+                let dy = line.p2.y - line.p1.y;
+                if dx.hypot(dy) <= 1e-9 {
+                    ignored_zero_lines += 1;
+                    continue;
+                }
                 curves.push(Curve2::Line { start: Point2 { x: line.p1.x, y: line.p1.y }, end: Point2 { x: line.p2.x, y: line.p2.y } });
             }
             EntityType::Circle(circle) => {
@@ -63,14 +76,13 @@ fn inspect_dxf(path: &Path, file_name: String) -> Result<ImportSummary, String> 
             }
             EntityType::LwPolyline(polyline) => {
                 *counts.entry("Polylinien".into()).or_insert(0) += 1;
+                let points: Vec<Point2> = polyline.vertices.iter().map(|p| Point2 { x: p.x, y: p.y }).collect();
                 let bulges: Vec<f64> = polyline.vertices.iter().map(|p| p.bulge).collect();
-                let bulged = bulges.iter().filter(|b| b.abs() > 1e-12).count();
-                if bulged > 0 { *counts.entry("Polyline-Bögen".into()).or_insert(0) += bulged; }
-                curves.push(Curve2::Polyline {
-                    points: polyline.vertices.iter().map(|p| Point2 { x: p.x, y: p.y }).collect(),
-                    bulges,
-                    closed: polyline.is_closed(),
-                });
+                let bulge_count = bulges.iter().filter(|b| b.abs() > 1e-12).count();
+                if bulge_count > 0 {
+                    *counts.entry("Polyline-Bögen".into()).or_insert(0) += bulge_count;
+                }
+                curves.push(Curve2::Polyline { points, closed: polyline.is_closed(), bulges });
             }
             other => {
                 let source_kind = format!("{other:?}").split([' ', '{', '(']).next().unwrap_or("Entity").to_string();
@@ -78,10 +90,13 @@ fn inspect_dxf(path: &Path, file_name: String) -> Result<ImportSummary, String> 
             }
         }
     }
+    if ignored_zero_lines > 0 {
+        counts.insert("Null-Linien ignoriert".into(), ignored_zero_lines);
+    }
     counts.insert("Layer".into(), drawing.layers().count());
     Ok(ImportSummary {
         kind: "dxf".into(), file_name, backend: "dxf-rs → BeBlog Geometry".into(), status: "ready".into(),
         entities: counts, planar_geometry: Some(PlanarGeometry::from_curves(curves)), brep: None,
-        note: Some("DXF-Elemente einschließlich LWPOLYLINE-Bulges wurden in das interne planare BeBlog-Geometriemodell normalisiert. Der CAM-Core bleibt dadurch vom DXF-Parser entkoppelt.".into()),
+        note: Some("DXF-Elemente wurden in das interne planare BeBlog-Geometriemodell normalisiert. Degenerierte Null-Linien werden verworfen; echte ARC- und LWPOLYLINE-Bogeninformation bleibt für die CAM-Interpolation erhalten.".into()),
     })
 }
