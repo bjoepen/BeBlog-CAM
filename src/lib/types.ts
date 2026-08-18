@@ -106,6 +106,7 @@ export interface ContourOperation {
   kind: 'contour';
   name: string;
   enabled: boolean;
+  contourId: number | null;
   tool: ToolDefinition;
   side: ToolpathSide;
   direction: CutDirection;
@@ -163,6 +164,7 @@ export const defaultContourOperation: ContourOperation = {
   kind: 'contour',
   name: 'Kontur 1',
   enabled: true,
+  contourId: null,
   tool: { id: 'tool-1', name: 'Schaftfräser 3 mm', diameterMm: 3 },
   side: 'outside',
   direction: 'climb',
