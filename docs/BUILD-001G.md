@@ -94,6 +94,35 @@ Der Safety-Fallback bleibt unverändert: Kann die native Offset-Geometrie nicht 
 
 **Gate 2 = PASS.**
 
+## Abschlussgate — `.nc`-Dateiexport: IMPLEMENTIERT / REALTEST AUSSTEHEND
+
+`06 · Fräsen` kann den bereits erzeugten und geprüften G-Code nun direkt als `.nc`-Datei speichern.
+
+Verbindliche Exportregeln:
+
+- Standardformat ist `.nc`.
+- Der Speichern-Dialog schlägt den Bauteilnamen mit `.nc` vor.
+- Fehlt die Dateiendung, ergänzt BeBlog CAM `.nc` automatisch.
+- Der native Backend-Befehl akzeptiert in 001G ausschließlich `.nc`.
+- Exportiert wird exakt der String, der gleichzeitig in der G-Code-Vorschau angezeigt wird.
+- Es findet beim Speichern keine zweite G-Code-Generierung, keine Neuformatierung und keine versteckte Postprozessor-Transformation statt.
+- Der Export steht nur zur Verfügung, wenn die aktuelle G-Code-Erzeugung erfolgreich ist.
+
+Damit kann die tatsächlich von BeBlog CAM erzeugte Maschinenprogrammdatei unmittelbar in externen Viewern/Simulatoren geprüft und anschließend als identische Datei zur Codekontrolle weitergegeben werden.
+
+Das Abschlussgate wird nach einem real gespeicherten, erneut geöffneten und in einem externen Viewer geprüften `.nc`-File auf PASS gesetzt.
+
+## Regression vor 001G Final
+
+Vor dem Einfrieren von 001G werden die bereits bewiesenen Referenzfälle nochmals kontrolliert:
+
+1. nativer DXF-Kreis — G2/G3, zwei Halbkreise pro Zustellung;
+2. einfacher gemischter Testkörper — G1 + G2/G3;
+3. Mini-OX-Außenkontur — analytisch geprüfte gemischte native Bahn;
+4. Außen/Innen — Werkzeugradius liegt auf der korrekten Seite;
+5. Gleichlauf/Gegenlauf — Fahrtrichtung und G2/G3-Richtung wechseln konsistent;
+6. `.nc`-Export — gespeicherter Dateiinhalt entspricht exakt der Vorschau.
+
 ## Ergebnis 001G bis Gate 2
 
 BeBlog CAM beherrscht nun sowohl native Vollkreise als auch reale zusammengesetzte DXF-Konturen aus Linien und Kreisbögen. Die ursprüngliche CAD-Semantik bleibt durch die Werkzeugbahnberechnung bis in den G-Code erhalten.
