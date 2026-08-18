@@ -1,5 +1,5 @@
 import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ContourOperation, Curve2 } from './types';
-import { buildClosedChains, offsetPolygon, validateOffsetSegments, sampleCurve, type P2 } from './contourMath';
+import { buildClosedChains, offsetPolygon, validateOffsetSegments, sampleCurve, type P2, type OffsetValidation } from './contourMath';
 
 export type InterpolationMode = 'g1-segmented' | 'g2g3-native-circle';
 
@@ -14,7 +14,7 @@ export type GcodeResult = {
   radiusMm:number;
   interpolation:InterpolationMode;
   nativeArcCount:number;
-  validation?:ReturnType<typeof validateOffsetSegments>;
+  validation?:OffsetValidation;
 };
 
 const rotate=(p:P2,deg:number):P2=>{const a=deg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c}};
@@ -54,6 +54,13 @@ function nativeCircleForContour(curves:Curve2[], contourId:number, transform:(p:
   return null;
 }
 
+function analyticCircleValidation(sourceRadius:number,toolRadius:number,correction:number):OffsetValidation{
+  const measured=Math.abs(toolRadius-sourceRadius),expected=Math.abs(correction);
+  const sideOk=correction>0?toolRadius>sourceRadius:correction<0?toolRadius<sourceRadius:true;
+  const maxDeviation=Math.abs(measured-expected);
+  return{ok:maxDeviation<=1e-9&&sideOk,expectedMm:expected,measuredMinMm:measured,measuredMaxMm:measured,maxDeviationMm:maxDeviation,maxParallelError:0,segmentCount:2,sideOk};
+}
+
 export function generateContourGcode(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation}):GcodeResult{
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;
   const errors:string[]=[],warnings:string[]=[];
@@ -78,7 +85,7 @@ export function generateContourGcode(args:{summary:ImportSummary;stock:StockDefi
   const radius=operation.tool.diameterMm/2;
   const correction=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;
   let toolpath=offsetPolygon(selected.points,correction);
-  const validation=validateOffsetSegments(selected.points,toolpath,correction,.002);
+  let validation:OffsetValidation=validateOffsetSegments(selected.points,toolpath,correction,.002);
   if(!validation.ok)return{ok:false,errors:[`Werkzeugbahn hat die geometrische Prüfung nicht bestanden (max. Abweichung ${Number.isFinite(validation.maxDeviationMm)?validation.maxDeviationMm.toFixed(4):'—'} mm).`],warnings,code:'',lineCount:0,pointCount:toolpath.length,passes:0,radiusMm:radius,interpolation:'g1-segmented',nativeArcCount:0,validation};
 
   const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);
@@ -87,6 +94,10 @@ export function generateContourGcode(args:{summary:ImportSummary;stock:StockDefi
   const useNativeCircle=!!nativeCircle&&nativeCircleRadius>0;
   if(nativeCircle&&nativeCircleRadius<=0){
     return{ok:false,errors:['Die Innenkorrektur ist für diese Kreis-Kontur größer oder gleich dem Kreisradius. Es existiert keine gültige Werkzeugmittelbahn.'],warnings,code:'',lineCount:0,pointCount:toolpath.length,passes:0,radiusMm:radius,interpolation:'g1-segmented',nativeArcCount:0,validation};
+  }
+  if(useNativeCircle&&nativeCircle){
+    validation=analyticCircleValidation(nativeCircle.radius,nativeCircleRadius,correction);
+    if(!validation.ok)return{ok:false,errors:['Die analytisch erzeugte Kreisbahn hat die CAD-Kreisprüfung nicht bestanden.'],warnings,code:'',lineCount:0,pointCount:3,passes:0,radiusMm:radius,interpolation:'g2g3-native-circle',nativeArcCount:0,validation};
   }
 
   toolpath=toolpath.map(p=>({x:p.x-origin.x,y:p.y-origin.y}));
