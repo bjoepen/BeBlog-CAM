@@ -103,6 +103,7 @@
 <div class="contour-overlay" aria-label="Konturauswahl und Werkzeugweg">
   <svg viewBox="0 0 1000 650">
     {#each scene.chains as chain}
+      <path d={path(chain.screen,true)} class="candidate" />
       <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id)}>
         <title>Kontur {chain.id+1} auswählen</title>
       </path>
@@ -115,10 +116,12 @@
 {/if}
 
 <style>
-  .contour-overlay{position:absolute;left:50%;top:50%;z-index:3;width:min(92%,1100px);transform:translate(-50%,-50%);pointer-events:none}
-  svg{width:100%;display:block;overflow:visible;pointer-events:none}
-  .caption-spacer{height:30px}
-  .pick{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
-  .selected{fill:none;stroke:rgba(194,117,40,.55);stroke-width:3;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
+  .contour-overlay{position:absolute;left:50%;top:50%;z-index:3;width:min(92%,1100px);transform:translate(-50%,-50%);pointer-events:auto}
+  svg{width:100%;display:block;overflow:visible;pointer-events:auto}
+  .caption-spacer{height:30px;pointer-events:none}
+  .candidate{fill:none;stroke:rgba(194,117,40,.12);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none}
+  .pick{fill:none;stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+  .pick:hover{stroke:rgba(194,117,40,.18)}
+  .selected{fill:none;stroke:rgba(194,117,40,.78);stroke-width:3.2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .toolpath{fill:none;stroke:#b1453b;stroke-width:3.2;vector-effect:non-scaling-stroke;pointer-events:none}
 </style>
