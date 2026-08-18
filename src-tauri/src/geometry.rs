@@ -18,7 +18,9 @@ pub enum Curve2 {
         start_angle_deg: f64,
         end_angle_deg: f64,
     },
-    Polyline { points: Vec<Point2>, closed: bool },
+    // `bulges[i]` belongs to the segment starting at `points[i]`.
+    // 0 = straight line; non-zero = exact DXF LWPOLYLINE circular arc.
+    Polyline { points: Vec<Point2>, bulges: Vec<f64>, closed: bool },
     Unsupported { source_kind: String },
 }
 
