@@ -1,7 +1,7 @@
 import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ContourOperation, Curve2 } from './types';
-import { buildClosedChains, offsetPolygon, validateOffsetSegments, sampleCurve, type P2, type OffsetValidation } from './contourMath';
+import { buildClosedChains, offsetPolygon, validateOffsetSegments, sampleCurve, buildSemanticContours, offsetSemanticContour, reverseSemanticPath, type P2, type OffsetValidation, type SemanticSegment } from './contourMath';
 
-export type InterpolationMode = 'g1-segmented' | 'g2g3-native-circle';
+export type InterpolationMode = 'g1-segmented' | 'g2g3-native-circle' | 'g1-g2g3-mixed';
 
 export type GcodeResult = {
   ok:boolean;
@@ -34,10 +34,7 @@ function placementTranslation(summary:ImportSummary,stock:StockDefinition,stockM
 
 function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateSystem,partBounds:{minX:number;maxX:number;minY:number;maxY:number}){
   const b=stockMode==='none'?partBounds:{minX:0,maxX:stock.width,minY:0,maxY:stock.height};
-  return{
-    x:wcs.x==='left'?b.minX:wcs.x==='right'?b.maxX:(b.minX+b.maxX)/2,
-    y:wcs.y==='front'?b.minY:wcs.y==='back'?b.maxY:(b.minY+b.maxY)/2
-  };
+  return{x:wcs.x==='left'?b.minX:wcs.x==='right'?b.maxX:(b.minX+b.maxX)/2,y:wcs.y==='front'?b.minY:wcs.y==='back'?b.maxY:(b.minY+b.maxY)/2};
 }
 
 function nativeCircleForContour(curves:Curve2[], contourId:number, transform:(p:P2)=>P2){
@@ -59,6 +56,11 @@ function analyticCircleValidation(sourceRadius:number,toolRadius:number,correcti
   const sideOk=correction>0?toolRadius>sourceRadius:correction<0?toolRadius<sourceRadius:true;
   const maxDeviation=Math.abs(measured-expected);
   return{ok:maxDeviation<=1e-9&&sideOk,expectedMm:expected,measuredMinMm:measured,measuredMaxMm:measured,maxDeviationMm:maxDeviation,maxParallelError:0,segmentCount:2,sideOk};
+}
+
+function toWcsSegment(s:SemanticSegment,origin:P2):SemanticSegment{
+  const move=(p:P2)=>({x:p.x-origin.x,y:p.y-origin.y});
+  return s.kind==='line'?{kind:'line',start:move(s.start),end:move(s.end)}:{...s,start:move(s.start),end:move(s.end),center:move(s.center)};
 }
 
 export function generateContourGcode(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation}):GcodeResult{
@@ -92,62 +94,61 @@ export function generateContourGcode(args:{summary:ImportSummary;stock:StockDefi
   const nativeCircle=operation.contourId===null?null:nativeCircleForContour(summary.planarGeometry?.curves??[],operation.contourId,transform);
   const nativeCircleRadius=nativeCircle?nativeCircle.radius+correction:0;
   const useNativeCircle=!!nativeCircle&&nativeCircleRadius>0;
-  if(nativeCircle&&nativeCircleRadius<=0){
-    return{ok:false,errors:['Die Innenkorrektur ist für diese Kreis-Kontur größer oder gleich dem Kreisradius. Es existiert keine gültige Werkzeugmittelbahn.'],warnings,code:'',lineCount:0,pointCount:toolpath.length,passes:0,radiusMm:radius,interpolation:'g1-segmented',nativeArcCount:0,validation};
-  }
+  if(nativeCircle&&nativeCircleRadius<=0)return{ok:false,errors:['Die Innenkorrektur ist für diese Kreis-Kontur größer oder gleich dem Kreisradius. Es existiert keine gültige Werkzeugmittelbahn.'],warnings,code:'',lineCount:0,pointCount:toolpath.length,passes:0,radiusMm:radius,interpolation:'g1-segmented',nativeArcCount:0,validation};
   if(useNativeCircle&&nativeCircle){
     validation=analyticCircleValidation(nativeCircle.radius,nativeCircleRadius,correction);
     if(!validation.ok)return{ok:false,errors:['Die analytisch erzeugte Kreisbahn hat die CAD-Kreisprüfung nicht bestanden.'],warnings,code:'',lineCount:0,pointCount:3,passes:0,radiusMm:radius,interpolation:'g2g3-native-circle',nativeArcCount:0,validation};
   }
 
+  const semantic=operation.contourId===null?null:buildSemanticContours(summary.planarGeometry?.curves??[],transform).find(c=>c.id===operation.contourId);
+  const semanticOffset=!useNativeCircle&&semantic&&semantic.segments.some(s=>s.kind==='arc')?offsetSemanticContour(semantic,correction,.002):null;
+  const useMixed=!!semanticOffset&&semanticOffset.validation.ok;
+  if(useMixed&&semanticOffset)validation=semanticOffset.validation;
+
   toolpath=toolpath.map(p=>({x:p.x-origin.x,y:p.y-origin.y}));
   if(operation.direction==='conventional')toolpath=[...toolpath].reverse();
-  const passes=Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm));
-  const lines:string[]=[];
-  const interpolation:InterpolationMode=useNativeCircle?'g2g3-native-circle':'g1-segmented';
-  const nativeArcCount=useNativeCircle?passes*2:0;
+  let mixedPath=useMixed&&semanticOffset?semanticOffset.segments.map(s=>toWcsSegment(s,origin)):[];
+  if(operation.direction==='conventional'&&mixedPath.length)mixedPath=reverseSemanticPath(mixedPath);
 
+  const passes=Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm));
+  const interpolation:InterpolationMode=useNativeCircle?'g2g3-native-circle':useMixed?'g1-g2g3-mixed':'g1-segmented';
+  const arcSegments=mixedPath.filter(s=>s.kind==='arc').length;
+  const nativeArcCount=useNativeCircle?passes*2:useMixed?passes*arcSegments:0;
+  const lines:string[]=[];
   lines.push('( BeBlog CAM 001G )');
   lines.push('( Konturkoordinaten sind Sollgeometrie; Bahn ist radiuskorrigierte Fräsermittelbahn )');
   lines.push(`( Werkzeug Ø${f3(operation.tool.diameterMm)} mm · ${operation.side==='outside'?'Aussen':operation.side==='inside'?'Innen':'Auf Linie'} )`);
-  lines.push(useNativeCircle?'( Interpolation: nativer Kreis als zwei G2/G3-Halbkreise )':'( Interpolation: G1-Referenzbahn; gemischte Bögen folgen in einem weiteren Gate )');
-  lines.push('G21');
-  lines.push('G90');
-  lines.push('G17');
-  lines.push(`S${Math.round(operation.spindleRpm)} M3`);
-  lines.push(`G0 Z${f3(operation.safeZMm)}`);
+  lines.push(useNativeCircle?'( Interpolation: nativer Kreis als zwei G2/G3-Halbkreise )':useMixed?'( Interpolation: gemischte native DXF-Kontur · G1 Linien + G2/G3 Bögen )':'( Interpolation: G1-Referenzbahn · native Semantik nicht eindeutig freigabefähig )');
+  lines.push('G21');lines.push('G90');lines.push('G17');lines.push(`S${Math.round(operation.spindleRpm)} M3`);lines.push(`G0 Z${f3(operation.safeZMm)}`);
 
   if(useNativeCircle&&nativeCircle){
-    const center={x:nativeCircle.center.x-origin.x,y:nativeCircle.center.y-origin.y};
-    const r=nativeCircleRadius;
-    const start={x:center.x+r,y:center.y};
-    const opposite={x:center.x-r,y:center.y};
-    const arcCode=operation.direction==='conventional'?'G2':'G3';
-    lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
+    const center={x:nativeCircle.center.x-origin.x,y:nativeCircle.center.y-origin.y},r=nativeCircleRadius,start={x:center.x+r,y:center.y},opposite={x:center.x-r,y:center.y};
+    const arcCode=operation.direction==='conventional'?'G2':'G3';lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
     for(let pass=1;pass<=passes;pass++){
-      const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);
-      lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);
-      lines.push(`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);
-      lines.push(`${arcCode} X${f3(opposite.x)} Y${f3(opposite.y)} I${f3(-r)} J0.000 F${Math.round(operation.feedMmMin)}`);
-      lines.push(`${arcCode} X${f3(start.x)} Y${f3(start.y)} I${f3(r)} J0.000 F${Math.round(operation.feedMmMin)}`);
-      lines.push(`G0 Z${f3(operation.safeZMm)}`);
-      if(pass<passes)lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
+      const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);lines.push(`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);
+      lines.push(`${arcCode} X${f3(opposite.x)} Y${f3(opposite.y)} I${f3(-r)} J0.000 F${Math.round(operation.feedMmMin)}`);lines.push(`${arcCode} X${f3(start.x)} Y${f3(start.y)} I${f3(r)} J0.000 F${Math.round(operation.feedMmMin)}`);
+      lines.push(`G0 Z${f3(operation.safeZMm)}`);if(pass<passes)lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
+    }
+  }else if(useMixed&&mixedPath.length){
+    const start=mixedPath[0].start;lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
+    for(let pass=1;pass<=passes;pass++){
+      const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);lines.push(`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);
+      for(const seg of mixedPath){
+        if(seg.kind==='line')lines.push(`G1 X${f3(seg.end.x)} Y${f3(seg.end.y)} F${Math.round(operation.feedMmMin)}`);
+        else{const code=seg.ccw?'G3':'G2',i=seg.center.x-seg.start.x,j=seg.center.y-seg.start.y;lines.push(`${code} X${f3(seg.end.x)} Y${f3(seg.end.y)} I${f3(i)} J${f3(j)} F${Math.round(operation.feedMmMin)}`)}
+      }
+      lines.push(`G0 Z${f3(operation.safeZMm)}`);if(pass<passes)lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
     }
   }else{
-    const start=toolpath[0];
-    lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
+    const start=toolpath[0];lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
     for(let pass=1;pass<=passes;pass++){
-      const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);
-      lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);
-      lines.push(`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);
+      const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);lines.push(`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);
       for(let i=1;i<toolpath.length;i++)lines.push(`G1 X${f3(toolpath[i].x)} Y${f3(toolpath[i].y)} F${Math.round(operation.feedMmMin)}`);
-      lines.push(`G0 Z${f3(operation.safeZMm)}`);
-      if(pass<passes)lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
+      lines.push(`G0 Z${f3(operation.safeZMm)}`);if(pass<passes)lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
     }
   }
 
-  lines.push('M5');
-  lines.push(`G0 Z${f3(operation.safeZMm)}`);
-  lines.push('M30');
-  return{ok:true,errors,warnings,code:lines.join('\n'),lineCount:lines.length,pointCount:useNativeCircle?3:toolpath.length,passes,radiusMm:radius,interpolation,nativeArcCount,validation};
+  lines.push('M5');lines.push(`G0 Z${f3(operation.safeZMm)}`);lines.push('M30');
+  const pointCount=useNativeCircle?3:useMixed?mixedPath.length+1:toolpath.length;
+  return{ok:true,errors,warnings,code:lines.join('\n'),lineCount:lines.length,pointCount,passes,radiusMm:radius,interpolation,nativeArcCount,validation};
 }
