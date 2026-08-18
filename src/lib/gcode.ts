@@ -1,5 +1,5 @@
 import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ContourOperation, Curve2 } from './types';
-import { buildClosedChains, offsetPolygon, validateOffsetSegments, sampleCurve, buildSemanticContours, offsetSemanticContour, reverseSemanticPath, type P2, type OffsetValidation, type SemanticSegment } from './contourMath';
+import { buildClosedChains, offsetPolygon, validateOffsetSegments, sampleCurve, buildSemanticContours, offsetSemanticContour, reverseSemanticPath, polygonArea, type P2, type OffsetValidation, type SemanticSegment, type SemanticContour } from './contourMath';
 
 export type InterpolationMode = 'g1-segmented' | 'g2g3-native-circle' | 'g1-g2g3-mixed';
 
@@ -58,6 +58,58 @@ function analyticCircleValidation(sourceRadius:number,toolRadius:number,correcti
   return{ok:maxDeviation<=1e-9&&sideOk,expectedMm:expected,measuredMinMm:measured,measuredMaxMm:measured,maxDeviationMm:maxDeviation,maxParallelError:0,segmentCount:2,sideOk};
 }
 
+function semanticPoints(contour:SemanticContour):P2[]{
+  const pts:P2[]=[];
+  for(const seg of contour.segments){
+    if(!pts.length)pts.push(seg.start);
+    if(seg.kind==='line'){
+      pts.push(seg.end);
+      continue;
+    }
+    const a0=Math.atan2(seg.start.y-seg.center.y,seg.start.x-seg.center.x);
+    const a1=Math.atan2(seg.end.y-seg.center.y,seg.end.x-seg.center.x);
+    let delta=a1-a0;
+    if(seg.ccw){while(delta<=0)delta+=Math.PI*2}else{while(delta>=0)delta-=Math.PI*2}
+    for(let i=1;i<=32;i++){
+      const a=a0+delta*i/32;
+      pts.push({x:seg.center.x+Math.cos(a)*seg.radius,y:seg.center.y+Math.sin(a)*seg.radius});
+    }
+  }
+  return pts;
+}
+
+function geometricContourScore(source:P2[],candidate:SemanticContour):number{
+  const cpts=semanticPoints(candidate);
+  if(source.length<3||cpts.length<3)return Infinity;
+  const sb=bounds(source),cb=bounds(cpts);
+  const span=Math.max(sb.maxX-sb.minX,sb.maxY-sb.minY,1);
+  const boundsError=(Math.abs(sb.minX-cb.minX)+Math.abs(sb.maxX-cb.maxX)+Math.abs(sb.minY-cb.minY)+Math.abs(sb.maxY-cb.maxY))/span;
+  const sourceArea=Math.abs(polygonArea(source));
+  const candidateArea=Math.abs(polygonArea(cpts));
+  const areaError=Math.abs(sourceArea-candidateArea)/Math.max(sourceArea,1);
+  const sample=source.filter((_,i)=>i%Math.max(1,Math.floor(source.length/24))===0);
+  let distanceError=0;
+  for(const p of sample){
+    let best=Infinity;
+    for(const q of cpts)best=Math.min(best,Math.hypot(p.x-q.x,p.y-q.y));
+    distanceError+=best/span;
+  }
+  distanceError/=Math.max(sample.length,1);
+  return boundsError*4+areaError*2+distanceError;
+}
+
+function matchSemanticContour(source:P2[],contours:SemanticContour[]):{contour:SemanticContour|null;score:number;secondScore:number}{
+  const ranked=contours
+    .filter(c=>c.supported&&c.segments.length>0&&c.segments.some(s=>s.kind==='arc'))
+    .map(contour=>({contour,score:geometricContourScore(source,contour)}))
+    .filter(x=>Number.isFinite(x.score))
+    .sort((a,b)=>a.score-b.score);
+  if(!ranked.length)return{contour:null,score:Infinity,secondScore:Infinity};
+  const best=ranked[0],second=ranked[1]?.score??Infinity;
+  const unique=best.score<0.02&&(second===Infinity||second-best.score>0.01);
+  return{contour:unique?best.contour:null,score:best.score,secondScore:second};
+}
+
 function toWcsSegment(s:SemanticSegment,origin:P2):SemanticSegment{
   const move=(p:P2)=>({x:p.x-origin.x,y:p.y-origin.y});
   return s.kind==='line'?{kind:'line',start:move(s.start),end:move(s.end)}:{...s,start:move(s.start),end:move(s.end),center:move(s.center)};
@@ -100,9 +152,16 @@ export function generateContourGcode(args:{summary:ImportSummary;stock:StockDefi
     if(!validation.ok)return{ok:false,errors:['Die analytisch erzeugte Kreisbahn hat die CAD-Kreisprüfung nicht bestanden.'],warnings,code:'',lineCount:0,pointCount:3,passes:0,radiusMm:radius,interpolation:'g2g3-native-circle',nativeArcCount:0,validation};
   }
 
-  const semantic=operation.contourId===null?null:buildSemanticContours(summary.planarGeometry?.curves??[],transform).find(c=>c.id===operation.contourId);
-  const semanticOffset=!useNativeCircle&&semantic&&semantic.segments.some(s=>s.kind==='arc')?offsetSemanticContour(semantic,correction,.002):null;
+  const semanticCandidates=buildSemanticContours(summary.planarGeometry?.curves??[],transform);
+  const semanticMatch=!useNativeCircle?matchSemanticContour(selected.points,semanticCandidates):{contour:null,score:Infinity,secondScore:Infinity};
+  const semantic=semanticMatch.contour;
+  if(!useNativeCircle&&!semantic&&semanticCandidates.some(c=>c.supported&&c.segments.some(s=>s.kind==='arc'))){
+    warnings.push(`Native DXF-Semantik konnte der gewählten Sollkontur nicht eindeutig geometrisch zugeordnet werden (Match-Score ${Number.isFinite(semanticMatch.score)?semanticMatch.score.toFixed(5):'—'}). G1-Fallback bleibt aktiv.`);
+  }
+  const semanticOffset=!useNativeCircle&&semantic?offsetSemanticContour(semantic,correction,.002):null;
   const useMixed=!!semanticOffset&&semanticOffset.validation.ok;
+  if(semantic&&!semanticOffset)warnings.push('Die passende native Linien-/Bogenkontur wurde erkannt, ihre analytische Radiuskorrektur konnte aber nicht geschlossen aufgebaut werden. G1-Fallback bleibt aktiv.');
+  else if(semanticOffset&&!semanticOffset.validation.ok)warnings.push(`Native Linien-/Bogenkontur erkannt, aber analytische Bahnprüfung fehlgeschlagen (max. Abweichung ${semanticOffset.validation.maxDeviationMm.toFixed(4)} mm). G1-Fallback bleibt aktiv.`);
   if(useMixed&&semanticOffset)validation=semanticOffset.validation;
 
   toolpath=toolpath.map(p=>({x:p.x-origin.x,y:p.y-origin.y}));
