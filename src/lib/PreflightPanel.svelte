@@ -9,17 +9,20 @@
   type Level='pass'|'warn'|'fail';
   type Check={level:Level;title:string;detail:string};
 
+  function measureActualToolpath(kind:string, contourId:number|null, correctionMm:number, diameterMm:number){
+    void diameterMm;
+    if(kind!=='dxf'||contourId===null)return null;
+    const chains=buildClosedChains(summary.planarGeometry?.curves??[]);
+    const selected=chains.find(c=>c.id===contourId);if(!selected)return null;
+    const actualToolpath=offsetPolygon(selected.points,correctionMm);
+    return validateOffsetSegments(selected.points,actualToolpath,correctionMm,.002);
+  }
+
   $: radius=operation.tool.diameterMm/2;
   $: passes=operation.stepDownMm>0?Math.ceil(operation.totalDepthMm/operation.stepDownMm):0;
   $: correction=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;
   $: correctionLabel=operation.side==='outside'?`+${radius.toFixed(3)} mm außen`:operation.side==='inside'?`${(-radius).toFixed(3)} mm innen`:'0,000 mm · auf Linie';
-  $: pathValidation=(() => {
-    if(summary.kind!=='dxf'||operation.contourId===null)return null;
-    const chains=buildClosedChains(summary.planarGeometry?.curves??[]);
-    const selected=chains.find(c=>c.id===operation.contourId);if(!selected)return null;
-    const actualToolpath=offsetPolygon(selected.points,correction);
-    return validateOffsetSegments(selected.points,actualToolpath,correction,.002);
-  })();
+  $: pathValidation=measureActualToolpath(summary.kind,operation.contourId,correction,operation.tool.diameterMm);
 
   $: checks=(():Check[]=>{
     const out:Check[]=[];
