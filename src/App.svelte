@@ -2,19 +2,21 @@
   import { invoke } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
   import GeometryView from './lib/GeometryView.svelte';
-  import type { ImportSummary, StockDefinition, PartPlacement, PartOrientation, WorkCoordinateSystem } from './lib/types';
+  import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './lib/types';
   import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs } from './lib/types';
 
   const steps = ['Bauteil', 'Rohling', 'Werkzeuge', 'Bearbeiten', 'Prüfen', 'Fräsen'];
   let activeStep = 'Bauteil';
   let importSummary: ImportSummary | null = null;
   let stock: StockDefinition = { ...defaultStock };
+  let stockMode: StockMode = 'manual';
   let placement: PartPlacement = { ...defaultPartPlacement };
   let orientation: PartOrientation = { ...defaultPartOrientation };
   let wcs: WorkCoordinateSystem = { ...defaultWcs };
   let error = '';
 
   function updateStock(field: 'width' | 'height' | 'thickness', event: Event) {
+    if (stockMode !== 'manual' && !(importSummary?.kind === 'dxf' && field === 'thickness')) return;
     const value = Number((event.currentTarget as HTMLInputElement).value);
     if (!Number.isFinite(value) || value <= 0) return;
     stock = { ...stock, [field]: value };
@@ -24,10 +26,63 @@
     if (!Number.isFinite(value)) return;
     placement = { ...placement, [field]: value };
   }
+
+  function curvePoints(curve: Curve2) {
+    if (curve.kind === 'line') return [curve.start, curve.end];
+    if (curve.kind === 'polyline') return curve.points;
+    if (curve.kind === 'circle') return Array.from({ length: 65 }, (_, i) => {
+      const a = i / 64 * Math.PI * 2;
+      return { x: curve.center.x + Math.cos(a) * curve.radius, y: curve.center.y + Math.sin(a) * curve.radius };
+    });
+    if (curve.kind === 'arc') {
+      let a = curve.startAngleDeg, b = curve.endAngleDeg;
+      while (b < a) b += 360;
+      return Array.from({ length: 65 }, (_, i) => {
+        const r = (a + (b - a) * i / 64) * Math.PI / 180;
+        return { x: curve.center.x + Math.cos(r) * curve.radius, y: curve.center.y + Math.sin(r) * curve.radius };
+      });
+    }
+    return [];
+  }
+
+  function orientedPartSize(angleDeg = orientation.rotationZDeg) {
+    if (!importSummary) return null;
+    const a = angleDeg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    let points: { x:number; y:number; z:number }[] = [];
+    if (importSummary.kind === 'step') {
+      const v = importSummary.brep?.displayVertices ?? [];
+      for (let i = 0; i + 2 < v.length; i += 3) points.push({ x:v[i], y:v[i+1], z:v[i+2] });
+    } else {
+      points = (importSummary.planarGeometry?.curves ?? []).flatMap(curvePoints).map(p => ({ ...p, z:0 }));
+    }
+    if (!points.length) return null;
+    const rotated = points.map(p => ({ x:p.x*c-p.y*s, y:p.x*s+p.y*c, z:p.z }));
+    const xs=rotated.map(p=>p.x), ys=rotated.map(p=>p.y), zs=rotated.map(p=>p.z);
+    return {
+      width: Math.max(...xs)-Math.min(...xs),
+      height: Math.max(...ys)-Math.min(...ys),
+      thickness: importSummary.kind === 'step' ? Math.max(...zs)-Math.min(...zs) : stock.thickness
+    };
+  }
+
+  function applyPartBounds(angleDeg = orientation.rotationZDeg) {
+    const size = orientedPartSize(angleDeg);
+    if (!size) return;
+    stock = { ...stock, width:size.width, height:size.height, thickness:size.thickness };
+    placement = { ...defaultPartPlacement };
+  }
+  function setStockMode(mode: StockMode) {
+    stockMode = mode;
+    if (mode === 'part-bounds') applyPartBounds();
+  }
+  function setRotationZ(value: number) {
+    orientation = { ...orientation, rotationZDeg:value };
+    if (stockMode === 'part-bounds') applyPartBounds(value);
+  }
   function updateRotationZ(event: Event) {
     const value = Number((event.currentTarget as HTMLInputElement).value);
     if (!Number.isFinite(value)) return;
-    orientation = { ...orientation, rotationZDeg: value };
+    setRotationZ(value);
   }
 
   async function importPart() {
@@ -36,6 +91,7 @@
     if (!path || Array.isArray(path)) return;
     try {
       importSummary = await invoke<ImportSummary>('inspect_import', { path });
+      stockMode = 'manual';
       placement = { ...defaultPartPlacement };
       orientation = { ...defaultPartOrientation };
       wcs = { ...defaultWcs };
@@ -63,8 +119,8 @@
         {#if importSummary}
           <dl><div><dt>Datei</dt><dd>{importSummary.fileName}</dd></div><div><dt>Format</dt><dd>{importSummary.kind.toUpperCase()}</dd></div><div><dt>Backend</dt><dd>{importSummary.backend}</dd></div><div><dt>Status</dt><dd>{importSummary.status === 'ready' ? 'Bereit' : 'Native STEP-Anbindung fehlt in diesem Build'}</dd></div></dl>
           <div class="placement-section"><p class="placement-title">Modellorientierung</p>
-            <div class="placement-grid"><button class:active={orientation.rotationZDeg === 0} onclick={() => orientation = {...orientation, rotationZDeg:0}}>0°</button><button class:active={orientation.rotationZDeg === 90} onclick={() => orientation = {...orientation, rotationZDeg:90}}>90°</button><button class:active={orientation.rotationZDeg === 180} onclick={() => orientation = {...orientation, rotationZDeg:180}}>180°</button></div>
-            <div class="placement-grid two"><button class:active={orientation.rotationZDeg === 270} onclick={() => orientation = {...orientation, rotationZDeg:270}}>270°</button><button onclick={() => orientation = {...orientation, rotationZDeg:0}}>Zurücksetzen</button></div>
+            <div class="placement-grid"><button class:active={orientation.rotationZDeg === 0} onclick={() => setRotationZ(0)}>0°</button><button class:active={orientation.rotationZDeg === 90} onclick={() => setRotationZ(90)}>90°</button><button class:active={orientation.rotationZDeg === 180} onclick={() => setRotationZ(180)}>180°</button></div>
+            <div class="placement-grid two"><button class:active={orientation.rotationZDeg === 270} onclick={() => setRotationZ(270)}>270°</button><button onclick={() => setRotationZ(0)}>Zurücksetzen</button></div>
             <label>Rotation Z <input type="number" step="1" value={orientation.rotationZDeg} oninput={updateRotationZ} /> °</label>
             <p class="note">Das dreht das Bauteil wirklich relativ zum Rohling. Die freie Mausrotation verändert dagegen nur die Kamera.</p>
           </div>
@@ -74,10 +130,13 @@
         {:else}<p>Das CAD-Modell ist die Quelle für alle späteren Bearbeitungen.</p><button class="primary" onclick={importPart}>Bauteil öffnen</button>{/if}
       {:else if activeStep === 'Rohling'}
         <p class="eyebrow">02 · Rohling</p><h2>Rohling</h2>
-        <label>Breite <input type="number" min="0.1" step="0.1" value={stock.width} oninput={(e) => updateStock('width', e)} /> mm</label>
-        <label>Länge <input type="number" min="0.1" step="0.1" value={stock.height} oninput={(e) => updateStock('height', e)} /> mm</label>
-        <label>Dicke <input type="number" min="0.1" step="0.1" value={stock.thickness} oninput={(e) => updateStock('thickness', e)} /> mm</label>
-        <p class="note">Rohlingabmessungen und Bauteillage aktualisieren die Geometrie live.</p>
+        <div class="placement-section"><p class="placement-title">Rohling entsteht aus</p>
+          <div class="placement-grid two"><button class:active={stockMode === 'manual'} onclick={() => setStockMode('manual')}>Maßen</button><button class:active={stockMode === 'part-bounds'} onclick={() => setStockMode('part-bounds')}>Bauteil</button></div>
+        </div>
+        <label>Breite <input type="number" min="0.1" step="0.1" value={stock.width} disabled={stockMode === 'part-bounds'} oninput={(e) => updateStock('width', e)} /> mm</label>
+        <label>Länge <input type="number" min="0.1" step="0.1" value={stock.height} disabled={stockMode === 'part-bounds'} oninput={(e) => updateStock('height', e)} /> mm</label>
+        <label>Dicke <input type="number" min="0.1" step="0.1" value={stock.thickness} disabled={stockMode === 'part-bounds' && importSummary?.kind === 'step'} oninput={(e) => updateStock('thickness', e)} /> mm</label>
+        {#if stockMode === 'part-bounds'}<p class="note"><strong>Bauteil = Rohling.</strong> Breite und Länge folgen automatisch der orientierten Geometrie.{#if importSummary?.kind === 'step'} Die Dicke wird ebenfalls aus dem STEP-Modell übernommen.{:else} Eine DXF enthält keine Materialdicke; diese bleibt separat einstellbar.{/if}</p>{:else}<p class="note">Rohlingabmessungen und Bauteillage aktualisieren die Geometrie live.</p>{/if}
         <div class="placement-section"><p class="placement-title">Bauteil im Rohling</p>
           <div class="placement-grid"><button class:active={placement.horizontal === 'left'} onclick={() => placement = {...placement, horizontal:'left'}}>Links</button><button class:active={placement.horizontal === 'center'} onclick={() => placement = {...placement, horizontal:'center'}}>Zentriert</button><button class:active={placement.horizontal === 'right'} onclick={() => placement = {...placement, horizontal:'right'}}>Rechts</button></div>
           <div class="placement-grid"><button class:active={placement.vertical === 'front'} onclick={() => placement = {...placement, vertical:'front'}}>Vorne</button><button class:active={placement.vertical === 'center'} onclick={() => placement = {...placement, vertical:'center'}}>Mitte</button><button class:active={placement.vertical === 'back'} onclick={() => placement = {...placement, vertical:'back'}}>Hinten</button></div>
