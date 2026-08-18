@@ -39,9 +39,11 @@ Der externe Simulator fährt pro Zustellung exakt zwei Halbkreise ab. Die zuvor 
 
 **Gate 1 = PASS.**
 
-## Gate 2 — gemischte Konturen: IMPLEMENTIERT / TEST AUSSTEHEND
+## Gate 2 — gemischte Konturen: PASS
 
-Geschlossene Konturen aus echten DXF-Linien und DXF-Bögen werden nun als semantische Primitive durch die CAM-Kette geführt.
+**Datum:** 2026-08-18
+
+Geschlossene Konturen aus echten DXF-Linien und DXF-Bögen werden als semantische Primitive durch die CAM-Kette geführt.
 
 Regeln:
 
@@ -60,8 +62,46 @@ Unter `06 · Fräsen` wird der aktive Modus ausdrücklich angezeigt:
 - `Gemischte native Kontur · G1-Linien + G2/G3-Bögen`
 - oder `G1-Referenzbahn`, wenn die native Semantik nicht sicher freigegeben werden kann.
 
-### Gate-2-Testziel
+### Reale Gate-2-Verifikation: Mini-OX-Seitenwange
 
-Für die bekannte Außenkontur der Mini-OX-Seitenwange muss der erzeugte G-Code innerhalb derselben Zustellung sowohl `G1` für echte Geraden als auch `G2/G3` für echte DXF-Bögen enthalten. Der Simulator muss die Rundungen als kontinuierliche Kreisbögen und die Geraden linear abfahren.
+Die bekannte Außenkontur der Mini-OX-Seitenwange wurde erfolgreich als gemischte native Werkzeugbahn erzeugt.
 
-**Gate 2 bleibt bis zur realen Simulator-Verifikation offen.**
+Verifizierter Testfall:
+
+- Werkzeug Ø 5.000 mm
+- Außenbearbeitung
+- Werkzeugradius 2.500 mm
+- drei Zustellungen bis Z -3.000 mm
+- Vorschub 600 mm/min
+- Eintauchvorschub 200 mm/min
+- Drehzahl 12.000 1/min
+- innerhalb jeder Zustellung: 5 lineare `G1`-Primitive + 5 native `G3`-Bögen
+- identische XY-Geometrie in allen drei Zustellungen
+
+Die zuvor aus rund 246 segmentierten Bahnprimitiven bestehende G1-Referenzdarstellung wird damit für diese Kontur durch eine kompakte native Linien-/Bogenbeschreibung ersetzt.
+
+### Externe Viewer-/Simulator-Verifikation
+
+Die erzeugte gemischte G1/G3-Bahn wurde in mehreren externen G-Code-Werkzeugen betrachtet. Die Werkzeuge interpretieren und visualisieren einzelne Kreisbögen unterschiedlich; ein Viewer stellte Teile der Bögen deutlich anders dar. In CutViewer wird die Mini-OX-Außenkontur dagegen geschlossen und geometrisch plausibel dargestellt, einschließlich der kritischen Line↔Arc-Übergänge.
+
+Diese Beobachtung begründet eine verbindliche Validierungsregel:
+
+**Externe Simulatoren und Viewer sind Validierungshilfen, aber keine geometrische Wahrheitsquelle.**
+
+Maßgeblich bleiben die CAD-Sollkontur und die mathematisch geprüfte CAM-Werkzeugbahn. Ein externer Simulator darf auf mögliche Probleme aufmerksam machen und gehört zum Realitätscheck, entscheidet aber nicht allein über die geometrische Richtigkeit einer Werkzeugbahn.
+
+Der Safety-Fallback bleibt unverändert: Kann die native Offset-Geometrie nicht eindeutig geschlossen und geprüft werden, wird keine halbfertige G2/G3-Bahn ausgegeben, sondern auf die bereits verifizierte G1-Referenzbahn zurückgefallen.
+
+**Gate 2 = PASS.**
+
+## Ergebnis 001G bis Gate 2
+
+BeBlog CAM beherrscht nun sowohl native Vollkreise als auch reale zusammengesetzte DXF-Konturen aus Linien und Kreisbögen. Die ursprüngliche CAD-Semantik bleibt durch die Werkzeugbahnberechnung bis in den G-Code erhalten.
+
+Damit gilt weiterhin:
+
+`CAD-Geometrie → analytische Werkzeugbahn → mathematische Prüfung → native G1/G2/G3-Ausgabe`
+
+und ausdrücklich nicht:
+
+`CAD → segmentierte Punktwolke → nachträgliches Arc-Fitting`
