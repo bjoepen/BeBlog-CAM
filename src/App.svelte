@@ -3,6 +3,7 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import GeometryView from './lib/GeometryView.svelte';
   import ContourOverlay from './lib/ContourOverlay.svelte';
+  import PreflightPanel from './lib/PreflightPanel.svelte';
   import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ContourOperation } from './lib/types';
   import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultContourOperation } from './lib/types';
 
@@ -29,10 +30,16 @@
     placement = { ...placement, [field]: value };
   }
   function updateContourNumber(field: 'totalDepthMm'|'stepDownMm'|'feedMmMin'|'plungeMmMin'|'spindleRpm'|'safeZMm', event:Event){
-    const value=Number((event.currentTarget as HTMLInputElement).value); if(!Number.isFinite(value))return; contour={...contour,[field]:value};
+    const value=Number((event.currentTarget as HTMLInputElement).value);
+    if(!Number.isFinite(value))return;
+    contour={...contour,[field]:value};
   }
-  function updateToolDiameter(event:Event){const value=Number((event.currentTarget as HTMLInputElement).value);if(!Number.isFinite(value)||value<=0)return;contour={...contour,tool:{...contour.tool,diameterMm:value}};}
-  function selectContour(id:number){contour={...contour,contourId:id};}
+  function updateToolDiameter(event:Event){
+    const value=Number((event.currentTarget as HTMLInputElement).value);
+    if(!Number.isFinite(value)||value<=0)return;
+    contour={...contour,tool:{...contour.tool,diameterMm:value}};
+  }
+  function selectContour(id:number){ contour={...contour,contourId:id}; }
 
   function curvePoints(curve: Curve2) {
     if (curve.kind === 'line') return [curve.start, curve.end];
@@ -45,24 +52,115 @@
   function orientedPartSize(angleDeg = orientation.rotationZDeg) {
     if (!importSummary) return null;
     const a=angleDeg*Math.PI/180,c=Math.cos(a),s=Math.sin(a); let points:{x:number;y:number;z:number}[]=[];
-    if(importSummary.kind==='step'){const v=importSummary.brep?.displayVertices??[];for(let i=0;i+2<v.length;i+=3)points.push({x:v[i],y:v[i+1],z:v[i+2]});}
-    else points=(importSummary.planarGeometry?.curves??[]).flatMap(curvePoints).map(p=>({...p,z:0}));
-    if(!points.length)return null;const rotated=points.map(p=>({x:p.x*c-p.y*s,y:p.x*s+p.y*c,z:p.z})),xs=rotated.map(p=>p.x),ys=rotated.map(p=>p.y),zs=rotated.map(p=>p.z);
+    if(importSummary.kind==='step'){
+      const v=importSummary.brep?.displayVertices??[];
+      for(let i=0;i+2<v.length;i+=3)points.push({x:v[i],y:v[i+1],z:v[i+2]});
+    } else points=(importSummary.planarGeometry?.curves??[]).flatMap(curvePoints).map(p=>({...p,z:0}));
+    if(!points.length)return null;
+    const rotated=points.map(p=>({x:p.x*c-p.y*s,y:p.x*s+p.y*c,z:p.z})),xs=rotated.map(p=>p.x),ys=rotated.map(p=>p.y),zs=rotated.map(p=>p.z);
     return{width:Math.max(...xs)-Math.min(...xs),height:Math.max(...ys)-Math.min(...ys),thickness:importSummary.kind==='step'?Math.max(...zs)-Math.min(...zs):stock.thickness};
   }
-  function applyPartBounds(angleDeg=orientation.rotationZDeg){const size=orientedPartSize(angleDeg);if(!size)return;stock={...stock,width:size.width,height:size.height,thickness:size.thickness};placement={...defaultPartPlacement};}
-  function setStockMode(mode:StockMode){if(mode==='none'&&importSummary?.kind!=='dxf')return;stockMode=mode;if(mode==='part-bounds')applyPartBounds();if(mode==='none')placement={...defaultPartPlacement};}
-  function setRotationZ(value:number){orientation={...orientation,rotationZDeg:value};if(stockMode==='part-bounds')applyPartBounds(value);}
-  function updateRotationZ(event:Event){const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value))setRotationZ(value);}
+  function applyPartBounds(angleDeg=orientation.rotationZDeg){
+    const size=orientedPartSize(angleDeg); if(!size)return;
+    stock={...stock,width:size.width,height:size.height,thickness:size.thickness};
+    placement={...defaultPartPlacement};
+  }
+  function setStockMode(mode:StockMode){
+    if(mode==='none'&&importSummary?.kind!=='dxf')return;
+    stockMode=mode;
+    if(mode==='part-bounds')applyPartBounds();
+    if(mode==='none')placement={...defaultPartPlacement};
+  }
+  function setRotationZ(value:number){
+    orientation={...orientation,rotationZDeg:value};
+    if(stockMode==='part-bounds')applyPartBounds(value);
+  }
+  function updateRotationZ(event:Event){
+    const value=Number((event.currentTarget as HTMLInputElement).value);
+    if(Number.isFinite(value))setRotationZ(value);
+  }
 
-  async function importPart(){error='';const path=await open({multiple:false,directory:false,filters:[{name:'CAD',extensions:['step','stp','dxf']} ]});if(!path||Array.isArray(path))return;try{importSummary=await invoke<ImportSummary>('inspect_import',{path});stockMode='manual';placement={...defaultPartPlacement};orientation={...defaultPartOrientation};wcs={...defaultWcs};contour={...defaultContourOperation,tool:{...defaultContourOperation.tool}};}catch(e){error=String(e);}}
+  async function importPart(){
+    error='';
+    const path=await open({multiple:false,directory:false,filters:[{name:'CAD',extensions:['step','stp','dxf']}]});
+    if(!path||Array.isArray(path))return;
+    try{
+      importSummary=await invoke<ImportSummary>('inspect_import',{path});
+      stockMode='manual'; placement={...defaultPartPlacement}; orientation={...defaultPartOrientation}; wcs={...defaultWcs};
+      contour={...defaultContourOperation,tool:{...defaultContourOperation.tool}};
+    }catch(e){error=String(e);}
+  }
 </script>
+
 <div class="app-shell">
-<header class="topbar"><div><strong>BeBlog CAM</strong><span class="build">001F</span></div><div class="project-name">{importSummary?.fileName??'Neues Projekt'}</div></header>
-<aside class="rail" aria-label="Arbeitsablauf">{#each steps as step,i}<button class:active={activeStep===step} onclick={()=>activeStep=step}><span>{String(i+1).padStart(2,'0')}</span>{step}</button>{/each}</aside>
-<main class="workspace"><section class="viewport">{#if importSummary}{#key `${importSummary.kind}:${stockMode}:${stock.width}:${stock.height}:${stock.thickness}:${placement.horizontal}:${placement.vertical}:${placement.offsetX}:${placement.offsetY}:${placement.offsetZ}:${orientation.rotationZDeg}:${wcs.x}:${wcs.y}:${wcs.z}`}<GeometryView summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs}/>{/key}{#if activeStep==='Bearbeiten'&&importSummary.kind==='dxf'}<ContourOverlay summary={importSummary} {stock} {stockMode} {placement} {orientation} operation={contour} onSelectContour={selectContour}/>{/if}<div class="view-label">Aufspannebene → {stockMode==='none'?'Bauteil':'Rohling → Bauteil'} → WCS</div>{:else}<div class="empty-state"><div class="mark">B</div><h1>Ein Bauteil öffnen</h1><p>STEP für exakte 3D-BRep-Geometrie oder DXF für planare Konturen.</p><button class="primary" onclick={importPart}>STEP oder DXF öffnen</button></div>{/if}</section>
-<aside class="inspector">
-{#if activeStep==='Bauteil'}<p class="eyebrow">01 · Bauteil</p><h2>Geometrie</h2>{#if importSummary}<dl><div><dt>Datei</dt><dd>{importSummary.fileName}</dd></div><div><dt>Format</dt><dd>{importSummary.kind.toUpperCase()}</dd></div><div><dt>Backend</dt><dd>{importSummary.backend}</dd></div><div><dt>Status</dt><dd>{importSummary.status==='ready'?'Bereit':'Native STEP-Anbindung fehlt in diesem Build'}</dd></div></dl><div class="placement-section"><p class="placement-title">Modellorientierung</p><div class="placement-grid"><button class:active={orientation.rotationZDeg===0} onclick={()=>setRotationZ(0)}>0°</button><button class:active={orientation.rotationZDeg===90} onclick={()=>setRotationZ(90)}>90°</button><button class:active={orientation.rotationZDeg===180} onclick={()=>setRotationZ(180)}>180°</button></div><div class="placement-grid two"><button class:active={orientation.rotationZDeg===270} onclick={()=>setRotationZ(270)}>270°</button><button onclick={()=>setRotationZ(0)}>Zurücksetzen</button></div><label>Rotation Z <input type="number" step="1" value={orientation.rotationZDeg} oninput={updateRotationZ}/> °</label><p class="note">Das dreht das Bauteil wirklich relativ zur Aufspannung. Die freie Mausrotation verändert nur die Kamera.</p></div>{#if Object.keys(importSummary.entities).length}<div class="entity-list">{#each Object.entries(importSummary.entities) as [name,count]}<span>{name} <b>{count}</b></span>{/each}</div>{/if}{#if importSummary.brep?.cylinderRadiiMm.length}<p class="note">Erkannte Zylinderradien: {importSummary.brep.cylinderRadiiMm.map(r=>`${r.toFixed(3)} mm`).join(' · ')}</p>{/if}{#if importSummary.note}<p class="note">{importSummary.note}</p>{/if}<button class="secondary" onclick={importPart}>Anderes Bauteil öffnen</button>{:else}<p>Das CAD-Modell ist die Quelle für alle späteren Bearbeitungen.</p><button class="primary" onclick={importPart}>Bauteil öffnen</button>{/if}
-{:else if activeStep==='Rohling'}<p class="eyebrow">02 · Rohling</p><h2>Rohling</h2><div class="placement-section"><p class="placement-title">Rohling entsteht aus</p><div class="placement-grid"><button class:active={stockMode==='manual'} onclick={()=>setStockMode('manual')}>Maßen</button><button class:active={stockMode==='part-bounds'} onclick={()=>setStockMode('part-bounds')}>Bauteil</button>{#if importSummary?.kind==='dxf'}<button class:active={stockMode==='none'} onclick={()=>setStockMode('none')}>Kein Rohling</button>{/if}</div></div>{#if stockMode!=='none'}<label>Breite <input type="number" min="0.1" step="0.1" value={stock.width} disabled={stockMode==='part-bounds'} oninput={e=>updateStock('width',e)}/> mm</label><label>Länge <input type="number" min="0.1" step="0.1" value={stock.height} disabled={stockMode==='part-bounds'} oninput={e=>updateStock('height',e)}/> mm</label><label>Dicke <input type="number" min="0.1" step="0.1" value={stock.thickness} disabled={stockMode==='part-bounds'&&importSummary?.kind==='step'} oninput={e=>updateStock('thickness',e)}/> mm</label>{#if stockMode==='part-bounds'}<p class="note"><strong>Bauteil = Rohling.</strong> Breite und Länge folgen der orientierten Geometrie.{#if importSummary?.kind==='step'} Die Dicke kommt ebenfalls aus dem STEP-Modell.{:else} Die DXF enthält keine Materialdicke; diese bleibt separat einstellbar.{/if}</p>{:else}<p class="note">Rohlingabmessungen und Bauteillage aktualisieren die Geometrie live.</p>{/if}<div class="placement-section"><p class="placement-title">Bauteil im Rohling</p><div class="placement-grid"><button class:active={placement.horizontal==='left'} onclick={()=>placement={...placement,horizontal:'left'}}>Links</button><button class:active={placement.horizontal==='center'} onclick={()=>placement={...placement,horizontal:'center'}}>Zentriert</button><button class:active={placement.horizontal==='right'} onclick={()=>placement={...placement,horizontal:'right'}}>Rechts</button></div><div class="placement-grid"><button class:active={placement.vertical==='front'} onclick={()=>placement={...placement,vertical:'front'}}>Vorne</button><button class:active={placement.vertical==='center'} onclick={()=>placement={...placement,vertical:'center'}}>Mitte</button><button class:active={placement.vertical==='back'} onclick={()=>placement={...placement,vertical:'back'}}>Hinten</button></div><details><summary>Feinkorrektur</summary><label>X <input type="number" step="0.1" value={placement.offsetX} oninput={e=>updatePlacementOffset('offsetX',e)}/> mm</label><label>Y <input type="number" step="0.1" value={placement.offsetY} oninput={e=>updatePlacementOffset('offsetY',e)}/> mm</label><label>Z <input type="number" step="0.1" value={placement.offsetZ} oninput={e=>updatePlacementOffset('offsetZ',e)}/> mm</label></details></div>{:else}<p class="note"><strong>Kein Rohling.</strong> Die DXF wird direkt als planare Bauteilgeometrie verwendet. Materialabmessungen werden erst verlangt, wenn eine spätere Bearbeitungsstrategie sie wirklich benötigt.</p>{/if}<div class="placement-section"><p class="placement-title">Werkstücknullpunkt / WCS</p><div class="placement-grid"><button class:active={wcs.x==='left'} onclick={()=>wcs={...wcs,x:'left'}}>Links</button><button class:active={wcs.x==='center'} onclick={()=>wcs={...wcs,x:'center'}}>Mitte</button><button class:active={wcs.x==='right'} onclick={()=>wcs={...wcs,x:'right'}}>Rechts</button></div><div class="placement-grid"><button class:active={wcs.y==='front'} onclick={()=>wcs={...wcs,y:'front'}}>Vorne</button><button class:active={wcs.y==='center'} onclick={()=>wcs={...wcs,y:'center'}}>Mitte</button><button class:active={wcs.y==='back'} onclick={()=>wcs={...wcs,y:'back'}}>Hinten</button></div><div class="placement-grid two"><button class:active={wcs.z==='top'} onclick={()=>wcs={...wcs,z:'top'}}>Oberseite</button><button class:active={wcs.z==='bottom'} onclick={()=>wcs={...wcs,z:'bottom'}}>Unterseite</button></div><p class="note"><strong>Aktiver WCS:</strong> {wcs.x==='left'?'links':wcs.x==='center'?'mittig':'rechts'} · {wcs.y==='front'?'vorne':wcs.y==='center'?'mittig':'hinten'} · {wcs.z==='top'?'Oberseite':'Unterseite'}.</p></div>
-{:else if activeStep==='Bearbeiten'}<p class="eyebrow">04 · Bearbeiten</p><h2>Kontur</h2>{#if importSummary}<p>{#if importSummary.kind==='dxf'}Klicke im Viewport auf eine geschlossene Kontur. Die orange Linie markiert die Geometrie, die rote Linie den Fräsermittelpunkt.{:else}Die Konturwahl aus STEP-Flächen folgt nach dem 2D-Gate; die Schnittdaten können bereits vorbereitet werden.{/if}</p>{#if importSummary.kind==='dxf'}<p class="note"><strong>Ziel:</strong> {contour.contourId===null?'Noch keine geschlossene Kontur gewählt.':`Kontur ${contour.contourId+1} gewählt.`}</p>{/if}<div class="placement-section"><p class="placement-title">Werkzeug</p><label>Durchmesser <input type="number" min="0.1" step="0.1" value={contour.tool.diameterMm} oninput={updateToolDiameter}/> mm</label></div><div class="placement-section"><p class="placement-title">Bahn</p><div class="placement-grid"><button class:active={contour.side==='outside'} onclick={()=>contour={...contour,side:'outside'}}>Außen</button><button class:active={contour.side==='inside'} onclick={()=>contour={...contour,side:'inside'}}>Innen</button><button class:active={contour.side==='on-line'} onclick={()=>contour={...contour,side:'on-line'}}>Auf Linie</button></div><div class="placement-grid two"><button class:active={contour.direction==='climb'} onclick={()=>contour={...contour,direction:'climb'}}>Gleichlauf</button><button class:active={contour.direction==='conventional'} onclick={()=>contour={...contour,direction:'conventional'}}>Gegenlauf</button></div></div><div class="placement-section"><p class="placement-title">Schnittdaten</p><label>Gesamttiefe <input type="number" min="0" step="0.1" value={contour.totalDepthMm} oninput={e=>updateContourNumber('totalDepthMm',e)}/> mm</label><label>Zustellung <input type="number" min="0.1" step="0.1" value={contour.stepDownMm} oninput={e=>updateContourNumber('stepDownMm',e)}/> mm</label><label>Vorschub <input type="number" min="1" step="10" value={contour.feedMmMin} oninput={e=>updateContourNumber('feedMmMin',e)}/> mm/min</label><label>Eintauchen <input type="number" min="1" step="10" value={contour.plungeMmMin} oninput={e=>updateContourNumber('plungeMmMin',e)}/> mm/min</label><label>Drehzahl <input type="number" min="0" step="100" value={contour.spindleRpm} oninput={e=>updateContourNumber('spindleRpm',e)}/> U/min</label><label>Sicherheits-Z <input type="number" min="0" step="0.5" value={contour.safeZMm} oninput={e=>updateContourNumber('safeZMm',e)}/> mm</label></div><p class="note"><strong>{contour.name}:</strong> Ø {contour.tool.diameterMm} mm · {contour.side==='outside'?'außen':contour.side==='inside'?'innen':'auf Linie'} · Tiefe {contour.totalDepthMm} mm in {Math.max(1,Math.ceil(contour.totalDepthMm/Math.max(contour.stepDownMm,0.001)))} Zustellung(en).</p>{:else}<p>Öffne zuerst ein Bauteil.</p>{/if}
-{:else}<p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p><h2>Noch ruhig.</h2><p>Dieser Bereich wird in einem späteren Build aktiviert.</p>{/if}{#if error}<p class="error">{error}</p>{/if}</aside></main></div>
+  <header class="topbar">
+    <div><strong>BeBlog CAM</strong><span class="build">001F</span></div>
+    <div class="project-name">{importSummary?.fileName??'Neues Projekt'}</div>
+  </header>
+
+  <aside class="rail" aria-label="Arbeitsablauf">
+    {#each steps as step,i}
+      <button class:active={activeStep===step} onclick={()=>activeStep=step}><span>{String(i+1).padStart(2,'0')}</span>{step}</button>
+    {/each}
+  </aside>
+
+  <main class="workspace">
+    <section class="viewport">
+      {#if importSummary}
+        {#key `${importSummary.kind}:${stockMode}:${stock.width}:${stock.height}:${stock.thickness}:${placement.horizontal}:${placement.vertical}:${placement.offsetX}:${placement.offsetY}:${placement.offsetZ}:${orientation.rotationZDeg}:${wcs.x}:${wcs.y}:${wcs.z}`}
+          <GeometryView summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs}/>
+        {/key}
+        {#if activeStep==='Bearbeiten'&&importSummary.kind==='dxf'}
+          <ContourOverlay summary={importSummary} {stock} {stockMode} {placement} {orientation} operation={contour} onSelectContour={selectContour}/>
+        {/if}
+        <div class="view-label">Aufspannebene → {stockMode==='none'?'Bauteil':'Rohling → Bauteil'} → WCS</div>
+      {:else}
+        <div class="empty-state"><div class="mark">B</div><h1>Ein Bauteil öffnen</h1><p>STEP für exakte 3D-BRep-Geometrie oder DXF für planare Konturen.</p><button class="primary" onclick={importPart}>STEP oder DXF öffnen</button></div>
+      {/if}
+    </section>
+
+    <aside class="inspector">
+      {#if activeStep==='Bauteil'}
+        <p class="eyebrow">01 · Bauteil</p><h2>Geometrie</h2>
+        {#if importSummary}
+          <dl><div><dt>Datei</dt><dd>{importSummary.fileName}</dd></div><div><dt>Format</dt><dd>{importSummary.kind.toUpperCase()}</dd></div><div><dt>Backend</dt><dd>{importSummary.backend}</dd></div><div><dt>Status</dt><dd>{importSummary.status==='ready'?'Bereit':'Native STEP-Anbindung fehlt in diesem Build'}</dd></div></dl>
+          <div class="placement-section"><p class="placement-title">Modellorientierung</p><div class="placement-grid"><button class:active={orientation.rotationZDeg===0} onclick={()=>setRotationZ(0)}>0°</button><button class:active={orientation.rotationZDeg===90} onclick={()=>setRotationZ(90)}>90°</button><button class:active={orientation.rotationZDeg===180} onclick={()=>setRotationZ(180)}>180°</button></div><div class="placement-grid two"><button class:active={orientation.rotationZDeg===270} onclick={()=>setRotationZ(270)}>270°</button><button onclick={()=>setRotationZ(0)}>Zurücksetzen</button></div><label>Rotation Z <input type="number" step="1" value={orientation.rotationZDeg} oninput={updateRotationZ}/> °</label><p class="note">Das dreht das Bauteil wirklich relativ zur Aufspannung. Die freie Mausrotation verändert nur die Kamera.</p></div>
+          {#if Object.keys(importSummary.entities).length}<div class="entity-list">{#each Object.entries(importSummary.entities) as [name,count]}<span>{name} <b>{count}</b></span>{/each}</div>{/if}
+          {#if importSummary.brep?.cylinderRadiiMm.length}<p class="note">Erkannte Zylinderradien: {importSummary.brep.cylinderRadiiMm.map(r=>`${r.toFixed(3)} mm`).join(' · ')}</p>{/if}
+          {#if importSummary.note}<p class="note">{importSummary.note}</p>{/if}
+          <button class="secondary" onclick={importPart}>Anderes Bauteil öffnen</button>
+        {:else}<p>Das CAD-Modell ist die Quelle für alle späteren Bearbeitungen.</p><button class="primary" onclick={importPart}>Bauteil öffnen</button>{/if}
+
+      {:else if activeStep==='Rohling'}
+        <p class="eyebrow">02 · Rohling</p><h2>Rohling</h2>
+        <div class="placement-section"><p class="placement-title">Rohling entsteht aus</p><div class="placement-grid"><button class:active={stockMode==='manual'} onclick={()=>setStockMode('manual')}>Maßen</button><button class:active={stockMode==='part-bounds'} onclick={()=>setStockMode('part-bounds')}>Bauteil</button>{#if importSummary?.kind==='dxf'}<button class:active={stockMode==='none'} onclick={()=>setStockMode('none')}>Kein Rohling</button>{/if}</div></div>
+        {#if stockMode!=='none'}
+          <label>Breite <input type="number" min="0.1" step="0.1" value={stock.width} disabled={stockMode==='part-bounds'} oninput={e=>updateStock('width',e)}/> mm</label>
+          <label>Länge <input type="number" min="0.1" step="0.1" value={stock.height} disabled={stockMode==='part-bounds'} oninput={e=>updateStock('height',e)}/> mm</label>
+          <label>Dicke <input type="number" min="0.1" step="0.1" value={stock.thickness} disabled={stockMode==='part-bounds'&&importSummary?.kind==='step'} oninput={e=>updateStock('thickness',e)}/> mm</label>
+          {#if stockMode==='part-bounds'}<p class="note"><strong>Bauteil = Rohling.</strong> Breite und Länge folgen der orientierten Geometrie.{#if importSummary?.kind==='step'} Die Dicke kommt ebenfalls aus dem STEP-Modell.{:else} Die DXF enthält keine Materialdicke; diese bleibt separat einstellbar.{/if}</p>{:else}<p class="note">Rohlingabmessungen und Bauteillage aktualisieren die Geometrie live.</p>{/if}
+          <div class="placement-section"><p class="placement-title">Bauteil im Rohling</p><div class="placement-grid"><button class:active={placement.horizontal==='left'} onclick={()=>placement={...placement,horizontal:'left'}}>Links</button><button class:active={placement.horizontal==='center'} onclick={()=>placement={...placement,horizontal:'center'}}>Zentriert</button><button class:active={placement.horizontal==='right'} onclick={()=>placement={...placement,horizontal:'right'}}>Rechts</button></div><div class="placement-grid"><button class:active={placement.vertical==='front'} onclick={()=>placement={...placement,vertical:'front'}}>Vorne</button><button class:active={placement.vertical==='center'} onclick={()=>placement={...placement,vertical:'center'}}>Mitte</button><button class:active={placement.vertical==='back'} onclick={()=>placement={...placement,vertical:'back'}}>Hinten</button></div><details><summary>Feinkorrektur</summary><label>X <input type="number" step="0.1" value={placement.offsetX} oninput={e=>updatePlacementOffset('offsetX',e)}/> mm</label><label>Y <input type="number" step="0.1" value={placement.offsetY} oninput={e=>updatePlacementOffset('offsetY',e)}/> mm</label><label>Z <input type="number" step="0.1" value={placement.offsetZ} oninput={e=>updatePlacementOffset('offsetZ',e)}/> mm</label></details></div>
+        {:else}<p class="note"><strong>Kein Rohling.</strong> Die DXF wird direkt als planare Bauteilgeometrie verwendet. Materialabmessungen werden erst verlangt, wenn eine spätere Bearbeitungsstrategie sie wirklich benötigt.</p>{/if}
+        <div class="placement-section"><p class="placement-title">Werkstücknullpunkt / WCS</p><div class="placement-grid"><button class:active={wcs.x==='left'} onclick={()=>wcs={...wcs,x:'left'}}>Links</button><button class:active={wcs.x==='center'} onclick={()=>wcs={...wcs,x:'center'}}>Mitte</button><button class:active={wcs.x==='right'} onclick={()=>wcs={...wcs,x:'right'}}>Rechts</button></div><div class="placement-grid"><button class:active={wcs.y==='front'} onclick={()=>wcs={...wcs,y:'front'}}>Vorne</button><button class:active={wcs.y==='center'} onclick={()=>wcs={...wcs,y:'center'}}>Mitte</button><button class:active={wcs.y==='back'} onclick={()=>wcs={...wcs,y:'back'}}>Hinten</button></div><div class="placement-grid two"><button class:active={wcs.z==='top'} onclick={()=>wcs={...wcs,z:'top'}}>Oberseite</button><button class:active={wcs.z==='bottom'} onclick={()=>wcs={...wcs,z:'bottom'}}>Unterseite</button></div><p class="note"><strong>Aktiver WCS:</strong> {wcs.x==='left'?'links':wcs.x==='center'?'mittig':'rechts'} · {wcs.y==='front'?'vorne':wcs.y==='center'?'mittig':'hinten'} · {wcs.z==='top'?'Oberseite':'Unterseite'}.</p></div>
+
+      {:else if activeStep==='Bearbeiten'}
+        <p class="eyebrow">04 · Bearbeiten</p><h2>Kontur</h2>
+        {#if importSummary}
+          <p>{#if importSummary.kind==='dxf'}Klicke im Viewport auf eine geschlossene Kontur. Orange markiert die Sollgeometrie, rot den daraus abgeleiteten Fräsermittelpunkt.{:else}Die Konturwahl aus STEP-Flächen folgt nach dem 2D-Gate; die Schnittdaten können bereits vorbereitet werden.{/if}</p>
+          {#if importSummary.kind==='dxf'}<p class="note"><strong>Ziel:</strong> {contour.contourId===null?'Noch keine geschlossene Kontur gewählt.':`Kontur ${contour.contourId+1} gewählt.`}</p>{/if}
+          <div class="placement-section"><p class="placement-title">Werkzeug</p><label>Durchmesser <input type="number" min="0.1" step="0.1" value={contour.tool.diameterMm} oninput={updateToolDiameter}/> mm</label></div>
+          <div class="placement-section"><p class="placement-title">Bahn</p><div class="placement-grid"><button class:active={contour.side==='outside'} onclick={()=>contour={...contour,side:'outside'}}>Außen</button><button class:active={contour.side==='inside'} onclick={()=>contour={...contour,side:'inside'}}>Innen</button><button class:active={contour.side==='on-line'} onclick={()=>contour={...contour,side:'on-line'}}>Auf Linie</button></div><div class="placement-grid two"><button class:active={contour.direction==='climb'} onclick={()=>contour={...contour,direction:'climb'}}>Gleichlauf</button><button class:active={contour.direction==='conventional'} onclick={()=>contour={...contour,direction:'conventional'}}>Gegenlauf</button></div></div>
+          <div class="placement-section"><p class="placement-title">Schnittdaten</p><label>Gesamttiefe <input type="number" min="0" step="0.1" value={contour.totalDepthMm} oninput={e=>updateContourNumber('totalDepthMm',e)}/> mm</label><label>Zustellung <input type="number" min="0.1" step="0.1" value={contour.stepDownMm} oninput={e=>updateContourNumber('stepDownMm',e)}/> mm</label><label>Vorschub <input type="number" min="1" step="10" value={contour.feedMmMin} oninput={e=>updateContourNumber('feedMmMin',e)}/> mm/min</label><label>Eintauchen <input type="number" min="1" step="10" value={contour.plungeMmMin} oninput={e=>updateContourNumber('plungeMmMin',e)}/> mm/min</label><label>Drehzahl <input type="number" min="0" step="100" value={contour.spindleRpm} oninput={e=>updateContourNumber('spindleRpm',e)}/> U/min</label><label>Sicherheits-Z <input type="number" min="0" step="0.5" value={contour.safeZMm} oninput={e=>updateContourNumber('safeZMm',e)}/> mm</label></div>
+          <p class="note"><strong>{contour.name}:</strong> Ø {contour.tool.diameterMm} mm · {contour.side==='outside'?'außen':contour.side==='inside'?'innen':'auf Linie'} · Tiefe {contour.totalDepthMm} mm in {Math.max(1,Math.ceil(contour.totalDepthMm/Math.max(contour.stepDownMm,0.001)))} Zustellung(en).</p>
+        {:else}<p>Öffne zuerst ein Bauteil.</p>{/if}
+
+      {:else if activeStep==='Prüfen'}
+        {#if importSummary}<PreflightPanel summary={importSummary} {stock} {stockMode} operation={contour}/>{:else}<p class="eyebrow">05 · Prüfen</p><h2>Preflight</h2><p>Öffne zuerst ein Bauteil.</p>{/if}
+
+      {:else}
+        <p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p><h2>Noch ruhig.</h2><p>Dieser Bereich wird in einem späteren Build aktiviert.</p>
+      {/if}
+      {#if error}<p class="error">{error}</p>{/if}
+    </aside>
+  </main>
+</div>
