@@ -2,11 +2,11 @@
 
 ## 2026-08-18 — First verified DXF-to-G-code CAM pipeline
 
-BeBlog CAM successfully completed and externally visualized its first verified CAM chain for a real DXF contour.
+BeBlog CAM successfully completed, externally visualized and dynamically simulated its first verified CAM chain for a real DXF contour.
 
 Verified path:
 
-`DXF → CAD contour as source of truth → tool-radius compensation → mathematical toolpath validation → depth passes → WCS transformation → G-code → external NC viewer`
+`DXF → CAD contour as source of truth → tool-radius compensation → mathematical toolpath validation → depth passes → WCS transformation → G-code → external NC viewer → dynamic simulation`
 
 Key result:
 
@@ -16,9 +16,11 @@ Key result:
 - Three depth passes were generated at Z -1.000 / -2.000 / -3.000 mm.
 - Safe Z was +5.000 mm; feed 600 mm/min; plunge 200 mm/min; spindle 12,000 1/min.
 - The resulting G-code was rendered plausibly in an external NC viewer with coincident XY contours across all three depth passes.
+- The complete program was then played in the simulator and followed the expected contour and pass sequence correctly.
+- The visible segmented motion on curves confirms the current `G1` reference implementation and motivates native `G2/G3` output in the following build.
 - `05 · Prüfen` is established as the mandatory preflight gate before `06 · Fräsen`.
 
-This milestone closes BeBlog CAM's first fundamental path from real CAD geometry to a numerically validated machine trajectory.
+This milestone closes BeBlog CAM's first fundamental path from real CAD geometry to a numerically validated and dynamically simulated machine trajectory.
 
 Detailed record: `docs/BUILD-001F.md`
 
