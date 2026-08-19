@@ -1,5 +1,13 @@
+import { writable } from 'svelte/store';
 import type { CamOperation, OperationKind, OperationsProject } from './types';
-import { defaultCarveOperation, defaultContourOperation, defaultPocketOperation } from './types';
+import { defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultOperationsProject } from './types';
+
+export const operationsProjectStore=writable<OperationsProject>({
+  operations:defaultOperationsProject.operations.map(op=>cloneOperation(op)),
+  activeOperationId:defaultOperationsProject.activeOperationId
+});
+
+function sync(project:OperationsProject){operationsProjectStore.set({operations:project.operations.map(cloneOperation),activeOperationId:project.activeOperationId});return project;}
 
 export function cloneOperation<T extends CamOperation>(operation:T):T {
   return {...operation,tool:{...operation.tool},...(operation.kind==='carve'?{curveIds:[...operation.curveIds]}:{})} as T;
@@ -13,6 +21,7 @@ export function createOperation(kind:OperationKind,index:number):CamOperation {
 }
 
 export function activeOperation(project:OperationsProject):CamOperation|null {
+  sync(project);
   return project.operations.find(op=>op.id===project.activeOperationId)??project.operations[0]??null;
 }
 
@@ -20,24 +29,24 @@ export function addOperation(project:OperationsProject,kind:OperationKind):Opera
   let serial=project.operations.length+1,id='';
   do{id=`op-${kind}-${serial++}`;}while(project.operations.some(op=>op.id===id));
   const op=createOperation(kind,serial-1);
-  return {operations:[...project.operations,op],activeOperationId:op.id};
+  return sync({operations:[...project.operations,op],activeOperationId:op.id});
 }
 
 export function replaceOperation(project:OperationsProject,next:CamOperation):OperationsProject {
-  return {...project,operations:project.operations.map(op=>op.id===next.id?cloneOperation(next):op)};
+  return sync({...project,operations:project.operations.map(op=>op.id===next.id?cloneOperation(next):op)});
 }
 
 export function selectOperation(project:OperationsProject,id:string):OperationsProject {
-  return project.operations.some(op=>op.id===id)?{...project,activeOperationId:id}:project;
+  return sync(project.operations.some(op=>op.id===id)?{...project,activeOperationId:id}:project);
 }
 
 export function removeOperation(project:OperationsProject,id:string):OperationsProject {
   const index=project.operations.findIndex(op=>op.id===id);
-  if(index<0)return project;
+  if(index<0)return sync(project);
   const operations=project.operations.filter(op=>op.id!==id);
-  if(project.activeOperationId!==id)return {...project,operations};
+  if(project.activeOperationId!==id)return sync({...project,operations});
   const fallback=operations[Math.min(index,operations.length-1)]??null;
-  return {operations,activeOperationId:fallback?.id??null};
+  return sync({operations,activeOperationId:fallback?.id??null});
 }
 
 export function operationSummary(operation:CamOperation):string {
