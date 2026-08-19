@@ -6,8 +6,8 @@
   import PreflightPanel from './lib/PreflightPanel.svelte';
   import GCodePanel from './lib/GCodePanel.svelte';
   import PocketGCodePanel from './lib/PocketGCodePanel.svelte';
-  import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CamOperation, ContourOperation, PocketOperation, OperationKind } from './lib/types';
-  import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultContourOperation, defaultPocketOperation } from './lib/types';
+  import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CamOperation, ContourOperation, PocketOperation, CarveOperation, OperationKind, CarveSelectionMode } from './lib/types';
+  import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultContourOperation, defaultPocketOperation, defaultCarveOperation } from './lib/types';
 
   const steps = ['Bauteil', 'Rohling', 'Werkzeuge', 'Bearbeiten', 'Prüfen', 'Fräsen'];
   let activeStep = 'Bauteil';
@@ -31,11 +31,19 @@
   function updateToolDiameter(event:Event){const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>0)operation={...operation,tool:{...operation.tool,diameterMm:value}} as CamOperation;}
   function updatePocketStepover(event:Event){if(operation.kind!=='pocket')return;const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value))operation={...operation,stepoverPercent:value};}
   function updateRampAngle(event:Event){if(operation.kind!=='pocket')return;const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value))operation={...operation,rampAngleDeg:value};}
-  function selectContour(id:number){operation={...operation,contourId:id} as CamOperation;}
+  function selectContour(id:number){if(operation.kind==='carve')return;operation={...operation,contourId:id};}
+  function eligibleCarveCurve(curve:Curve2){return curve.kind==='line'||curve.kind==='arc'||(curve.kind==='polyline'&&!curve.closed);}
+  function carveLayerNames(){if(importSummary?.kind!=='dxf')return[];const curves=importSummary.planarGeometry?.curves??[],layers=importSummary.planarGeometry?.curveLayers??[];return [...new Set(curves.map((curve,i)=>eligibleCarveCurve(curve)?layers[i]:null).filter((v):v is string=>!!v))].sort((a,b)=>a.localeCompare(b));}
+  function setCarveSelectionMode(mode:CarveSelectionMode){if(operation.kind!=='carve')return;operation={...operation,selectionMode:mode,curveIds:[],layerName:null};}
+  function toggleCarveCurve(id:number){if(operation.kind!=='carve'||operation.selectionMode!=='individual')return;const set=new Set(operation.curveIds);set.has(id)?set.delete(id):set.add(id);operation={...operation,curveIds:[...set].sort((a,b)=>a-b),layerName:null};}
+  function chooseCarveLayer(event:Event){if(operation.kind!=='carve'||!importSummary?.planarGeometry)return;const name=(event.currentTarget as HTMLSelectElement).value||null;const curves=importSummary.planarGeometry.curves,layers=importSummary.planarGeometry.curveLayers??[];const curveIds=name?curves.flatMap((curve,i)=>layers[i]===name&&eligibleCarveCurve(curve)?[i]:[]):[];operation={...operation,layerName:name,curveIds};}
   function setOperationKind(kind:OperationKind){
     if(kind===operation.kind)return;
-    const shared={contourId:operation.contourId,tool:{...operation.tool},totalDepthMm:operation.totalDepthMm,stepDownMm:operation.stepDownMm,feedMmMin:operation.feedMmMin,plungeMmMin:operation.plungeMmMin,spindleRpm:operation.spindleRpm,safeZMm:operation.safeZMm};
-    operation=kind==='contour'?{...defaultContourOperation,...shared,id:'op-contour-1'}:{...defaultPocketOperation,...shared,id:'op-pocket-1'};
+    const common={tool:{...operation.tool},totalDepthMm:operation.totalDepthMm,stepDownMm:operation.stepDownMm,feedMmMin:operation.feedMmMin,plungeMmMin:operation.plungeMmMin,spindleRpm:operation.spindleRpm,safeZMm:operation.safeZMm};
+    const contourId=operation.kind==='carve'?null:operation.contourId;
+    if(kind==='contour')operation={...defaultContourOperation,...common,contourId,id:'op-contour-1'};
+    else if(kind==='pocket')operation={...defaultPocketOperation,...common,contourId,id:'op-pocket-1'};
+    else operation={...defaultCarveOperation,...common,tool:{...defaultCarveOperation.tool},id:'op-carve-1'};
   }
 
   function curvePoints(curve:Curve2){
@@ -59,7 +67,7 @@
     <section class="viewport">
       {#if importSummary}
         {#key `${importSummary.kind}:${stockMode}:${stock.width}:${stock.height}:${stock.thickness}:${placement.horizontal}:${placement.vertical}:${placement.offsetX}:${placement.offsetY}:${placement.offsetZ}:${orientation.rotationZDeg}:${wcs.x}:${wcs.y}:${wcs.z}`}<GeometryView summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs}/>{/key}
-        {#if activeStep==='Bearbeiten'&&importSummary.kind==='dxf'}<ContourOverlay summary={importSummary} {stock} {stockMode} {placement} {orientation} {operation} onSelectContour={selectContour}/>{/if}
+        {#if activeStep==='Bearbeiten'&&importSummary.kind==='dxf'}<ContourOverlay summary={importSummary} {stock} {stockMode} {placement} {orientation} {operation} onSelectContour={selectContour} onSelectCarveCurve={toggleCarveCurve}/>{/if}
         <div class="view-label">Aufspannebene → {stockMode==='none'?'Bauteil':'Rohling → Bauteil'} → WCS</div>
       {:else}<div class="empty-state"><div class="mark">B</div><h1>Ein Bauteil öffnen</h1><p>STEP für exakte 3D-BRep-Geometrie oder DXF für planare Konturen.</p><button class="primary" onclick={importPart}>STEP oder DXF öffnen</button></div>{/if}
     </section>
@@ -85,30 +93,42 @@
         <div class="placement-section"><p class="placement-title">Werkstücknullpunkt / WCS</p><div class="placement-grid"><button class:active={wcs.x==='left'} onclick={()=>wcs={...wcs,x:'left'}}>Links</button><button class:active={wcs.x==='center'} onclick={()=>wcs={...wcs,x:'center'}}>Mitte</button><button class:active={wcs.x==='right'} onclick={()=>wcs={...wcs,x:'right'}}>Rechts</button></div><div class="placement-grid"><button class:active={wcs.y==='front'} onclick={()=>wcs={...wcs,y:'front'}}>Vorne</button><button class:active={wcs.y==='center'} onclick={()=>wcs={...wcs,y:'center'}}>Mitte</button><button class:active={wcs.y==='back'} onclick={()=>wcs={...wcs,y:'back'}}>Hinten</button></div><div class="placement-grid two"><button class:active={wcs.z==='top'} onclick={()=>wcs={...wcs,z:'top'}}>Oberseite</button><button class:active={wcs.z==='bottom'} onclick={()=>wcs={...wcs,z:'bottom'}}>Unterseite</button></div></div>
 
       {:else if activeStep==='Bearbeiten'}
-        <p class="eyebrow">04 · Bearbeiten</p><h2>{operation.kind==='contour'?'Kontur':'Tasche'}</h2>
+        <p class="eyebrow">04 · Bearbeiten</p><h2>{operation.kind==='contour'?'Kontur':operation.kind==='pocket'?'Tasche':'Carve'}</h2>
         {#if importSummary}
-          <div class="placement-section"><p class="placement-title">Bearbeitung</p><div class="placement-grid two"><button class:active={operation.kind==='contour'} onclick={()=>setOperationKind('contour')}>Kontur</button><button class:active={operation.kind==='pocket'} onclick={()=>setOperationKind('pocket')}>Tasche</button></div></div>
-          <p>{importSummary.kind==='dxf'?'Klicke im Viewport auf eine geschlossene Kontur.':'Die 2D-Auswahl aus STEP folgt später.'}</p>
-          {#if importSummary.kind==='dxf'}<p class="note"><strong>Ziel:</strong> {operation.contourId===null?'Noch keine geschlossene Kontur gewählt.':`Kontur ${operation.contourId+1} gewählt.`}</p>{/if}
+          <div class="placement-section"><p class="placement-title">Bearbeitung</p><div class="placement-grid"><button class:active={operation.kind==='contour'} onclick={()=>setOperationKind('contour')}>Kontur</button><button class:active={operation.kind==='pocket'} onclick={()=>setOperationKind('pocket')}>Tasche</button><button class:active={operation.kind==='carve'} onclick={()=>setOperationKind('carve')}>Carve</button></div></div>
+          {#if operation.kind==='carve'}
+            <p>{importSummary.kind==='dxf'?'Wähle offene DXF-Geometrien einzeln oder gemeinsam über ihre Ebene.':'Carve aus STEP folgt später.'}</p>
+            {#if importSummary.kind==='dxf'}
+              <div class="placement-section"><p class="placement-title">Geometrie auswählen</p><div class="placement-grid two"><button class:active={operation.selectionMode==='individual'} onclick={()=>setCarveSelectionMode('individual')}>Einzeln</button><button class:active={operation.selectionMode==='layer'} onclick={()=>setCarveSelectionMode('layer')}>Ebene</button></div>
+                {#if operation.selectionMode==='layer'}<label>Ebene <select value={operation.layerName??''} onchange={chooseCarveLayer}><option value="">Ebene wählen …</option>{#each carveLayerNames() as layer}<option value={layer}>{layer}</option>{/each}</select></label>{/if}
+                <p class="note"><strong>Auswahl:</strong> {operation.curveIds.length} offene Geometrie{operation.curveIds.length===1?'':'n'}{operation.layerName?` · Ebene ${operation.layerName}`:''}.</p>
+              </div>
+            {/if}
+          {:else}
+            <p>{importSummary.kind==='dxf'?'Klicke im Viewport auf eine geschlossene Kontur.':'Die 2D-Auswahl aus STEP folgt später.'}</p>
+            {#if importSummary.kind==='dxf'}<p class="note"><strong>Ziel:</strong> {operation.contourId===null?'Noch keine geschlossene Kontur gewählt.':`Kontur ${operation.contourId+1} gewählt.`}</p>{/if}
+          {/if}
           <div class="placement-section"><p class="placement-title">Werkzeug</p><label>Durchmesser <input type="number" min="0.1" step="0.1" value={operation.tool.diameterMm} oninput={updateToolDiameter}/> mm</label></div>
 
           {#if operation.kind==='contour'}
             <div class="placement-section"><p class="placement-title">Bahn</p><div class="placement-grid"><button class:active={operation.side==='outside'} onclick={()=>operation={...operation,side:'outside'}}>Außen</button><button class:active={operation.side==='inside'} onclick={()=>operation={...operation,side:'inside'}}>Innen</button><button class:active={operation.side==='on-line'} onclick={()=>operation={...operation,side:'on-line'}}>Auf Linie</button></div><div class="placement-grid two"><button class:active={operation.direction==='climb'} onclick={()=>operation={...operation,direction:'climb'}}>Gleichlauf</button><button class:active={operation.direction==='conventional'} onclick={()=>operation={...operation,direction:'conventional'}}>Gegenlauf</button></div></div>
-          {:else}
+          {:else if operation.kind==='pocket'}
             <div class="placement-section"><p class="placement-title">Ausräumen</p><label>Seitliche Zustellung <input type="number" min="5" max="90" step="5" value={operation.stepoverPercent} oninput={updatePocketStepover}/> % Werkzeugdurchmesser</label><p class="note">Konservativer Startwert: 40 %. Daraus wird eine deterministische Rasterbahn mit abschließendem Wandumlauf berechnet.</p></div>
-            <div class="placement-section"><p class="placement-title">Eintauchen</p><div class="placement-grid two"><button class:active={operation.entry==='plunge'} onclick={()=>operation={...operation,entry:'plunge'}}>Senkrecht</button><button class:active={operation.entry==='ramp'} onclick={()=>operation={...operation,entry:'ramp'}}>Rampe</button></div>{#if operation.entry==='ramp'}<label>Rampenwinkel <input type="number" min="0.5" max="15" step="0.5" value={operation.rampAngleDeg} oninput={updateRampAngle}/> °</label><p class="note"><strong>Noch nicht freigegeben:</strong> Die Rampengeometrie folgt in einem eigenen Gate.</p>{:else}<p class="note">Für den ersten Referenztest wird kontrolliert senkrecht eingetaucht.</p>{/if}</div>
+            <div class="placement-section"><p class="placement-title">Eintauchen</p><div class="placement-grid two"><button class:active={operation.entry==='plunge'} onclick={()=>operation={...operation,entry:'plunge'}}>Senkrecht</button><button class:active={operation.entry==='ramp'} onclick={()=>operation={...operation,entry:'ramp'}}>Rampe</button></div>{#if operation.entry==='ramp'}<label>Rampenwinkel <input type="number" min="0.5" max="15" step="0.5" value={operation.rampAngleDeg} oninput={updateRampAngle}/> °</label><p class="note">Die lineare Rampe wird analytisch gegen die verfügbare Rasterlänge geprüft.</p>{:else}<p class="note">Senkrechtes Eintauchen mit definiertem Eintauchvorschub.</p>{/if}</div>
+          {:else}
+            <div class="placement-section"><p class="placement-title">Bahn</p><p class="note"><strong>Centerline:</strong> Die gewählte DXF-Geometrie selbst ist die Fräsermittellinie. Es wird kein Werkzeugradius-Offset erzeugt.</p></div>
           {/if}
 
           <div class="placement-section"><p class="placement-title">Schnittdaten</p><label>Gesamttiefe <input type="number" min="0.01" step="0.1" value={operation.totalDepthMm} oninput={e=>updateNumber('totalDepthMm',e)}/> mm</label><label>Zustellung <input type="number" min="0.01" step="0.1" value={operation.stepDownMm} oninput={e=>updateNumber('stepDownMm',e)}/> mm</label><label>Vorschub <input type="number" min="1" step="10" value={operation.feedMmMin} oninput={e=>updateNumber('feedMmMin',e)}/> mm/min</label><label>Eintauchen <input type="number" min="1" step="10" value={operation.plungeMmMin} oninput={e=>updateNumber('plungeMmMin',e)}/> mm/min</label><label>Drehzahl <input type="number" min="1" step="100" value={operation.spindleRpm} oninput={e=>updateNumber('spindleRpm',e)}/> 1/min</label><label>Sicherheits-Z <input type="number" min="0.1" step="0.5" value={operation.safeZMm} oninput={e=>updateNumber('safeZMm',e)}/> mm</label></div>
-          {#if operation.kind==='pocket'}<p class="note"><strong>001H Gate 4:</strong> Rechtecktaschen mit senkrechtem Eintauchen können nach bestandenem Preflight als .nc ausgegeben werden.</p>{/if}
+          {#if operation.kind==='carve'}<p class="note"><strong>001H Gate 6B:</strong> Carve-Auswahl und Ebenenwahl sind aktiv. Prüfen und Fräsen folgen erst nach dem Auswahl-Realtest.</p>{/if}
         {:else}<p>Noch kein Bauteil geladen.</p>{/if}
 
       {:else if activeStep==='Prüfen'}
-        {#if importSummary}<PreflightPanel summary={importSummary} {stock} {stockMode} {operation}/>{:else}<p class="eyebrow">05 · Prüfen</p><h2>Preflight</h2><p>Noch kein Bauteil geladen.</p>{/if}
+        {#if importSummary}{#if operation.kind==='carve'}<p class="eyebrow">05 · Prüfen</p><h2>Preflight</h2><div class="note"><strong>Carve vorbereitet · noch nicht freigegeben.</strong><br/>Gate 6C prüft die ausgewählten Centerline-Geometrien mathematisch. Bis dahin gibt es bewusst kein PASS.</div>{:else}<PreflightPanel summary={importSummary} {stock} {stockMode} operation={operation as ContourOperation|PocketOperation}/>{/if}{:else}<p class="eyebrow">05 · Prüfen</p><h2>Preflight</h2><p>Noch kein Bauteil geladen.</p>{/if}
 
       {:else if activeStep==='Fräsen'}
         {#if importSummary}
-          {#if operation.kind==='contour'}<GCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as ContourOperation}/>{:else}<PocketGCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as PocketOperation}/>{/if}
+          {#if operation.kind==='contour'}<GCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as ContourOperation}/>{:else if operation.kind==='pocket'}<PocketGCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as PocketOperation}/>{:else}<p class="eyebrow">06 · Fräsen</p><h2>G-Code</h2><div class="note"><strong>Carve-G-Code noch gesperrt.</strong><br/>Erst nach Gate 6C wird aus den ausgewählten Centerlines Maschinen-Code erzeugt.</div>{/if}
         {:else}<p class="eyebrow">06 · Fräsen</p><h2>G-Code</h2><p>Noch kein Bauteil geladen.</p>{/if}
 
       {:else}<p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p><h2>{activeStep}</h2><p>Dieser Schritt wird in den nächsten Builds freigeschaltet.</p>{/if}
