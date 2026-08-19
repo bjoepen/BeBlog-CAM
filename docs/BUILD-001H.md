@@ -10,7 +10,7 @@ Produktregel:
 
 ## Gate 1 — Taschenmodell und konservativer Geometriekern
 
-Status: IMPLEMENTIERT / UI- UND G-CODE-VERDRAHTUNG FOLGT
+Status: PASS / IMPLEMENTIERT
 
 Für den ersten realen Taschenversuch wird absichtlich ein enger, sehr gut vermessbarer Referenzfall unterstützt:
 
@@ -22,7 +22,7 @@ Für den ersten realen Taschenversuch wird absichtlich ein enger, sehr gut verme
 - zusätzlicher Wand-Schlichtumlauf auf der radiuskorrigierten Innenkontur,
 - zunächst konservative senkrechte Eintauchstrategie; Rampen werden als eigener Folge-Gate validiert.
 
-Der neue pure Geometriekern liegt in `src/lib/pocketMath.ts`.
+Der pure Geometriekern liegt in `src/lib/pocketMath.ts`.
 
 ### Geometrische Regeln
 
@@ -36,13 +36,7 @@ Die Rasterbahnen werden so verteilt, dass der reale seitliche Abstand den einges
 
 ### Warum zunächst Rechtecktaschen?
 
-Der erste physische Test soll nicht gleichzeitig Taschenstrategie, Offset-Topologie und komplexe Freiformgeometrie beweisen. Eine Rechtecktasche lässt sich nach dem Fräsen eindeutig vermessen:
-
-- Breite,
-- Länge,
-- Tiefe,
-- Wandmaß,
-- Bodenbild.
+Der erste physische Test soll nicht gleichzeitig Taschenstrategie, Offset-Topologie und komplexe Freiformgeometrie beweisen. Eine Rechtecktasche lässt sich nach dem Fräsen eindeutig vermessen: Breite, Länge, Tiefe, Wandmaß und Bodenbild.
 
 Erst nach diesem physischen Nachweis wird die Taschengeometrie auf allgemeine geschlossene Konturen erweitert.
 
@@ -53,29 +47,50 @@ Erst nach diesem physischen Nachweis wird die Taschengeometrie auf allgemeine ge
 - `contour`
 - `pocket`
 
-`PocketOperation` enthält zunächst:
+`PocketOperation` enthält zunächst Zielkontur, Werkzeug, Gleichlauf/Gegenlauf, Gesamttiefe, Z-Zustellung, Stepover in Prozent, Eintauchstrategie, vorbereiteten Rampenwinkel, Vorschub, Eintauchvorschub, Drehzahl und Sicherheits-Z.
+
+Der Default-Stepover beträgt bewusst konservative 40 % des Werkzeugdurchmessers.
+
+## Gate 2 — Taschenoperation in der UX
+
+Status: IMPLEMENTIERT / REALTEST AUSSTEHEND
+
+Die vorhandene linke Workflow-Leiste bleibt vollständig unverändert. Unter `04 · Bearbeiten` wird die Bearbeitungsart nun kontextuell gewählt:
+
+`Kontur | Tasche`
+
+Für `Kontur` bleibt der in 001G bewiesene Inspector erhalten. Für `Tasche` erscheinen ausschließlich taschenrelevante Parameter:
 
 - Zielkontur,
-- Werkzeug,
-- Gleichlauf/Gegenlauf,
+- Werkzeugdurchmesser,
+- seitliche Zustellung / Stepover,
+- Eintauchstrategie `Senkrecht | Rampe`,
+- Rampenwinkel nur bei gewählter Rampe,
 - Gesamttiefe,
 - Z-Zustellung,
-- Stepover in Prozent,
-- Eintauchstrategie,
-- Rampenwinkel als vorbereiteten Folgeparameter,
 - Vorschub,
 - Eintauchvorschub,
 - Drehzahl,
 - Sicherheits-Z.
 
-Der Default-Stepover beträgt bewusst konservative 40 % des Werkzeugdurchmessers.
+Die Konturauswahl im Viewport akzeptiert nun beide Operationstypen. Bei einer Tasche zeigt die rote Hilfslinie zunächst die um den Werkzeugradius reduzierte Innenbegrenzung; die vollständige Rasterräumung wird erst nach der Gate-3-Prüfung als freigegebene Werkzeugbahn visualisiert.
 
-## Nächstes Gate
+### Sicherheitsgrenze von Gate 2
 
-Gate 2 verdrahtet die Taschenoperation in die bestehende UX:
+Die Taschen-UX darf bereits vollständig bedienbar sein, aber `05 · Prüfen` und `06 · Fräsen` bleiben für `pocket` ausdrücklich gesperrt. Es gibt vor Gate 3 weder ein falsches PASS noch Taschen-G-Code.
 
-`04 · Bearbeiten → Tasche → Kontur wählen → Parameter`
+Damit bleibt der 001G-Konturpfad unverändert nutzbar, während die neue Operation schrittweise und sichtbar entsteht.
 
-`05 · Prüfen` muss anschließend Werkzeugpassung, Stepover, Z-Zustellungen und vollständige Flächenabdeckung prüfen.
+## Gate 3 — als Nächstes
 
-Erst wenn Gate 2 PASS ist, darf `06 · Fräsen` Taschen-G-Code und `.nc` erzeugen.
+Gate 3 verbindet den Taschen-Geometriekern mit dem Preflight. Geprüft werden mindestens:
+
+- geschlossene und für Gate 3 unterstützte Rechteckkontur,
+- Werkzeug passt vollständig in die Tasche,
+- Stepover liegt im freigegebenen Bereich,
+- Rasterabdeckung ist vollständig,
+- Wandumlauf liegt exakt um Werkzeugradius innerhalb der CAD-Sollwand,
+- Z-Zustellungen erreichen die Gesamttiefe ohne Überschreitung,
+- Eintauchstrategie ist für den aktuellen Gate-Stand freigegeben.
+
+Erst nach diesem PASS darf `06 · Fräsen` Taschen-G-Code und `.nc` erzeugen.
