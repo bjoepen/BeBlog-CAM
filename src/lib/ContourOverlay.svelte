@@ -72,7 +72,7 @@
     {#if scene.kind==='carve'}
       {#each scene.carve as curve}
         <path d={path(curve.screen,false)} class:selected-carve={curve.selected} class="carve-candidate" />
-        {#if operation.kind==='carve'&&operation.selectionMode==='individual'}<path d={path(curve.screen,false)} class="carve-pick" onclick={()=>onSelectCarveCurve(curve.id)}><title>Carve-Geometrie {curve.id+1} auswählen</title></path>{/if}
+        <path d={path(curve.screen,false)} class="carve-pick" onclick={()=>onSelectCarveCurve(curve.id)}><title>{curve.selected?'Aus Carve-Auswahl entfernen':'Zur Carve-Auswahl hinzufügen'}</title></path>
       {/each}
     {:else}
       {#each scene.chains as chain}
