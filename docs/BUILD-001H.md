@@ -68,9 +68,9 @@ Der reale Rechteck-Testfall wurde erfolgreich als PASS bestätigt. Geprüft werd
 
 ## Gate 4 — Taschen-G-Code und `.nc`
 
-Status: IMPLEMENTIERT / REALTEST AUSSTEHEND
+Status: PASS
 
-Die in Gate 3 freigegebene Rechtecktaschen-Strategie wird nun in `06 · Fräsen` als Maschinenprogramm ausgegeben.
+Die in Gate 3 freigegebene Rechtecktaschen-Strategie wird in `06 · Fräsen` als Maschinenprogramm ausgegeben.
 
 Verbindlicher Ablauf pro Z-Ebene:
 
@@ -98,13 +98,20 @@ Der Maschinen-Code wird in `src/lib/pocketGcode.ts` erzeugt; die UI liegt in `sr
 
 ### Gate-4-Realtest
 
-Für PASS sind jetzt erforderlich:
+Die erzeugte `.nc` wurde in CAMotics simuliert. Die Simulation zeigt die vollständige Rasterräumung über alle Z-Ebenen sowie den anschließenden Wandumlauf korrekt.
 
-- Rechtecktasche wählen,
-- `05 · Prüfen` = PASS,
-- `06 · Fräsen` erzeugt plausiblen Taschen-G-Code,
-- `.nc` speichern,
-- Datei in externem Viewer/Simulator laden,
-- bestätigen, dass jede Z-Ebene vollständig geräumt und anschließend die Wand abgefahren wird.
+**Gate 4 = PASS.**
 
-Erst danach wird Gate 4 auf PASS gesetzt.
+### Gate-4-Polish — Übergang Raster → Wandumlauf
+
+Im ersten PASS-Code begann der geschlossene Wandumlauf immer an seinem statischen ersten Eckpunkt. Endete die Rasterräumung an einer anderen Ecke, fuhr der Fräser deshalb unnötig diagonal durch die bereits ausgeräumte Tasche zurück.
+
+Der Cleanup-Pfad wird nun zyklisch auf den geometrisch nächstgelegenen gültigen Startpunkt rotiert. Da der Wandumlauf geschlossen ist, verändern sich dadurch weder Geometrie noch Umlaufrichtung.
+
+Für den Referenzfall endet die Rasterbahn bereits auf einer Ecke des Wandumlaufs. In diesem Fall entfällt der Positionierzug vollständig und der Wandumlauf setzt direkt von der aktuellen Fräserposition fort.
+
+Verbindliche Toolpath-Regel daraus:
+
+**Geschlossene Folgepfade sollen am bereits erreichten oder geometrisch nächstgelegenen gültigen Startpunkt beginnen, sofern Geometrie und Bearbeitungsrichtung dadurch unverändert bleiben.**
+
+Dieser Polish verändert keine Sollmaße und keine geprüfte Taschengeometrie; er reduziert ausschließlich unnötige Verfahrwege.
