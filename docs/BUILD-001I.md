@@ -2,93 +2,91 @@
 
 ## Ziel
 
-001I beginnt den nächsten Architektur-Meilenstein nach dem in 001H bewiesenen klassischen 2D-CAM-Grundstock `Kontur · Tasche · Carve`.
-
-Der Schwerpunkt liegt nun auf **mehreren Bearbeitungen innerhalb eines Projekts**. Die bewiesenen Geometrie-, Preflight- und G-Code-Kerne aus 001H werden in Gate 7A ausdrücklich noch nicht verändert.
+001I erweitert den in 001H bewiesenen klassischen 2D-CAM-Grundstock `Kontur · Tasche · Carve` um mehrere Bearbeitungen innerhalb eines Projekts.
 
 Referenzbauteil bleibt das reale CBG-Griffbrett:
 
 1. `FRET_SLOTS` → Carve → Ø 0,6 mm,
-2. `OUTLINE` → Kontur außen → separates Werkzeug.
+2. `OUTLINE` → Kontur außen → Ø 3,0 mm.
 
 ## Gate 7A — Operationsmodell und Bearbeitungsliste
 
-Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**
 
-### UX-Grundsatz
+Der Realtest bestätigte die gewünschte 7A-Semantik: Mehrere Bearbeitungen können angelegt und unabhängig gespeichert werden. Je nachdem, welche Operation aktiv markiert ist, arbeiten die bestehenden Einzel-Preflight- und Einzel-G-Code-Pfade mit genau dieser Operation. Damit ist nachgewiesen, dass die Bearbeitungen nicht gegenseitig ihre Geometrie- oder Werkzeugdaten überschreiben.
 
 Die lineare Hauptnavigation bleibt unverändert:
 
 `01 Bauteil → 02 Rohling → 03 Werkzeuge → 04 Bearbeiten → 05 Prüfen → 06 Fräsen`
 
-Mehrere Operationen erzeugen keinen neuen Hauptschritt und keine zusätzliche CMS-artige Navigation. Sie werden als ruhige Bearbeitungsliste innerhalb `04 · Bearbeiten` geführt.
+Mehrere Operationen werden als ruhige Liste innerhalb `04 · Bearbeiten` geführt.
 
-### Architektur
-
-Der bisherige Einzelzustand wurde kontrolliert zu einem Projektzustand erweitert:
+Verbindliche Architektur:
 
 - `operations: CamOperation[]`
 - `activeOperationId: string | null`
-- eine daraus abgeleitete aktive Operation für die bestehenden Editoren, Preflights und G-Code-Panels.
+- unabhängige Geometrieauswahl, Werkzeug- und Schnittdaten pro Operation.
 
-Der pure Operationskern liegt in `src/lib/operationsProject.ts`.
+**Gate 7A = PASS.**
 
-Jede Operation behält eine unabhängige Kopie ihrer:
+## Gate 7B — Gesamtjob und kontrollierter Werkzeugwechsel
 
-- konkreten Geometrieauswahl,
-- Werkzeugdaten,
-- Schnittdaten,
-- bearbeitungsspezifischen Parameter.
+Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
 
-Insbesondere werden Carve-`curveIds[]` und Werkzeugobjekte beim Anlegen/Wechseln geklont, damit Bearbeitungen keine Zustände miteinander teilen.
+Gate 7B verbindet mehrere bereits bewiesene Einzeloperationen zu einer gemeinsamen `.nc`-Datei.
 
-### Sichtbare Bearbeitungsliste
+Wichtige Sicherheitsentscheidung: Die Geometrie- und G-Code-Kerne für Kontur, Tasche und Carve werden nicht neu implementiert. `src/lib/jobGcode.ts` ruft die bestehenden Generatoren auf und verbindet deren freigegebene Maschinenbewegungen lediglich auf Programmebene.
 
-Unter `04 · Bearbeiten` ist nun eine kompakte Operationsliste aktiv. Sie zeigt pro Bearbeitung:
+### Gesamtjob-Regeln
 
-- laufende Nummer,
-- Operationstyp,
-- kurze Geometrie-/Strategiezusammenfassung,
-- Werkzeugdurchmesser.
+- alle aktivierten Operationen werden in Listenreihenfolge ausgegeben,
+- jede Operation muss für sich freigabefähig sein; ein Einzel-FAIL blockiert den Gesamtjob,
+- `G21 / G90 / G17` werden einmal global gesetzt,
+- die einzelnen Maschinenbewegungen der bewiesenen Generatoren bleiben unverändert,
+- `M30` erscheint nur einmal am Ende des Gesamtjobs,
+- unterschiedliche Werkzeuge erzeugen einen manuellen, sicheren Werkzeugwechsel,
+- gleicher Werkzeugtyp benötigt keinen Werkzeugwechselhalt.
 
-Die aktive Bearbeitung wird ruhig hervorgehoben. Neue Bearbeitungen können als `Kontur`, `Tasche` oder `Carve` hinzugefügt werden. Bei mehr als einer Operation kann eine Bearbeitung einzeln gelöscht werden.
+### Manueller Werkzeugwechsel
 
-Die bestehenden Parameterfelder bearbeiten ausschließlich die aktive Operation. Beim Wechsel wird der gespeicherte Zustand der anderen Operation nicht überschrieben.
+Bei einem Wechsel auf ein anderes Werkzeug wird konservativ erzeugt:
 
-### Gate-7A-Sicherheitsgrenze
+```text
+G0 Z<max. Sicherheits-Z>
+M5
+( Werkzeugwechsel )
+M0 ( Werkzeug ... einsetzen und bestaetigen )
+```
 
-Gate 7A verändert **nicht**:
+Erst nach Bestätigung startet die nächste Operation mit ihren eigenen Drehzahl- und Schnittdaten.
 
-- Werkzeugradiuskorrektur,
-- Taschengeometrie,
-- Carve-Centerlines,
-- Preflight-Mathematik,
-- G-Code-Erzeuger,
-- `.nc`-Export,
-- Reihenfolge oder Semantik bestehender Maschinenbewegungen.
+Ein automatischer `M6`-Wechsel wird in Gate 7B bewusst nicht vorausgesetzt; Referenz ist weiterhin eine Hobby-CNC ohne ATC.
 
-`05 · Prüfen` und `06 · Fräsen` arbeiten weiterhin ausschließlich mit der jeweils aktiven Operation. Ein Gesamtjob und Werkzeugwechsel folgen erst in einem eigenen Gate.
+### UX
 
-### Erforderlicher Realtest
+Sobald das Projekt mehr als eine Operation enthält, zeigt `06 · Fräsen` einen **Gesamtjob** statt nur den gerade markierten Einzelpfad. Der Exportname ist wieder die Bauteildatei mit `.nc`, da die Datei nun den vollständigen Job repräsentiert.
 
-Gate 7A ist PASS, wenn am CBG-Griffbrett:
+Die Einzelgeneratoren bleiben weiterhin verfügbar, wenn nur eine Operation im Projekt existiert.
 
-1. eine Carve-Operation für `FRET_SLOTS` angelegt werden kann,
-2. der Nullbund entfernt werden kann und die Auswahl beim Wechsel der aktiven Operation erhalten bleibt,
-3. eine zweite Konturoperation für `OUTLINE` angelegt werden kann,
-4. zwischen beiden Operationen verlustfrei gewechselt werden kann,
-5. Werkzeug- und Schnittdaten pro Operation unabhängig erhalten bleiben,
-6. eine Operation gelöscht werden kann, ohne die andere zu verändern,
-7. die aktive Operation weiterhin durch die bestehenden Einzel-Preflight- und G-Code-Pfade verarbeitet wird,
-8. Kontur/Tasche/Carve keine Regression gegenüber 001H zeigen.
+### Gate-7B-Realtest
 
-Erst danach wird Gate 7A geschlossen.
+Für PASS am CBG-Griffbrett:
 
-## Folge-Gates
+1. `FRET_SLOTS` als Carve mit 16 gewünschten Bundlinien und Ø 0,6 mm,
+2. `OUTLINE` als Außenkontur mit Ø 3,0 mm,
+3. `06 · Fräsen` muss unabhängig von der aktuell markierten Operation **2 Bearbeitungen / 1 Werkzeugwechsel** anzeigen,
+4. die `.nc` muss zuerst den Carve-Pfad und anschließend die Kontur enthalten,
+5. zwischen beiden muss ein sicherer `M0`-Werkzeugwechsel liegen,
+6. CAMotics muss beide Bearbeitungen im selben Job zeigen,
+7. Nullbund darf nicht wieder erscheinen,
+8. Kontur und Carve müssen geometrisch identisch zu ihren bereits bestandenen Einzeltests bleiben.
 
-Nach Gate 7A folgen getrennt:
+Erst nach externer Simulation wird Gate 7B geschlossen.
+
+## Danach
+
+Nach Gate 7B folgen getrennt:
 
 - projektweiter Preflight über mehrere Operationen,
-- Werkzeuggruppierung und Werkzeugwechsel,
-- Gesamtjob-G-Code,
+- optional intelligentere Werkzeuggruppierung,
 - sichere Job-End-/Parkstrategie.
