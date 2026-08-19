@@ -14,7 +14,7 @@ Freigegebener Taschenpfad:
 
 ## Gate 6 — Carve / Mittellinienbearbeitung
 
-Referenzbauteil ist das reale CBG-Griffbrett `CBG_Diatonic_3_String_635mm.dxf`. Die Bundschlitze liegen als einzelne offene Linien auf dem DXF-Layer `FRET_SLOTS` und werden später mit einem Ø 0,6-mm-Fräser bearbeitet. Die Außenkontur bleibt eine separate Konturoperation.
+Referenzbauteil ist das reale CBG-Griffbrett `CBG_Diatonic_3_String_635mm.dxf`. Die Bundschlitze liegen als einzelne offene Linien auf dem DXF-Layer `FRET_SLOTS` und werden mit einem Ø 0,6-mm-Fräser bearbeitet. Die Außenkontur bleibt eine separate Konturoperation.
 
 ### Verbindliche Semantik
 
@@ -22,20 +22,11 @@ Referenzbauteil ist das reale CBG-Griffbrett `CBG_Diatonic_3_String_635mm.dxf`. 
 - **Tasche:** CAD-Geometrie beschreibt die fertige Flächenbegrenzung; der Innenraum wird radiuskorrigiert geräumt.
 - **Carve:** CAD-Geometrie **ist die Fräsermittellinie**. Es gibt keinen seitlichen Werkzeugradius-Offset.
 
-Damit bleibt die bestehende Grundregel erhalten: Die CAD-Koordinaten sind maßgeblich; die Operation bestimmt lediglich ihre Bearbeitungssemantik.
-
 ## Gate 6A — DXF-Layer als CAM-Semantik
 
 Status: **PASS / GESCHLOSSEN**
 
-Der DXF-Importer verwirft Layerinformationen nicht mehr. Für jede importierte Kurve wird parallel der originale DXF-Layer gespeichert; zusätzlich liefert `PlanarGeometry` die tatsächlich verwendeten Layernamen.
-
-Neue Felder:
-
-- `planarGeometry.curveLayers[]` — 1:1-Zuordnung zu `curves[]`
-- `planarGeometry.layerNames[]` — eindeutige verwendete Layer
-
-Der Realtest bestätigte Anwendungstart, korrekte DXF-Darstellung und keine Regression des bestehenden Importpfads.
+Der DXF-Importer bewahrt Layerinformationen je Kurve und als eindeutige Layerliste. Anwendungstart und DXF-Darstellung wurden nach dem Umbau regressionsgeprüft.
 
 **Gate 6A = PASS.**
 
@@ -43,81 +34,83 @@ Der Realtest bestätigte Anwendungstart, korrekte DXF-Darstellung und keine Regr
 
 Status: **PASS / GESCHLOSSEN**
 
-Unter `04 · Bearbeiten` stehen innerhalb desselben linearen Arbeitsschritts:
-
-`Kontur | Tasche | Carve`
-
-Carve unterstützt die Auswahlmethoden `Einzeln` und `Ebene`. Die Ebenenwahl ist ausdrücklich nur eine komfortable Vorauswahl. Maßgeblich für die Bearbeitung bleibt immer die konkrete Liste `curveIds[]`.
+Carve unterstützt `Einzeln` und `Ebene`. Die Ebenenwahl ist nur eine komfortable Vorauswahl; maßgeblich bleibt immer `curveIds[]`.
 
 Verbindliche Regel:
 
 **Ebene = Vorauswahl. Konkrete Geometrieauswahl = verbindliche Bearbeitungsmenge.**
 
-Der Realtest am CBG-Griffbrett bestätigte:
-
-- Ebene `FRET_SLOTS` kann gemeinsam ausgewählt werden,
-- alle zugehörigen offenen Geometrien werden hervorgehoben,
-- einzelne Elemente können anschließend direkt im Viewport aus der Ebenenauswahl entfernt werden,
-- erneuter Klick fügt sie wieder hinzu,
-- der Nullbund kann damit gezielt ausgeschlossen werden,
-- die Anzeige wechselt entsprechend von der vollständigen Ebenenauswahl auf die reduzierte konkrete Auswahl,
-- die sichtbare Carve-Bahn bleibt exakt auf der DXF-Centerline; kein Radiusoffset und kein sichtbarer dicker Balken.
+Der Realtest am CBG-Griffbrett bestätigte insbesondere das gezielte Entfernen des Nullbundes aus `FRET_SLOTS` und die unveränderte Centerline-Darstellung ohne Offset.
 
 **Gate 6B = PASS.**
 
 ## Gate 6C — mathematischer Carve-Preflight
 
-Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**
 
-Gate 6C schaltet `05 · Prüfen` für Carve frei. Maschinen-Code bleibt weiterhin gesperrt.
+Der Realtest am CBG-Griffbrett wurde mit 16 konkret ausgewählten offenen DXF-Linien bestanden. `05 · Prüfen` bestätigte:
 
-Der pure Prüfkernel liegt in `src/lib/carveMath.ts`; die sichtbare Preflight-UX in `src/lib/CarvePreflightPanel.svelte`.
+- 16 gespeicherte Geometrie-IDs,
+- Ebene `FRET_SLOTS` nur als Vorauswahl/Herkunft,
+- 16 offene DXF-`LINE`-Entities,
+- Gesamt-Centerline-Länge `711.742 mm`,
+- Werkzeug Ø `0.600 mm`,
+- seitlicher Offset explizit `0.000 mm`,
+- Soll = Ist = ausgewählte DXF-Centerline,
+- gültige Tiefen/Zustellungen und Schnittdaten,
+- Sicherheits-Z.
 
-### Prüfregeln
+Der sichtbare Gesamtstatus war wegen `Kein Rohling` erwartungsgemäß WARN; die Carve-Geometrie selbst bestand alle relevanten Prüfungen.
 
-Der Preflight prüft:
+Gate 6C bleibt bewusst auf exakte offene DXF-`LINE`-Entities begrenzt. ARC und offene LWPOLYLINE benötigen eigene Interpolations-Gates.
 
-- mindestens eine konkret ausgewählte Geometrie,
-- keine doppelten Geometrie-IDs,
-- alle ausgewählten IDs existieren noch in der aktuellen DXF,
-- nutzbare geometrische Länge,
-- Werkzeugdurchmesser > 0,
-- Gesamttiefe > 0,
-- Zustellung > 0,
-- Vorschub / Eintauchvorschub / Drehzahl > 0,
-- Sicherheits-Z > 0,
-- resultierende Zahl der Z-Zustellungen,
-- Gesamt-Centerline-Länge der ausgewählten Carve-Geometrien.
+**Gate 6C = PASS.**
 
-### Centerline-Wahrheit
+## Gate 6D — Carve-G-Code, sichere Mehrsegment-Anfahrt und `.nc`
 
-Für Carve gilt im Preflight ausdrücklich:
+Status: **IMPLEMENTIERT / CAMOTICS-REALTEST AUSSTEHEND**
 
-`Soll = Ist = ausgewählte DXF-Geometrie`
+Der in Gate 6C freigegebene Centerline-Pfad wird nun als Maschinen-Code ausgegeben.
 
-Seitlicher Werkzeugradius-Offset:
+Implementierung:
 
-`0.000 mm`
+- `src/lib/carveGcode.ts` — G-Code-Kern,
+- `src/lib/CarveGCodePanel.svelte` — Vorschau, PASS/FAIL und `.nc`-Export,
+- `06 · Fräsen` ist für Carve freigeschaltet.
 
-Die Werkzeugbreite beeinflusst die reale Nutbreite, aber nicht die XY-Fräsermittellinie.
+### Sicherheitsregeln
 
-### Bewusste Gate-6C-Grenze
+- keine seitliche Radiuskorrektur,
+- jede ausgewählte DXF-Linie bleibt geometrisch unverändert,
+- Segmentwechsel erfolgen ausschließlich auf Sicherheits-Z,
+- pro Segment: Sicherheits-Z → XY-Anfahrt → Eintauchen → exakte Centerline-Fahrt → Sicherheits-Z,
+- mehrere Z-Zustellungen erreichen exakt die Solltiefe,
+- WCS-Unterseite bleibt in diesem Gate gesperrt,
+- ARC/offene Polyline bleiben gesperrt, weil Gate 6C sie nicht freigibt.
 
-Der erste mathematisch freigegebene Carve-Referenzpfad akzeptiert zunächst ausschließlich exakte offene DXF-`LINE`-Entities. `ARC` und offene `LWPOLYLINE` bleiben in der Auswahl sichtbar, führen in Gate 6C aber bewusst zu FAIL, bis deren native Carve-Interpolation separat regression-getestet ist.
+### Verfahrreihenfolge
 
-Damit ist der CBG-Bundschlitzfall maximal transparent und mathematisch auditierbar.
+Zwischen getrennten Segmenten wird eine einfache Nächster-Nachbar-Reihenfolge verwendet. Diese Optimierung verändert keine CAD-Geometrie. Eine Linie darf lediglich in umgekehrter Richtung durchlaufen werden, wenn dadurch der sichere Leerweg zum nächsten Startpunkt kürzer wird.
 
-### Gate-6C-Realtest
+Verbindliche Regel:
 
-Für PASS sind erforderlich:
+**Optimiert werden nur sichere Leerwege; die ausgewählte CAD-Centerline selbst wird niemals verändert.**
+
+### Export
+
+Der `.nc`-Export speichert exakt den aktuell angezeigten Carve-G-Code. Standardname: `*-carve.nc`.
+
+### Gate-6D-Realtest
+
+Für PASS:
 
 1. CBG-DXF laden.
-2. `Carve → Ebene → FRET_SLOTS` wählen.
-3. Nullbund abwählen, sodass nur die gewünschten Bundschlitze verbleiben.
-4. `05 · Prüfen` öffnen.
-5. Preflight muss die konkrete Anzahl ausgewählter Linien, gesamte Centerline-Länge, Werkzeug Ø 0,6 mm, Tiefe/Zustellungen und Schnittdaten anzeigen.
-6. Seitlicher Offset muss explizit `0.000 mm` sein.
-7. `05 · Prüfen` muss bei gültigen Parametern PASS liefern.
-8. Negativtest: Auswahl vollständig leeren oder eine nicht freigegebene Geometrie hinzufügen → FAIL.
+2. `FRET_SLOTS` wählen und Nullbund entfernen → 16 Linien.
+3. Gate-6C-Preflight muss weiterhin freigabefähig sein.
+4. `06 · Fräsen` öffnen und `.nc` exportieren.
+5. Datei in CAMotics simulieren.
+6. Jede der 16 Linien muss auf jeder Z-Ebene exakt auf der DXF-Centerline abgefahren werden.
+7. Zwischen getrennten Linien muss der Fräser vor der XY-Verfahrt auf Sicherheits-Z stehen.
+8. Keine zusätzliche oder wieder hineingeratene Nullbund-Linie darf erscheinen.
 
-Erst nach diesem Realtest folgt der Carve-G-Code mit sicherer Mehrsegment-Anfahrt und `.nc`-Export.
+Erst nach diesem externen Simulationstest wird Gate 6D geschlossen.
