@@ -1,15 +1,14 @@
-import type { CamOperation, ImportSummary, StockDefinition, StockMode } from './types';
+import type { CamOperation, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
 import { generateContourGcode } from './gcode';
 import { generatePocketGcode } from './pocketGcode';
 import { validateCarveOperation } from './carveMath';
-import type { PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
 
 export type JobPreflightLevel='pass'|'warn'|'fail';
 export type JobPreflightOperation={id:string;index:number;kind:CamOperation['kind'];label:string;detail:string;level:JobPreflightLevel;errors:string[];warnings:string[]};
 export type JobPreflightResult={level:JobPreflightLevel;operations:JobPreflightOperation[];enabledCount:number;toolChanges:number;errors:string[];warnings:string[]};
 
 const kindLabel=(kind:CamOperation['kind'])=>kind==='contour'?'Kontur':kind==='pocket'?'Tasche':'Carve';
-const toolKey=(op:CamOperation)=>`${op.tool.kind}:${op.tool.diameterMm.toFixed(6)}`;
+const toolKey=(op:CamOperation)=>`${op.tool.name}|${op.tool.diameterMm.toFixed(6)}`;
 
 export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[]}):JobPreflightResult{
   const {summary,stock,stockMode,placement,orientation,wcs}=args;
