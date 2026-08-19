@@ -14,6 +14,8 @@ Freigegebener Taschenpfad:
 
 ## Gate 6 — Carve / Mittellinienbearbeitung
 
+**PASS / GESCHLOSSEN.**
+
 Referenzbauteil ist das reale CBG-Griffbrett `CBG_Diatonic_3_String_635mm.dxf`. Die Bundschlitze liegen als einzelne offene Linien auf dem DXF-Layer `FRET_SLOTS` und werden mit einem Ø 0,6-mm-Fräser bearbeitet. Die Außenkontur bleibt eine separate Konturoperation.
 
 ### Verbindliche Semantik
@@ -68,9 +70,9 @@ Gate 6C bleibt bewusst auf exakte offene DXF-`LINE`-Entities begrenzt. ARC und o
 
 ## Gate 6D — Carve-G-Code, sichere Mehrsegment-Anfahrt und `.nc`
 
-Status: **IMPLEMENTIERT / CAMOTICS-REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**
 
-Der in Gate 6C freigegebene Centerline-Pfad wird nun als Maschinen-Code ausgegeben.
+Der in Gate 6C freigegebene Centerline-Pfad wird als Maschinen-Code ausgegeben.
 
 Implementierung:
 
@@ -102,15 +104,30 @@ Der `.nc`-Export speichert exakt den aktuell angezeigten Carve-G-Code. Standardn
 
 ### Gate-6D-Realtest
 
-Für PASS:
+Der exportierte Referenz-G-Code `CBG_Diatonic_3_String_635mm-carve.nc` wurde extern in CAMotics simuliert. Bestätigt wurden:
 
-1. CBG-DXF laden.
-2. `FRET_SLOTS` wählen und Nullbund entfernen → 16 Linien.
-3. Gate-6C-Preflight muss weiterhin freigabefähig sein.
-4. `06 · Fräsen` öffnen und `.nc` exportieren.
-5. Datei in CAMotics simulieren.
-6. Jede der 16 Linien muss auf jeder Z-Ebene exakt auf der DXF-Centerline abgefahren werden.
-7. Zwischen getrennten Linien muss der Fräser vor der XY-Verfahrt auf Sicherheits-Z stehen.
-8. Keine zusätzliche oder wieder hineingeratene Nullbund-Linie darf erscheinen.
+- exakt 16 gewünschte Bundschlitze,
+- Nullbund bleibt ausgeschlossen,
+- drei Z-Zustellungen bis `-3.000 mm`,
+- alle Zustellungen liegen deckungsgleich auf derselben DXF-Centerline,
+- sichere Z-Rückzüge zwischen getrennten Linien,
+- keine XY-Verfahrt im Material zwischen Segmenten,
+- die Nächster-Nachbar-Optimierung verkürzt Leerwege sinnvoll,
+- das Umkehren einzelner Linien verändert die Sollgeometrie nicht.
 
-Erst nach diesem externen Simulationstest wird Gate 6D geschlossen.
+Im erzeugten Code kann zwischen Segmenten redundant `G0 Z5.000` doppelt auftreten. Das ist geometrisch und maschinell unkritisch und wird ausschließlich als späterer Polish vorgemerkt; der bewiesene Gate-Pfad wird dafür nicht verändert.
+
+**Gate 6D = PASS.**
+
+## Meilenstein — klassischer 2D-CAM-Grundstock
+
+Mit Abschluss von Gate 6 beherrscht BeBlog CAM drei extern simulierte klassische 2D-Bearbeitungssemantiken:
+
+`Kontur · Tasche · Carve`
+
+Der nächste Architektur-Meilenstein ist nicht eine weitere Einzelstrategie, sondern die Kombination mehrerer Bearbeitungen innerhalb eines Projekts. Das CBG-Griffbrett bildet dafür den Referenzfall:
+
+1. `FRET_SLOTS` → Carve → Ø 0,6 mm,
+2. `OUTLINE` → Kontur außen → separates Werkzeug.
+
+Daraus folgen als nächstes Operationsliste, Werkzeugzuordnung und kontrollierter Werkzeugwechsel. Die bestehende lineare Hauptnavigation bleibt dabei unverändert; mehrere Operationen gehören innerhalb von `04 · Bearbeiten` in eine ruhige, explizite Bearbeitungsliste.
