@@ -5,7 +5,8 @@
   import ContourOverlay from './lib/ContourOverlay.svelte';
   import PreflightPanel from './lib/PreflightPanel.svelte';
   import GCodePanel from './lib/GCodePanel.svelte';
-  import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CamOperation, ContourOperation, OperationKind } from './lib/types';
+  import PocketGCodePanel from './lib/PocketGCodePanel.svelte';
+  import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CamOperation, ContourOperation, PocketOperation, OperationKind } from './lib/types';
   import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultContourOperation, defaultPocketOperation } from './lib/types';
 
   const steps = ['Bauteil', 'Rohling', 'Werkzeuge', 'Bearbeiten', 'Prüfen', 'Fräsen'];
@@ -99,7 +100,7 @@
           {/if}
 
           <div class="placement-section"><p class="placement-title">Schnittdaten</p><label>Gesamttiefe <input type="number" min="0.01" step="0.1" value={operation.totalDepthMm} oninput={e=>updateNumber('totalDepthMm',e)}/> mm</label><label>Zustellung <input type="number" min="0.01" step="0.1" value={operation.stepDownMm} oninput={e=>updateNumber('stepDownMm',e)}/> mm</label><label>Vorschub <input type="number" min="1" step="10" value={operation.feedMmMin} oninput={e=>updateNumber('feedMmMin',e)}/> mm/min</label><label>Eintauchen <input type="number" min="1" step="10" value={operation.plungeMmMin} oninput={e=>updateNumber('plungeMmMin',e)}/> mm/min</label><label>Drehzahl <input type="number" min="1" step="100" value={operation.spindleRpm} oninput={e=>updateNumber('spindleRpm',e)}/> 1/min</label><label>Sicherheits-Z <input type="number" min="0.1" step="0.5" value={operation.safeZMm} oninput={e=>updateNumber('safeZMm',e)}/> mm</label></div>
-          {#if operation.kind==='pocket'}<p class="note"><strong>001H Gate 3:</strong> Der mathematische Taschen-Preflight ist aktiv. G-Code bleibt bis Gate 4 gesperrt.</p>{/if}
+          {#if operation.kind==='pocket'}<p class="note"><strong>001H Gate 4:</strong> Rechtecktaschen mit senkrechtem Eintauchen können nach bestandenem Preflight als .nc ausgegeben werden.</p>{/if}
         {:else}<p>Noch kein Bauteil geladen.</p>{/if}
 
       {:else if activeStep==='Prüfen'}
@@ -107,7 +108,7 @@
 
       {:else if activeStep==='Fräsen'}
         {#if importSummary}
-          {#if operation.kind==='contour'}<GCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as ContourOperation}/>{:else}<p class="eyebrow">06 · Fräsen</p><h2>G-Code</h2><div class="note"><strong>Taschen-G-Code noch gesperrt.</strong><br/>Gate 3 prüft die Taschenbahn mathematisch. Gate 4 erzeugt daraus erst nach erfolgreichem Test den Maschinen-Code.</div>{/if}
+          {#if operation.kind==='contour'}<GCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as ContourOperation}/>{:else}<PocketGCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as PocketOperation}/>{/if}
         {:else}<p class="eyebrow">06 · Fräsen</p><h2>G-Code</h2><p>Noch kein Bauteil geladen.</p>{/if}
 
       {:else}<p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p><h2>{activeStep}</h2><p>Dieser Schritt wird in den nächsten Builds freigeschaltet.</p>{/if}
