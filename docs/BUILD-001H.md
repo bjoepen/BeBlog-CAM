@@ -46,44 +46,65 @@ Der Realtest bestätigte: Beim Wechsel von Kontur zu Tasche bleibt dieselbe CAD-
 
 ## Gate 3 — mathematischer Taschen-Preflight
 
+Status: PASS
+
+`05 · Prüfen` verarbeitet `ContourOperation` und `PocketOperation` über denselben sichtbaren Preflight-Schritt.
+
+Der reale Rechteck-Testfall wurde erfolgreich als PASS bestätigt. Geprüft werden insbesondere:
+
+- geschlossene Sollkontur,
+- achsparallele Rechtecktasche,
+- Werkzeugpassung,
+- radiuskorrigierte Fräsermittelpunktfläche,
+- Stepover und tatsächliche Rasterteilung,
+- vollständige Rasterabdeckung,
+- Wandumlauf,
+- Z-Zustellungen,
+- Schnittdaten,
+- Sicherheits-Z,
+- freigegebene Eintauchstrategie.
+
+`Rampe` bleibt bewusst FAIL, bis ihre Geometrie in einem eigenen Gate erzeugt und geprüft wird.
+
+## Gate 4 — Taschen-G-Code und `.nc`
+
 Status: IMPLEMENTIERT / REALTEST AUSSTEHEND
 
-`05 · Prüfen` verarbeitet nun `ContourOperation` und `PocketOperation` über denselben sichtbaren Preflight-Schritt.
+Die in Gate 3 freigegebene Rechtecktaschen-Strategie wird nun in `06 · Fräsen` als Maschinenprogramm ausgegeben.
 
-Für eine Tasche werden geprüft:
+Verbindlicher Ablauf pro Z-Ebene:
 
-- geschlossene Sollkontur vorhanden,
-- Gate-3-Geometrie ist eine achsparallele Rechtecktasche,
-- Werkzeugdurchmesser > 0,
-- Werkzeug passt vollständig in die Tasche,
-- CAD-Wand bleibt geometrische Wahrheit,
-- Fräsermittelpunktfläche liegt um den Werkzeugradius vollständig innerhalb der CAD-Wand,
-- Stepover liegt > 0 % und ≤ 100 %,
-- reale Rasterteilung überschreitet den eingestellten maximalen Stepover nicht,
-- Anzahl der Rasterbahnen wird explizit ausgewiesen,
-- abschließender Wandumlauf liegt auf der radiuskorrigierten Innenbegrenzung,
-- Gesamttiefe und Z-Zustellung sind plausibel,
-- Vorschub, Eintauchvorschub und Drehzahl sind > 0,
-- Sicherheits-Z ist > 0,
-- in Gate 3 ist ausschließlich senkrechtes Eintauchen freigegeben.
+1. Sicherheits-Z,
+2. Anfahrt zum Startpunkt der Rasterbahn,
+3. senkrechtes Eintauchen mit Eintauchvorschub,
+4. deterministische Zickzack-Rasterräumung,
+5. abschließender Wandumlauf auf der radiuskorrigierten Innenbegrenzung,
+6. Rückzug auf Sicherheits-Z.
 
-Wird `Rampe` gewählt, erzeugt der Preflight bewusst FAIL. Der Parameter ist sichtbar vorbereitet, aber die Rampengeometrie wird erst in einem eigenen Gate erzeugt und validiert.
+Mehrere Z-Zustellungen werden bis zur exakten Gesamttiefe erzeugt. Die letzte Zustellung wird gegebenenfalls kleiner als `stepDown` ausgeführt, damit die Solltiefe nicht überschritten wird.
 
-### Sicherheitsgrenze von Gate 3
+Der G-Code verwendet für Gate 4 bewusst ausschließlich lineare Bewegungen (`G0/G1`). Die Herausforderung dieses Gates ist die vollständige Flächenräumung und Tiefenstrategie, nicht Bogeninterpolation.
 
-`06 · Fräsen` bleibt für `PocketOperation` weiterhin gesperrt. Ein PASS im Taschen-Preflight bedeutet zunächst nur: Die definierte Taschenstrategie ist mathematisch konsistent und freigabefähig für die nächste Entwicklungsstufe.
+### Export
 
-Es wird noch kein Taschen-G-Code erzeugt.
+Der bereits in 001G bewiesene `.nc`-Export wird auch für Taschen verwendet:
 
-## Gate 4 — als Nächstes
+- Vorschau und gespeicherte Datei sind identisch,
+- keine zweite G-Code-Berechnung beim Speichern,
+- Standarddateiname erhält den Zusatz `-tasche.nc`,
+- Rampenoperationen bleiben gesperrt.
 
-Nach erfolgreichem Realtest von Gate 3 wird exakt die geprüfte Raster- und Cleanup-Bahn in Maschinenbewegungen überführt:
+Der Maschinen-Code wird in `src/lib/pocketGcode.ts` erzeugt; die UI liegt in `src/lib/PocketGCodePanel.svelte`.
 
-- sichere Anfahrt,
-- senkrechtes Eintauchen mit Eintauchvorschub,
-- Rasterräumung pro Z-Zustellung,
-- Wandumlauf pro Z-Ebene,
-- Rückzug auf Sicherheits-Z,
-- `.nc`-Export über denselben in 001G bewiesenen Exportpfad.
+### Gate-4-Realtest
 
-Für Gate 4 gilt erneut: **Die erzeugte G-Code-Bahn muss dieselbe Geometrie sein, die Gate 3 geprüft hat. Keine zweite unabhängige Taschenberechnung im Export.**
+Für PASS sind jetzt erforderlich:
+
+- Rechtecktasche wählen,
+- `05 · Prüfen` = PASS,
+- `06 · Fräsen` erzeugt plausiblen Taschen-G-Code,
+- `.nc` speichern,
+- Datei in externem Viewer/Simulator laden,
+- bestätigen, dass jede Z-Ebene vollständig geräumt und anschließend die Wand abgefahren wird.
+
+Erst danach wird Gate 4 auf PASS gesetzt.
