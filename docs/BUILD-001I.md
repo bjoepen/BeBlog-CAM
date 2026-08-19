@@ -13,7 +13,7 @@ Referenzbauteil bleibt das reale CBG-Griffbrett:
 
 ## Gate 7A — Operationsmodell und Bearbeitungsliste
 
-Status: **GESTARTET**
+Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
 
 ### UX-Grundsatz
 
@@ -23,33 +23,37 @@ Die lineare Hauptnavigation bleibt unverändert:
 
 Mehrere Operationen erzeugen keinen neuen Hauptschritt und keine zusätzliche CMS-artige Navigation. Sie werden als ruhige Bearbeitungsliste innerhalb `04 · Bearbeiten` geführt.
 
-Zielbild:
-
-```text
-Bearbeitungen
-
-01  Carve
-    FRET_SLOTS · 16 Linien · Ø 0,6 mm
-
-02  Kontur
-    OUTLINE · Außen · Ø 3,0 mm
-
-+ Bearbeitung
-```
-
 ### Architektur
 
-Der bisherige Einzelzustand
-
-`operation: CamOperation`
-
-wird kontrolliert zu einem Projektzustand erweitert:
+Der bisherige Einzelzustand wurde kontrolliert zu einem Projektzustand erweitert:
 
 - `operations: CamOperation[]`
 - `activeOperationId: string | null`
-- abgeleitet: aktive Operation
+- eine daraus abgeleitete aktive Operation für die bestehenden Editoren, Preflights und G-Code-Panels.
 
-Jede Operation behält ihre eigene konkrete Geometrieauswahl, Werkzeugzuordnung und Schnittdaten.
+Der pure Operationskern liegt in `src/lib/operationsProject.ts`.
+
+Jede Operation behält eine unabhängige Kopie ihrer:
+
+- konkreten Geometrieauswahl,
+- Werkzeugdaten,
+- Schnittdaten,
+- bearbeitungsspezifischen Parameter.
+
+Insbesondere werden Carve-`curveIds[]` und Werkzeugobjekte beim Anlegen/Wechseln geklont, damit Bearbeitungen keine Zustände miteinander teilen.
+
+### Sichtbare Bearbeitungsliste
+
+Unter `04 · Bearbeiten` ist nun eine kompakte Operationsliste aktiv. Sie zeigt pro Bearbeitung:
+
+- laufende Nummer,
+- Operationstyp,
+- kurze Geometrie-/Strategiezusammenfassung,
+- Werkzeugdurchmesser.
+
+Die aktive Bearbeitung wird ruhig hervorgehoben. Neue Bearbeitungen können als `Kontur`, `Tasche` oder `Carve` hinzugefügt werden. Bei mehr als einer Operation kann eine Bearbeitung einzeln gelöscht werden.
+
+Die bestehenden Parameterfelder bearbeiten ausschließlich die aktive Operation. Beim Wechsel wird der gespeicherte Zustand der anderen Operation nicht überschrieben.
 
 ### Gate-7A-Sicherheitsgrenze
 
@@ -63,7 +67,7 @@ Gate 7A verändert **nicht**:
 - `.nc`-Export,
 - Reihenfolge oder Semantik bestehender Maschinenbewegungen.
 
-`05 · Prüfen` und `06 · Fräsen` arbeiten zunächst weiterhin nur mit der jeweils aktiven Operation. Ein Gesamtjob und Werkzeugwechsel folgen erst in einem eigenen Gate.
+`05 · Prüfen` und `06 · Fräsen` arbeiten weiterhin ausschließlich mit der jeweils aktiven Operation. Ein Gesamtjob und Werkzeugwechsel folgen erst in einem eigenen Gate.
 
 ### Erforderlicher Realtest
 
