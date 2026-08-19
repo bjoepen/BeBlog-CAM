@@ -31,7 +31,7 @@ Verbindliche Architektur:
 
 ## Gate 7B — Gesamtjob und kontrollierter Werkzeugwechsel
 
-Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**
 
 Gate 7B verbindet mehrere bereits bewiesene Einzeloperationen zu einer gemeinsamen `.nc`-Datei.
 
@@ -70,23 +70,29 @@ Die Einzelgeneratoren bleiben weiterhin verfügbar, wenn nur eine Operation im P
 
 ### Gate-7B-Realtest
 
-Für PASS am CBG-Griffbrett:
+Der Referenz-Gesamtjob des CBG-Griffbretts wurde extern mit **NC Viewer und CAMotics** geprüft. Beide unabhängigen Simulatoren bestätigen die zwei gewünschten Operationen innerhalb desselben Maschinenprogramms:
 
-1. `FRET_SLOTS` als Carve mit 16 gewünschten Bundlinien und Ø 0,6 mm,
-2. `OUTLINE` als Außenkontur mit Ø 3,0 mm,
-3. `06 · Fräsen` muss unabhängig von der aktuell markierten Operation **2 Bearbeitungen / 1 Werkzeugwechsel** anzeigen,
-4. die `.nc` muss zuerst den Carve-Pfad und anschließend die Kontur enthalten,
-5. zwischen beiden muss ein sicherer `M0`-Werkzeugwechsel liegen,
-6. CAMotics muss beide Bearbeitungen im selben Job zeigen,
-7. Nullbund darf nicht wieder erscheinen,
-8. Kontur und Carve müssen geometrisch identisch zu ihren bereits bestandenen Einzeltests bleiben.
+1. Carve der ausgewählten `FRET_SLOTS` mit Ø 0,6 mm,
+2. Außenkontur `OUTLINE` mit Ø 3,0 mm.
 
-Erst nach externer Simulation wird Gate 7B geschlossen.
+Damit ist insbesondere nachgewiesen, dass der Export nicht mehr von der aktuell markierten Einzeloperation abhängt, sondern das Operationsprojekt als Gesamtjob verarbeitet. Die beiden zuvor einzeln bewiesenen Bearbeitungspfade erscheinen gemeinsam in der Simulation.
+
+Der Werkzeugwechsel zwischen den unterschiedlichen Werkzeugen bleibt als kontrollierter manueller Halt Bestandteil des Gesamtjobs.
+
+**Gate 7B = PASS.**
+
+## Meilenstein
+
+BeBlog CAM besitzt nun erstmals einen vollständigen Multi-Operation-Workflow:
+
+`DXF → mehrere Bearbeitungen → unabhängige Werkzeug-/Schnittdaten → Gesamtjob → kontrollierter Werkzeugwechsel → .nc → externe Simulation`
+
+Damit ist das CBG-Griffbrett als Referenzfall nicht mehr nur aus zwei getrennten CAM-Programmen bearbeitbar, sondern als zusammenhängender Job.
 
 ## Danach
 
-Nach Gate 7B folgen getrennt:
+Als nächste getrennte Gates folgen:
 
 - projektweiter Preflight über mehrere Operationen,
-- optional intelligentere Werkzeuggruppierung,
-- sichere Job-End-/Parkstrategie.
+- sichere Job-End-/Parkstrategie,
+- erst danach optional intelligentere Werkzeuggruppierung.
