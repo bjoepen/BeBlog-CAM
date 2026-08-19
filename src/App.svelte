@@ -5,7 +5,7 @@
   import ContourOverlay from './lib/ContourOverlay.svelte';
   import PreflightPanel from './lib/PreflightPanel.svelte';
   import GCodePanel from './lib/GCodePanel.svelte';
-  import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CamOperation, ContourOperation, PocketOperation, OperationKind } from './lib/types';
+  import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CamOperation, ContourOperation, OperationKind } from './lib/types';
   import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultContourOperation, defaultPocketOperation } from './lib/types';
 
   const steps = ['Bauteil', 'Rohling', 'Werkzeuge', 'Bearbeiten', 'Prüfen', 'Fräsen'];
@@ -94,22 +94,20 @@
           {#if operation.kind==='contour'}
             <div class="placement-section"><p class="placement-title">Bahn</p><div class="placement-grid"><button class:active={operation.side==='outside'} onclick={()=>operation={...operation,side:'outside'}}>Außen</button><button class:active={operation.side==='inside'} onclick={()=>operation={...operation,side:'inside'}}>Innen</button><button class:active={operation.side==='on-line'} onclick={()=>operation={...operation,side:'on-line'}}>Auf Linie</button></div><div class="placement-grid two"><button class:active={operation.direction==='climb'} onclick={()=>operation={...operation,direction:'climb'}}>Gleichlauf</button><button class:active={operation.direction==='conventional'} onclick={()=>operation={...operation,direction:'conventional'}}>Gegenlauf</button></div></div>
           {:else}
-            <div class="placement-section"><p class="placement-title">Ausräumen</p><label>Seitliche Zustellung <input type="number" min="5" max="90" step="5" value={operation.stepoverPercent} oninput={updatePocketStepover}/> % Werkzeugdurchmesser</label><p class="note">Konservativer Startwert: 40 %. Gate 1 berechnet daraus eine deterministische Rasterbahn mit abschließendem Wandumlauf.</p></div>
-            <div class="placement-section"><p class="placement-title">Eintauchen</p><div class="placement-grid two"><button class:active={operation.entry==='plunge'} onclick={()=>operation={...operation,entry:'plunge'}}>Senkrecht</button><button class:active={operation.entry==='ramp'} onclick={()=>operation={...operation,entry:'ramp'}}>Rampe</button></div>{#if operation.entry==='ramp'}<label>Rampenwinkel <input type="number" min="0.5" max="15" step="0.5" value={operation.rampAngleDeg} oninput={updateRampAngle}/> °</label><p class="note"><strong>Noch nicht freigegeben:</strong> Die Rampengeometrie wird erst in einem folgenden Gate erzeugt und geprüft.</p>{:else}<p class="note">Für den ersten Referenztest wird kontrolliert senkrecht eingetaucht.</p>{/if}</div>
+            <div class="placement-section"><p class="placement-title">Ausräumen</p><label>Seitliche Zustellung <input type="number" min="5" max="90" step="5" value={operation.stepoverPercent} oninput={updatePocketStepover}/> % Werkzeugdurchmesser</label><p class="note">Konservativer Startwert: 40 %. Daraus wird eine deterministische Rasterbahn mit abschließendem Wandumlauf berechnet.</p></div>
+            <div class="placement-section"><p class="placement-title">Eintauchen</p><div class="placement-grid two"><button class:active={operation.entry==='plunge'} onclick={()=>operation={...operation,entry:'plunge'}}>Senkrecht</button><button class:active={operation.entry==='ramp'} onclick={()=>operation={...operation,entry:'ramp'}}>Rampe</button></div>{#if operation.entry==='ramp'}<label>Rampenwinkel <input type="number" min="0.5" max="15" step="0.5" value={operation.rampAngleDeg} oninput={updateRampAngle}/> °</label><p class="note"><strong>Noch nicht freigegeben:</strong> Die Rampengeometrie folgt in einem eigenen Gate.</p>{:else}<p class="note">Für den ersten Referenztest wird kontrolliert senkrecht eingetaucht.</p>{/if}</div>
           {/if}
 
           <div class="placement-section"><p class="placement-title">Schnittdaten</p><label>Gesamttiefe <input type="number" min="0.01" step="0.1" value={operation.totalDepthMm} oninput={e=>updateNumber('totalDepthMm',e)}/> mm</label><label>Zustellung <input type="number" min="0.01" step="0.1" value={operation.stepDownMm} oninput={e=>updateNumber('stepDownMm',e)}/> mm</label><label>Vorschub <input type="number" min="1" step="10" value={operation.feedMmMin} oninput={e=>updateNumber('feedMmMin',e)}/> mm/min</label><label>Eintauchen <input type="number" min="1" step="10" value={operation.plungeMmMin} oninput={e=>updateNumber('plungeMmMin',e)}/> mm/min</label><label>Drehzahl <input type="number" min="1" step="100" value={operation.spindleRpm} oninput={e=>updateNumber('spindleRpm',e)}/> 1/min</label><label>Sicherheits-Z <input type="number" min="0.1" step="0.5" value={operation.safeZMm} oninput={e=>updateNumber('safeZMm',e)}/> mm</label></div>
-          {#if operation.kind==='pocket'}<p class="note"><strong>001H Gate 2:</strong> Die Taschen-UX ist aktiv. Prüfen und Fräsen bleiben bis zur mathematischen Gate-3-Bahnprüfung gesperrt.</p>{/if}
+          {#if operation.kind==='pocket'}<p class="note"><strong>001H Gate 3:</strong> Der mathematische Taschen-Preflight ist aktiv. G-Code bleibt bis Gate 4 gesperrt.</p>{/if}
         {:else}<p>Noch kein Bauteil geladen.</p>{/if}
 
       {:else if activeStep==='Prüfen'}
-        {#if importSummary}
-          {#if operation.kind==='contour'}<PreflightPanel summary={importSummary} {stock} {stockMode} operation={operation as ContourOperation}/>{:else}<p class="eyebrow">05 · Prüfen</p><h2>Preflight</h2><div class="note"><strong>Tasche vorbereitet · noch nicht freigegeben.</strong><br/>Gate 3 verdrahtet die Taschenbahn mit der mathematischen Prüfung. Bis dahin gibt es bewusst kein PASS.</div>{/if}
-        {:else}<p class="eyebrow">05 · Prüfen</p><h2>Preflight</h2><p>Noch kein Bauteil geladen.</p>{/if}
+        {#if importSummary}<PreflightPanel summary={importSummary} {stock} {stockMode} {operation}/>{:else}<p class="eyebrow">05 · Prüfen</p><h2>Preflight</h2><p>Noch kein Bauteil geladen.</p>{/if}
 
       {:else if activeStep==='Fräsen'}
         {#if importSummary}
-          {#if operation.kind==='contour'}<GCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as ContourOperation}/>{:else}<p class="eyebrow">06 · Fräsen</p><h2>G-Code</h2><div class="note"><strong>Taschen-G-Code gesperrt.</strong><br/>Erst nach bestandener Gate-3-Bahnprüfung wird aus der Taschenoperation Maschinen-Code erzeugt.</div>{/if}
+          {#if operation.kind==='contour'}<GCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operation={operation as ContourOperation}/>{:else}<p class="eyebrow">06 · Fräsen</p><h2>G-Code</h2><div class="note"><strong>Taschen-G-Code noch gesperrt.</strong><br/>Gate 3 prüft die Taschenbahn mathematisch. Gate 4 erzeugt daraus erst nach erfolgreichem Test den Maschinen-Code.</div>{/if}
         {:else}<p class="eyebrow">06 · Fräsen</p><h2>G-Code</h2><p>Noch kein Bauteil geladen.</p>{/if}
 
       {:else}<p class="eyebrow">{String(steps.indexOf(activeStep)+1).padStart(2,'0')} · {activeStep}</p><h2>{activeStep}</h2><p>Dieser Schritt wird in den nächsten Builds freigeschaltet.</p>{/if}
