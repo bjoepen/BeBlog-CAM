@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, ContourOperation } from './types';
+  import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation } from './types';
   import { buildClosedChains, offsetPolygon, sampleCurve, type P2 } from './contourMath';
 
   export let summary: ImportSummary;
@@ -7,7 +7,7 @@
   export let stockMode: StockMode;
   export let placement: PartPlacement;
   export let orientation: PartOrientation;
-  export let operation: ContourOperation;
+  export let operation: CamOperation;
   export let onSelectContour: (id: number) => void = () => {};
 
   const width=1000,height=650,pad=54;
@@ -33,21 +33,22 @@
     }else{const m=Math.max(stock.width,stock.height)*.12+10;plane=[{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}]}
     const map=fit([...all.map(move),...plane]);
     const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
-    let tool:P2[]|null=null;if(selected){const r=operation.tool.diameterMm/2,d=operation.side==='outside'?r:operation.side==='inside'?-r:0;tool=offsetPolygon(selected.points,d)}
+    let tool:P2[]|null=null;
+    if(selected){
+      const r=operation.tool.diameterMm/2;
+      const d=operation.kind==='pocket'?-r:operation.side==='outside'?r:operation.side==='inside'?-r:0;
+      tool=offsetPolygon(selected.points,d);
+    }
     return{chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,tool:tool?tool.map(map):null};
   }
 
   $: scene=buildScene(
+    operation.kind,
     operation.contourId,
     operation.tool.diameterMm,
-    operation.side,
-    stockMode,
-    stock.width,
-    stock.height,
-    placement.horizontal,
-    placement.vertical,
-    placement.offsetX,
-    placement.offsetY,
+    operation.kind==='contour'?operation.side:'pocket',
+    stockMode,stock.width,stock.height,
+    placement.horizontal,placement.vertical,placement.offsetX,placement.offsetY,
     orientation.rotationZDeg
   );
 </script>
@@ -57,9 +58,7 @@
   <svg viewBox="0 0 1000 650">
     {#each scene.chains as chain}
       <path d={path(chain.screen,true)} class="candidate" />
-      <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id)}>
-        <title>Kontur {chain.id+1} auswählen</title>
-      </path>
+      <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id)}><title>Kontur {chain.id+1} auswählen</title></path>
     {/each}
     {#if scene.selected}<path d={path(scene.selected,true)} class="selected"/>{/if}
     {#if scene.tool}<path d={path(scene.tool,true)} class="toolpath"/>{/if}
