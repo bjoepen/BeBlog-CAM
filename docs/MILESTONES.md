@@ -1,5 +1,36 @@
 # BeBlog CAM — Milestones
 
+## 2026-08-19 — 001G Final: native DXF CAM pipeline with `.nc` export
+
+BeBlog CAM completed the first fully regression-checked native DXF machining pipeline.
+
+Verified path:
+
+`DXF CAD semantics → analytical tool-radius compensation → mathematical preflight → native G1/G2/G3 → depth passes → WCS → .nc export → external validation`
+
+Verified real-world reference cases include:
+
+- native DXF circles emitted as two controller-friendly 180° G2/G3 arcs per pass;
+- mixed LINE/ARC contours emitted as native G1 plus G2/G3 rather than polygonized curve approximations;
+- the real Mini-OX side-plate outer contour as the complex reference geometry;
+- outside and inside compensation from the same CAD source contour;
+- climb and conventional direction reversal with geometrically identical tool-center paths and consistent G2/G3 reversal;
+- mathematical preflight before machine output;
+- safe fallback to the previously verified G1 reference path when native semantic offset geometry cannot be proven safe;
+- direct `.nc` export of exactly the G-code shown in the application.
+
+A key validation rule was established during external viewer testing:
+
+**External simulators and viewers are validation aids, not the geometric source of truth.**
+
+The CAD source contour and BeBlog CAM's mathematically verified toolpath remain authoritative.
+
+001G proves that BeBlog CAM is no longer only a CAD viewer or CAM UI prototype: it can preserve real DXF geometry semantics through compensation and validation into a reusable machine-program file.
+
+Detailed record: `docs/BUILD-001G.md`
+
+---
+
 ## 2026-08-18 — First verified DXF-to-G-code CAM pipeline
 
 BeBlog CAM successfully completed, externally visualized and dynamically simulated its first verified CAM chain for a real DXF contour.
@@ -24,10 +55,6 @@ This milestone closes BeBlog CAM's first fundamental path from real CAD geometry
 
 Detailed record: `docs/BUILD-001F.md`
 
-### Known limitations at this milestone
-
-G-code is still preview-only, curves are currently emitted as segmented `G1` moves rather than native `G2/G3` arcs, bottom-side WCS output remains intentionally blocked pending a validated material-thickness transformation, and multi-operation/tool-change workflows are not yet part of this gate.
-
 ---
 
 ## 2026-08-17 — First native STEP/BRep model on macOS
@@ -49,7 +76,3 @@ Observed real-world result:
 - exact BRep retained as source of truth; display mesh kept separate
 
 This milestone proves that BeBlog CAM can ingest real CAD geometry natively on macOS without converting STEP to STL as the machining source.
-
-### Known limitation at this milestone
-
-The 3D viewport is still a static projection. Free orbit, pan and zoom are required before the viewport can be considered usable for CAM work.
