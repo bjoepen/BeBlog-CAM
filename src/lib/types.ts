@@ -24,10 +24,12 @@ export type WcsX='left'|'center'|'right'; export type WcsY='front'|'center'|'bac
 export interface WorkCoordinateSystem { x:WcsX;y:WcsY;z:WcsZ; }
 export interface SetupDefinition { id:string;name:string;stockMode:StockMode;orientation:PartOrientation;placement:PartPlacement;wcsReference:WcsReference;wcs:WorkCoordinateSystem; }
 
-export type OperationKind='contour'; export type ToolpathSide='outside'|'inside'|'on-line'; export type CutDirection='conventional'|'climb';
+export type OperationKind='contour'|'pocket'; export type ToolpathSide='outside'|'inside'|'on-line'; export type CutDirection='conventional'|'climb';
+export type PocketEntry='plunge'|'ramp';
 export interface ToolDefinition { id:string;name:string;diameterMm:number; }
 export interface ContourOperation { id:string;kind:'contour';name:string;enabled:boolean;contourId:number|null;tool:ToolDefinition;side:ToolpathSide;direction:CutDirection;totalDepthMm:number;stepDownMm:number;feedMmMin:number;plungeMmMin:number;spindleRpm:number;safeZMm:number; }
-export type CamOperation=ContourOperation;
+export interface PocketOperation { id:string;kind:'pocket';name:string;enabled:boolean;contourId:number|null;tool:ToolDefinition;direction:CutDirection;totalDepthMm:number;stepDownMm:number;stepoverPercent:number;entry:PocketEntry;rampAngleDeg:number;feedMmMin:number;plungeMmMin:number;spindleRpm:number;safeZMm:number; }
+export type CamOperation=ContourOperation|PocketOperation;
 
 export const defaultStock:StockDefinition={width:200,height:80,thickness:22,offsetX:10,offsetY:10,offsetZ:0};
 export const defaultPartPlacement:PartPlacement={horizontal:'center',vertical:'center',offsetX:0,offsetY:0,offsetZ:0};
@@ -35,3 +37,4 @@ export const defaultPartOrientation:PartOrientation={rotationXDeg:0,rotationYDeg
 export const defaultWcs:WorkCoordinateSystem={x:'left',y:'front',z:'top'};
 export const defaultSetup:SetupDefinition={id:'setup-1',name:'Aufspannung 1',stockMode:'manual',orientation:{...defaultPartOrientation},placement:{...defaultPartPlacement},wcsReference:'stock',wcs:{...defaultWcs}};
 export const defaultContourOperation:ContourOperation={id:'op-contour-1',kind:'contour',name:'Kontur 1',enabled:true,contourId:null,tool:{id:'tool-1',name:'Schaftfräser 3 mm',diameterMm:3},side:'outside',direction:'climb',totalDepthMm:3,stepDownMm:1,feedMmMin:600,plungeMmMin:200,spindleRpm:12000,safeZMm:5};
+export const defaultPocketOperation:PocketOperation={id:'op-pocket-1',kind:'pocket',name:'Tasche 1',enabled:true,contourId:null,tool:{id:'tool-1',name:'Schaftfräser 3 mm',diameterMm:3},direction:'climb',totalDepthMm:3,stepDownMm:1,stepoverPercent:40,entry:'plunge',rampAngleDeg:3,feedMmMin:600,plungeMmMin:200,spindleRpm:12000,safeZMm:5};
