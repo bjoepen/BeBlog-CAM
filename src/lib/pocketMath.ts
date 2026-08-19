@@ -12,6 +12,7 @@ export type PocketPath = {
   cleanup:Point2[];
   passesAcross:number;
 };
+export type PocketRamp = { ok:boolean; error?:string; lengthMm:number; availableMm:number; end?:Point2 };
 
 const EPS=1e-6;
 const near=(a:number,b:number,t=.01)=>Math.abs(a-b)<=t;
@@ -27,15 +28,12 @@ export function detectAxisAlignedRectangle(points:Point2[],toleranceMm=.01):Rect
   const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
   const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
   if(maxX-minX<=toleranceMm||maxY-minY<=toleranceMm)return null;
-  const corners=[
-    {x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY}
-  ];
+  const corners=[{x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY}];
   const matches=corners.every(c=>pts.some(p=>near(p.x,c.x,toleranceMm)&&near(p.y,c.y,toleranceMm)));
   if(!matches)return null;
   for(let i=0;i<pts.length;i++){
     const a=pts[i],b=pts[(i+1)%pts.length];
-    const horizontal=near(a.y,b.y,toleranceMm);
-    const vertical=near(a.x,b.x,toleranceMm);
+    const horizontal=near(a.y,b.y,toleranceMm),vertical=near(a.x,b.x,toleranceMm);
     if(!horizontal&&!vertical)return null;
   }
   return{minX,maxX,minY,maxY};
@@ -47,21 +45,27 @@ export function buildRectangularPocketPath(points:Point2[],toolDiameterMm:number
   if(!(toolDiameterMm>0))return{...empty,error:'Werkzeugdurchmesser muss größer als 0 sein.'};
   if(!(stepoverPercent>0&&stepoverPercent<=100))return{...empty,error:'Seitliche Zustellung muss zwischen 0 und 100 % liegen.'};
   const pocket=detectAxisAlignedRectangle(points);
-  if(!pocket)return{...empty,error:'001H Gate 1 unterstützt zunächst nur geschlossene achsparallele Rechtecktaschen.'};
+  if(!pocket)return{...empty,error:'001H unterstützt zunächst nur geschlossene achsparallele Rechtecktaschen.'};
   const minX=pocket.minX+toolRadiusMm,maxX=pocket.maxX-toolRadiusMm,minY=pocket.minY+toolRadiusMm,maxY=pocket.maxY-toolRadiusMm;
   if(maxX-minX<=EPS||maxY-minY<=EPS)return{...empty,pocket,error:'Das Werkzeug passt nicht vollständig in die gewählte Tasche.'};
-  const stepoverMm=toolDiameterMm*stepoverPercent/100;
-  const height=maxY-minY;
-  const passesAcross=Math.max(1,Math.ceil(height/stepoverMm)+1);
-  const actualStep=passesAcross===1?0:height/(passesAcross-1);
+  const stepoverMm=toolDiameterMm*stepoverPercent/100,height=maxY-minY;
+  const passesAcross=Math.max(1,Math.ceil(height/stepoverMm)+1),actualStep=passesAcross===1?0:height/(passesAcross-1);
   const raster:Point2[]=[];
   for(let i=0;i<passesAcross;i++){
     const y=i===passesAcross-1?maxY:minY+i*actualStep;
-    if(i%2===0){raster.push({x:minX,y},{x:maxX,y});}
-    else{raster.push({x:maxX,y},{x:minX,y});}
+    if(i%2===0)raster.push({x:minX,y},{x:maxX,y}); else raster.push({x:maxX,y},{x:minX,y});
   }
-  const cleanup:Point2[]=[
-    {x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY},{x:minX,y:minY}
-  ];
+  const cleanup:Point2[]=[{x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY},{x:minX,y:minY}];
   return{ok:true,pocket,toolRadiusMm,stepoverMm:actualStep||stepoverMm,raster,cleanup,passesAcross};
+}
+
+export function buildPocketRamp(path:PocketPath,depthIncrementMm:number,angleDeg:number):PocketRamp{
+  if(!path.ok||path.raster.length<2)return{ok:false,error:'Keine gültige Rasterbahn für die Rampe vorhanden.',lengthMm:0,availableMm:0};
+  if(!(depthIncrementMm>0))return{ok:false,error:'Rampen-Zustellung muss größer als 0 sein.',lengthMm:0,availableMm:0};
+  if(!(angleDeg>0&&angleDeg<90))return{ok:false,error:'Rampenwinkel muss zwischen 0° und 90° liegen.',lengthMm:0,availableMm:0};
+  const a=path.raster[0],b=path.raster[1],dx=b.x-a.x,dy=b.y-a.y,availableMm=Math.hypot(dx,dy);
+  const lengthMm=depthIncrementMm/Math.tan(angleDeg*Math.PI/180);
+  if(lengthMm>availableMm+EPS)return{ok:false,error:`Rampe benötigt ${lengthMm.toFixed(3)} mm, auf der ersten Rasterbahn stehen aber nur ${availableMm.toFixed(3)} mm zur Verfügung.`,lengthMm,availableMm};
+  const t=availableMm<=EPS?0:lengthMm/availableMm;
+  return{ok:true,lengthMm,availableMm,end:{x:a.x+dx*t,y:a.y+dy*t}};
 }
