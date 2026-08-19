@@ -68,7 +68,8 @@ Der reale Rechteck-Testfall wurde erfolgreich als PASS bestätigt. Geprüft werd
 
 ## Gate 4 — Taschen-G-Code und `.nc`
 
-Status: PASS
+Status: **PASS / GESCHLOSSEN**  
+Geschlossen: **2026-08-19**
 
 Die in Gate 3 freigegebene Rechtecktaschen-Strategie wird in `06 · Fräsen` als Maschinenprogramm ausgegeben.
 
@@ -98,7 +99,13 @@ Der Maschinen-Code wird in `src/lib/pocketGcode.ts` erzeugt; die UI liegt in `sr
 
 ### Gate-4-Realtest
 
-Die erzeugte `.nc` wurde in CAMotics simuliert. Die Simulation zeigt die vollständige Rasterräumung über alle Z-Ebenen sowie den anschließenden Wandumlauf korrekt.
+Die von BeBlog CAM erzeugte `.nc` wurde in CAMotics simuliert. Die Simulation bestätigt:
+
+- vollständige Rasterräumung über alle vorgesehenen Z-Ebenen,
+- korrekte Zustellfolge,
+- anschließenden Wandumlauf auf jeder Ebene,
+- plausiblen Rückzug auf Sicherheits-Z,
+- geometrisch erwartete fertige Rechtecktasche.
 
 **Gate 4 = PASS.**
 
@@ -110,8 +117,24 @@ Der Cleanup-Pfad wird nun zyklisch auf den geometrisch nächstgelegenen gültige
 
 Für den Referenzfall endet die Rasterbahn bereits auf einer Ecke des Wandumlaufs. In diesem Fall entfällt der Positionierzug vollständig und der Wandumlauf setzt direkt von der aktuellen Fräserposition fort.
 
+Der korrigierte Export wurde erneut in CAMotics geprüft. Der Wandumlauf beginnt nun unmittelbar an der erreichten Raster-Endposition; die zuvor sichtbare unnötige Diagonalfahrt ist entfallen.
+
 Verbindliche Toolpath-Regel daraus:
 
 **Geschlossene Folgepfade sollen am bereits erreichten oder geometrisch nächstgelegenen gültigen Startpunkt beginnen, sofern Geometrie und Bearbeitungsrichtung dadurch unverändert bleiben.**
 
 Dieser Polish verändert keine Sollmaße und keine geprüfte Taschengeometrie; er reduziert ausschließlich unnötige Verfahrwege.
+
+### Nicht Bestandteil von Gate 4
+
+Eine allgemeine End-of-Job-/Parkstrategie wird bewusst nicht mehr in Gate 4 aufgenommen. Das spätere Verhalten nach Abschluss der letzten Bearbeitung — etwa Sicherheits-Z, Rückkehr zu einer definierten Start-/Parkposition und Spindelstopp — ist eine job- bzw. postprozessorweite Funktion und wird in einem späteren Build spezifiziert.
+
+## Gate-4-Abschluss
+
+Gate 4 ist nach mathematischem Preflight, `.nc`-Export, CAMotics-Simulation und bestätigtem Toolpath-Polish **geschlossen**.
+
+Der funktionierende Taschenpfad wird für die nächsten Entwicklungsschritte als Referenz geschützt:
+
+`DXF-Sollkontur → radiuskorrigierte Taschenfläche → Rasterstrategie → Preflight → Z-Zustellungen → Wandumlauf → .nc → CAMotics`
+
+Neue Funktionen verändern diesen bewiesenen Gate-4-Pfad nicht ohne eigenes Regression-Gate.
