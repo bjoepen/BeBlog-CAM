@@ -2,94 +2,72 @@
 
 ## Ziel
 
-001H führt die erste echte Taschenoperation ein, ohne den in 001G bewiesenen Konturpfad zu verändern.
+001H erweitert den bewiesenen 2D-CAM-Kern schrittweise, ohne bestehende PASS-Pfade zu verändern.
 
-Produktregel:
+## Gates 1–5
 
-**Die linke Workflow-Leiste bleibt unverändert. Tasche ist eine Bearbeitung innerhalb `04 · Bearbeiten`, kein neuer Hauptschritt.**
+**PASS / GESCHLOSSEN.** Rechtecktasche, Preflight, `.nc`, CAMotics, optimierter Wandumlauf sowie senkrechte und analytisch geprüfte lineare Rampenzustellung sind verifiziert.
 
-## Gates 1–3
+Freigegebener Taschenpfad:
 
-**PASS.** Taschenmodell, UX und mathematischer Rechtecktaschen-Preflight sind verifiziert. Die CAD-Kontur bleibt das Fertigmaß; Werkzeugradius, Stepover, Flächenabdeckung und Z-Zustellungen werden vor Maschinen-Code geprüft.
+`DXF-Sollkontur → radiuskorrigierte Taschenfläche → Rasterstrategie → Preflight → Senkrecht ODER geprüfte Rampe → Z-Zustellungen → Wandumlauf → .nc → CAMotics`
 
-## Gate 4 — Taschen-G-Code und `.nc`
+## Gate 6 — Carve / Mittellinienbearbeitung
 
-Status: **PASS / GESCHLOSSEN**  
-Geschlossen: **2026-08-19**
+Status: **6A IMPLEMENTIERT — IMPORT-/DATENMODELL**
 
-Der bewiesene Referenzpfad lautet:
+Referenzbauteil ist das reale CBG-Griffbrett `CBG_Diatonic_3_String_635mm.dxf`. Die Bundschlitze liegen als einzelne offene Linien auf dem DXF-Layer `FRET_SLOTS` und werden später mit einem Ø 0,6-mm-Fräser bearbeitet. Die Außenkontur bleibt eine separate Konturoperation.
 
-`DXF-Sollkontur → radiuskorrigierte Taschenfläche → Rasterstrategie → Preflight → Z-Zustellungen → Wandumlauf → .nc → CAMotics`
+### Verbindliche Semantik
 
-Die von BeBlog CAM erzeugte `.nc` wurde in CAMotics erfolgreich simuliert. Vollständige Rasterräumung, Zustellfolge und Wandumlauf wurden bestätigt.
+Carve unterscheidet sich bewusst von den bestehenden Operationen:
 
-### Gate-4-Polish
+- **Kontur:** CAD-Geometrie beschreibt die fertige Werkstückkante; Fräsermittelbahn wird radiuskorrigiert.
+- **Tasche:** CAD-Geometrie beschreibt die fertige Flächenbegrenzung; der Innenraum wird radiuskorrigiert geräumt.
+- **Carve:** CAD-Geometrie **ist die Fräsermittellinie**. Es gibt keinen seitlichen Werkzeugradius-Offset.
 
-Der geschlossene Wandumlauf wird zyklisch auf den geometrisch nächstgelegenen gültigen Startpunkt rotiert. Endet die Rasterbahn bereits dort, entfällt eine unnötige Positionierfahrt. Der korrigierte Export wurde erneut in CAMotics bestätigt.
+Damit bleibt die bestehende Grundregel erhalten: Die CAD-Koordinaten sind maßgeblich; die Operation bestimmt lediglich ihre Bearbeitungssemantik.
 
-Verbindliche Toolpath-Regel:
+### Gate 6A — DXF-Layer als CAM-Semantik
 
-**Geschlossene Folgepfade sollen am bereits erreichten oder geometrisch nächstgelegenen gültigen Startpunkt beginnen, sofern Geometrie und Bearbeitungsrichtung dadurch unverändert bleiben.**
+Der DXF-Importer verwirft Layerinformationen nicht mehr. Für jede importierte Kurve wird parallel der originale DXF-Layer gespeichert; zusätzlich liefert `PlanarGeometry` die tatsächlich verwendeten Layernamen.
 
-Eine allgemeine End-of-Job-/Parkstrategie bleibt bewusst einem späteren job-/postprozessorweiten Schritt vorbehalten.
+Neue Felder:
 
-## Gate 5 — lineare Rampenzustellung
+- `planarGeometry.curveLayers[]` — 1:1-Zuordnung zu `curves[]`
+- `planarGeometry.layerNames[]` — eindeutige verwendete Layer
 
-Status: **PASS / GESCHLOSSEN**  
-Geschlossen: **2026-08-19**
+Das TypeScript-Datenmodell enthält bereits den buildneutralen `CarveOperation`-Vertrag mit:
 
-Für den geplanten realen Frästest steht neben senkrechtem Eintauchen nun eine mathematisch kontrollierte lineare Rampe zur Verfügung.
+- mehreren `curveIds`,
+- optionalem `layerName`,
+- eigenem Werkzeug,
+- Gesamttiefe und Zustellung,
+- Vorschub / Eintauchvorschub / Drehzahl / Sicherheits-Z.
 
-### Sicherheitsregeln
+Als konservativer Referenzwert ist Ø 0,6 mm vorbereitet. `CarveOperation` wird absichtlich erst dann Teil der aktiven `CamOperation`-Union, wenn Gate 6B die sichtbare Auswahl und den Preflight gemeinsam verdrahtet. Dadurch bleiben die geschlossenen Kontur- und Taschen-Pfade während Gate 6A buildneutral und regressionsgeschützt.
 
-- Die Rampe liegt vollständig auf dem ersten zur Taschenräumung gehörenden Rastersegment.
-- Der Rampenwinkel ist ein expliziter Operationsparameter.
-- Die benötigte horizontale Rampenlänge wird analytisch aus der jeweiligen Z-Zustellung berechnet:
+### Geplante Folgegates
 
-  `L = ΔZ / tan(α)`
+**Gate 6B — Auswahl und UX**
 
-- Die Rampe wird nur freigegeben, wenn `L` vollständig auf das erste Rastersegment passt.
-- Passt sie nicht, meldet `05 · Prüfen` FAIL; es wird keine verkürzte oder steilere Ersatzrampe erfunden.
-- Für jede Z-Ebene wird nur die zusätzliche Zustelltiefe `ΔZ` verrampt. Bei einer kleineren letzten Zustellung wird entsprechend eine kürzere Rampe berechnet.
-- Die vorhandene senkrechte Gate-4-Strategie bleibt unverändert verfügbar.
+- `Kontur | Tasche | Carve` unter `04 · Bearbeiten`, ohne neuen linken Workflow-Schritt.
+- Mehrfachauswahl offener DXF-Geometrien.
+- Komfortauswahl über Layer, insbesondere `FRET_SLOTS`.
+- Sichtbare Centerline-Werkzeugbahn ohne Radiusoffset.
 
-### G-Code-Strategie
+**Gate 6C — Preflight und G-Code**
 
-Bei `Rampe` fährt der Fräser vom Rasterstart entlang des ersten Rastersegments gleichzeitig in XY und Z auf die neue Solltiefe. Anschließend wird das verbleibende erste Rastersegment mit normalem Vorschub beendet und die bewiesene Gate-4-Räumung fortgesetzt.
+- nur unterstützte offene Geometrien freigeben,
+- exakte Centerline-Koordinaten prüfen,
+- Z-Zustellungen und Schnittdaten prüfen,
+- mehrere Segmente sicher anfahren,
+- `.nc`-Export.
 
-Für Folgeebenen wird zunächst kontrolliert auf die bereits vollständig geräumte vorherige Z-Ebene abgesenkt; nur die neue Materialzustellung erfolgt über die Rampe.
+**Gate 6D — Reihenfolge und CAMotics**
 
-### Positivtest
+- sichere, kurze Verfahrreihenfolge zwischen mehreren Segmenten,
+- keine Änderung der einzelnen CAD-Linien,
+- CAMotics-Regression am CBG-Griffbrett.
 
-Referenzfall:
-
-- Zustellung `ΔZ = 1.000 mm`
-- Rampenwinkel `5°`
-
-Analytisch ergibt sich:
-
-`L = 1 / tan(5°) ≈ 11.430 mm`
-
-Der erzeugte G-Code verwendet diese Strecke direkt als kombinierte XY/Z-Bewegung. Die resultierenden Rampen wurden in CAMotics auf allen Z-Ebenen sauber und sichtbar dargestellt. Die nachfolgende Rasterräumung und der Wandumlauf bleiben unverändert.
-
-### Negativtest
-
-Mit `1°` Rampenwinkel ergibt sich bei `ΔZ = 1.000 mm` eine benötigte Rampenlänge von `57.290 mm`.
-
-Auf der ersten Rasterbahn stehen im Referenzfall jedoch nur `47.000 mm` zur Verfügung. `05 · Prüfen` meldet deshalb korrekt:
-
-`FAIL — Rampe benötigt 57.290 mm, auf der ersten Rasterbahn stehen aber nur 47.000 mm zur Verfügung.`
-
-Damit ist bestätigt, dass BeBlog CAM unpassende Rampenparameter nicht stillschweigend verändert, sondern die Bearbeitung vor G-Code-Ausgabe sperrt.
-
-### Gate-5-Abschluss
-
-Positivtest, externe CAMotics-Simulation und Negativtest sind bestanden.
-
-**Gate 5 = PASS.**
-
-Der freigegebene Taschenpfad lautet damit nun:
-
-`DXF-Sollkontur → radiuskorrigierte Taschenfläche → Rasterstrategie → Preflight → senkrechtes Eintauchen ODER analytisch geprüfte lineare Rampe → Z-Zustellungen → Wandumlauf → .nc → CAMotics`
-
-Neue Taschenstrategien müssen diesen Pfad über eigene Regression-Gates erweitern, nicht ersetzen.
+Erst danach wird Gate 6 geschlossen.
