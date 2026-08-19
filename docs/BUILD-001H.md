@@ -35,13 +35,14 @@ Eine allgemeine End-of-Job-/Parkstrategie bleibt bewusst einem späteren job-/po
 
 ## Gate 5 — lineare Rampenzustellung
 
-Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**  
+Geschlossen: **2026-08-19**
 
-Für den geplanten realen Frästest wird neben senkrechtem Eintauchen nun eine mathematisch kontrollierte lineare Rampe vorbereitet.
+Für den geplanten realen Frästest steht neben senkrechtem Eintauchen nun eine mathematisch kontrollierte lineare Rampe zur Verfügung.
 
 ### Sicherheitsregeln
 
-- Die Rampe liegt vollständig auf dem ersten bereits zur Taschenräumung gehörenden Rastersegment.
+- Die Rampe liegt vollständig auf dem ersten zur Taschenräumung gehörenden Rastersegment.
 - Der Rampenwinkel ist ein expliziter Operationsparameter.
 - Die benötigte horizontale Rampenlänge wird analytisch aus der jeweiligen Z-Zustellung berechnet:
 
@@ -58,14 +59,37 @@ Bei `Rampe` fährt der Fräser vom Rasterstart entlang des ersten Rastersegments
 
 Für Folgeebenen wird zunächst kontrolliert auf die bereits vollständig geräumte vorherige Z-Ebene abgesenkt; nur die neue Materialzustellung erfolgt über die Rampe.
 
-### Gate-5-Test
+### Positivtest
 
-Für PASS sind erforderlich:
+Referenzfall:
 
-1. Rechtecktasche mit `Rampe` wählen.
-2. `05 · Prüfen` muss Rampenwinkel, benötigte Länge und verfügbare Länge ausweisen und PASS liefern.
-3. Ein absichtlich zu flacher Winkel bzw. eine zu kurze Tasche muss FAIL erzeugen.
-4. `.nc` in CAMotics simulieren.
-5. Prüfen, dass jede neue Z-Ebene über eine sichtbare lineare Rampe erreicht wird und die anschließende Raster-/Wandgeometrie unverändert bleibt.
+- Zustellung `ΔZ = 1.000 mm`
+- Rampenwinkel `5°`
 
-Erst nach diesem Test wird Gate 5 geschlossen.
+Analytisch ergibt sich:
+
+`L = 1 / tan(5°) ≈ 11.430 mm`
+
+Der erzeugte G-Code verwendet diese Strecke direkt als kombinierte XY/Z-Bewegung. Die resultierenden Rampen wurden in CAMotics auf allen Z-Ebenen sauber und sichtbar dargestellt. Die nachfolgende Rasterräumung und der Wandumlauf bleiben unverändert.
+
+### Negativtest
+
+Mit `1°` Rampenwinkel ergibt sich bei `ΔZ = 1.000 mm` eine benötigte Rampenlänge von `57.290 mm`.
+
+Auf der ersten Rasterbahn stehen im Referenzfall jedoch nur `47.000 mm` zur Verfügung. `05 · Prüfen` meldet deshalb korrekt:
+
+`FAIL — Rampe benötigt 57.290 mm, auf der ersten Rasterbahn stehen aber nur 47.000 mm zur Verfügung.`
+
+Damit ist bestätigt, dass BeBlog CAM unpassende Rampenparameter nicht stillschweigend verändert, sondern die Bearbeitung vor G-Code-Ausgabe sperrt.
+
+### Gate-5-Abschluss
+
+Positivtest, externe CAMotics-Simulation und Negativtest sind bestanden.
+
+**Gate 5 = PASS.**
+
+Der freigegebene Taschenpfad lautet damit nun:
+
+`DXF-Sollkontur → radiuskorrigierte Taschenfläche → Rasterstrategie → Preflight → senkrechtes Eintauchen ODER analytisch geprüfte lineare Rampe → Z-Zustellungen → Wandumlauf → .nc → CAMotics`
+
+Neue Taschenstrategien müssen diesen Pfad über eigene Regression-Gates erweitern, nicht ersetzen.
