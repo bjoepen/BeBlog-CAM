@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation } from './types';
+  import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation, Curve2 } from './types';
   import { buildClosedChains, offsetPolygon, sampleCurve, type P2 } from './contourMath';
 
   export let summary: ImportSummary;
@@ -9,11 +9,13 @@
   export let orientation: PartOrientation;
   export let operation: CamOperation;
   export let onSelectContour: (id: number) => void = () => {};
+  export let onSelectCarveCurve: (id: number) => void = () => {};
 
   const width=1000,height=650,pad=54;
   const rotate=(p:P2):P2=>{const a=orientation.rotationZDeg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c}};
   const bounds=(pts:P2[])=>{const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)}};
   const path=(pts:P2[],closed=false)=>pts.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')+(closed?' Z':'');
+  const eligibleCarve=(curve:Curve2)=>curve.kind==='line'||curve.kind==='arc'||(curve.kind==='polyline'&&!curve.closed);
 
   function fit(points:P2[]){
     const b=bounds(points),sx=Math.max(b.maxX-b.minX,1e-9),sy=Math.max(b.maxY-b.minY,1e-9),scale=Math.min((width-2*pad)/sx,(height-2*pad)/sy),ox=(width-sx*scale)/2,oy=(height-sy*scale)/2;
@@ -22,16 +24,25 @@
 
   function buildScene(..._deps: unknown[]){
     const curves=summary.planarGeometry?.curves??[];if(summary.kind!=='dxf'||!curves.length)return null;
-    const all=curves.flatMap(c=>sampleCurve(c).map(rotate));if(!all.length)return null;const partB=bounds(all);
+    const rotatedCurves=curves.map((curve,id)=>({id,curve,points:sampleCurve(curve).map(rotate)}));
+    const all=rotatedCurves.flatMap(c=>c.points);if(!all.length)return null;const partB=bounds(all);
     const dx=stockMode==='none'?-partB.minX:placement.horizontal==='left'?-partB.minX+placement.offsetX:placement.horizontal==='right'?stock.width-(partB.maxX-partB.minX)-partB.minX+placement.offsetX:(stock.width-(partB.maxX-partB.minX))/2-partB.minX+placement.offsetX;
     const dy=stockMode==='none'?-partB.minY:placement.vertical==='front'?-partB.minY+placement.offsetY:placement.vertical==='back'?stock.height-(partB.maxY-partB.minY)-partB.minY+placement.offsetY:(stock.height-(partB.maxY-partB.minY))/2-partB.minY+placement.offsetY;
     const move=(p:P2)=>({x:p.x+dx,y:p.y+dy});
+    const movedCurves=rotatedCurves.map(c=>({...c,points:c.points.map(move)}));
     const cs=buildClosedChains(curves,rotate).map(c=>({...c,points:c.points.map(move)}));
     let plane:P2[];
     if(stockMode==='none'){
       const moved=all.map(move),b=bounds(moved),m=Math.max(b.maxX-b.minX,b.maxY-b.minY)*.12+10;plane=[{x:b.minX-m,y:b.minY-m},{x:b.maxX+m,y:b.minY-m},{x:b.maxX+m,y:b.maxY+m},{x:b.minX-m,y:b.maxY+m}];
     }else{const m=Math.max(stock.width,stock.height)*.12+10;plane=[{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}]}
-    const map=fit([...all.map(move),...plane]);
+    const map=fit([...movedCurves.flatMap(c=>c.points),...plane]);
+
+    if(operation.kind==='carve'){
+      const selected=new Set(operation.curveIds);
+      const carve=movedCurves.filter(c=>eligibleCarve(c.curve)).map(c=>({id:c.id,screen:c.points.map(map),selected:selected.has(c.id)}));
+      return{kind:'carve' as const,carve};
+    }
+
     const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
     let tool:P2[]|null=null;
     if(selected){
@@ -39,14 +50,16 @@
       const d=operation.kind==='pocket'?-r:operation.side==='outside'?r:operation.side==='inside'?-r:0;
       tool=offsetPolygon(selected.points,d);
     }
-    return{chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,tool:tool?tool.map(map):null};
+    return{kind:'closed' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,tool:tool?tool.map(map):null};
   }
 
   $: scene=buildScene(
     operation.kind,
-    operation.contourId,
+    operation.kind==='carve'?operation.curveIds.join(','):operation.contourId,
+    operation.kind==='carve'?operation.selectionMode:operation.kind,
+    operation.kind==='carve'?operation.layerName:operation.kind,
     operation.tool.diameterMm,
-    operation.kind==='contour'?operation.side:'pocket',
+    operation.kind==='contour'?operation.side:operation.kind,
     stockMode,stock.width,stock.height,
     placement.horizontal,placement.vertical,placement.offsetX,placement.offsetY,
     orientation.rotationZDeg
@@ -54,14 +67,21 @@
 </script>
 
 {#if scene}
-<div class="contour-overlay" aria-label="Konturauswahl und Werkzeugweg">
+<div class="contour-overlay" aria-label="Geometrieauswahl und Werkzeugweg">
   <svg viewBox="0 0 1000 650">
-    {#each scene.chains as chain}
-      <path d={path(chain.screen,true)} class="candidate" />
-      <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id)}><title>Kontur {chain.id+1} auswählen</title></path>
-    {/each}
-    {#if scene.selected}<path d={path(scene.selected,true)} class="selected"/>{/if}
-    {#if scene.tool}<path d={path(scene.tool,true)} class="toolpath"/>{/if}
+    {#if scene.kind==='carve'}
+      {#each scene.carve as curve}
+        <path d={path(curve.screen,false)} class:selected-carve={curve.selected} class="carve-candidate" />
+        {#if operation.kind==='carve'&&operation.selectionMode==='individual'}<path d={path(curve.screen,false)} class="carve-pick" onclick={()=>onSelectCarveCurve(curve.id)}><title>Carve-Geometrie {curve.id+1} auswählen</title></path>{/if}
+      {/each}
+    {:else}
+      {#each scene.chains as chain}
+        <path d={path(chain.screen,true)} class="candidate" />
+        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id)}><title>Kontur {chain.id+1} auswählen</title></path>
+      {/each}
+      {#if scene.selected}<path d={path(scene.selected,true)} class="selected"/>{/if}
+      {#if scene.tool}<path d={path(scene.tool,true)} class="toolpath"/>{/if}
+    {/if}
   </svg>
   <div class="caption-spacer"></div>
 </div>
@@ -75,4 +95,7 @@
   .pick{fill:none;stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
   .selected{fill:none;stroke:rgba(194,117,40,.9);stroke-width:2.2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
+  .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}
+  .carve-candidate.selected-carve{stroke:#b1453b;stroke-width:2.2}
+  .carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
 </style>
