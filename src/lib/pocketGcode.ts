@@ -9,6 +9,28 @@ export type PocketGcodeResult={
 const rotate=(p:P2,deg:number):P2=>{const a=deg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c}};
 const bounds=(pts:P2[])=>{const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)}};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
+const distance=(a:P2,b:P2)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+/**
+ * A closed cleanup contour may start at any of its vertices without changing
+ * geometry or traversal direction. Rotate it to the vertex nearest the current
+ * cutter position so the transition from raster clearing to wall cleanup is
+ * as short as possible. If raster already ends on that vertex, no positioning
+ * move is emitted at all.
+ */
+function rotateClosedPathNearest(path:P2[],current:P2):P2[]{
+  if(path.length<2)return [...path];
+  const isClosed=distance(path[0],path[path.length-1])<=1e-6;
+  const ring=isClosed?path.slice(0,-1):[...path];
+  if(!ring.length)return [...path];
+  let best=0,bestDistance=Infinity;
+  for(let i=0;i<ring.length;i++){
+    const d=distance(ring[i],current);
+    if(d<bestDistance){bestDistance=d;best=i;}
+  }
+  const rotated=[...ring.slice(best),...ring.slice(0,best)];
+  return isClosed?[...rotated,{...rotated[0]}]:rotated;
+}
 
 function placementTranslation(summary:ImportSummary,stock:StockDefinition,stockMode:StockMode,placement:PartPlacement,orientation:PartOrientation){
   const curves=summary.planarGeometry?.curves??[];
@@ -63,9 +85,15 @@ export function generatePocketGcode(args:{summary:ImportSummary;stock:StockDefin
     lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);
     lines.push(`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);
     for(let i=1;i<raster.length;i++) lines.push(`G1 X${f3(raster[i].x)} Y${f3(raster[i].y)} F${Math.round(operation.feedMmMin)}`);
-    const c0=cleanup[0];
-    lines.push(`G1 X${f3(c0.x)} Y${f3(c0.y)} F${Math.round(operation.feedMmMin)}`);
-    for(let i=1;i<cleanup.length;i++) lines.push(`G1 X${f3(cleanup[i].x)} Y${f3(cleanup[i].y)} F${Math.round(operation.feedMmMin)}`);
+
+    const rasterEnd=raster[raster.length-1];
+    const cleanupFromEnd=rotateClosedPathNearest(cleanup,rasterEnd);
+    const cleanupStart=cleanupFromEnd[0];
+    if(distance(rasterEnd,cleanupStart)>1e-6){
+      lines.push(`G1 X${f3(cleanupStart.x)} Y${f3(cleanupStart.y)} F${Math.round(operation.feedMmMin)}`);
+    }
+    for(let i=1;i<cleanupFromEnd.length;i++) lines.push(`G1 X${f3(cleanupFromEnd[i].x)} Y${f3(cleanupFromEnd[i].y)} F${Math.round(operation.feedMmMin)}`);
+
     lines.push(`G0 Z${f3(operation.safeZMm)}`);
     if(pass<passes)lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
   }
