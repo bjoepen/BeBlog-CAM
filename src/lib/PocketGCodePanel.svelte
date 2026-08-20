@@ -20,17 +20,17 @@
 {:else}
 <p class="eyebrow">06 · Fräsen</p><h2>Tasche</h2>
 {#if result.ok}
-  <div class="release pass"><strong>PASS</strong><span>Die in Gate 3 geprüfte Rechtecktasche kann als Maschinenprogramm ausgegeben werden.</span></div>
-  <div class="facts"><span>{result.passes} Zustellung{result.passes===1?'':'en'}</span><span>{result.rasterPasses} Rasterbahnen</span><span>Stepover {result.stepoverMm.toFixed(3)} mm</span><span>Radius {result.toolRadiusMm.toFixed(3)} mm</span><span>{result.lineCount} G-Code-Zeilen</span></div>
-  <p class="note"><strong>Strategie:</strong> Senkrecht eintauchen · deterministische Zickzack-Räumung · abschließender Wandumlauf auf jeder Z-Ebene.</p>
+  <div class="release pass"><strong>PASS</strong><span>Die geprüfte Taschenstrategie kann als Maschinenprogramm ausgegeben werden.</span></div>
+  <div class="facts"><span>{result.passes} Zustellung{result.passes===1?'':'en'}</span>{#if result.strategy==='raster'}<span>{result.rasterPasses} Rasterbahnen</span>{:else}<span>{result.concentricRings} Kreisring{result.concentricRings===1?'':'e'}</span>{/if}<span>Stepover {result.stepoverMm.toFixed(3)} mm</span><span>Radius {result.toolRadiusMm.toFixed(3)} mm</span><span>{result.lineCount} G-Code-Zeilen</span></div>
+  <p class="note"><strong>Strategie:</strong> {result.strategy==='concentric'?'Konzentrische Kreistasche · Zentrum zuerst · native G2/G3-Halbkreise · äußerster Ring als radiuskorrigierte Fertigwand.':operation.entry==='ramp'?'Rechteck-Raster · lineare Rampe · Zickzack-Räumung · abschließender Wandumlauf.':'Rechteck-Raster · senkrecht eintauchen · Zickzack-Räumung · abschließender Wandumlauf.'}</p>
   {#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
   <div class="export-box"><div><strong>NC-Datei</strong><span>Speichert exakt den aktuell angezeigten Taschen-G-Code als .nc.</span></div><button class="primary-export" onclick={saveNc}>G-Code speichern …</button></div>
   {#if exportMessage}<p class:export-ok={exportState==='saved'} class:export-error={exportState==='error'} class="export-message">{exportMessage}</p>{/if}
   <div class="code-head"><span>Vorschau · identisch zur .nc-Datei</span><button onclick={copyCode}>{copied?'Kopiert':'G-Code kopieren'}</button></div><pre>{result.code}</pre>
 {:else}
-  <div class="release fail"><strong>FAIL</strong><span>Taschen-G-Code wird nur erzeugt, wenn die aktuelle Operation freigabefähig ist.</span></div>{#each result.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}{#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
+  <div class="release fail"><strong>FAIL</strong><span>Taschen-G-Code wird nur erzeugt, wenn Geometrie und gewählte Räumstrategie freigabefähig sind.</span></div>{#each result.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}{#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
 {/if}
-<p class="note"><strong>001H Gate 4:</strong> Der bewiesene Taschenpfad bleibt unverändert; 001I verknüpft ihn nur im Gesamtjob.</p>
+<p class="note"><strong>001J Gate 8A:</strong> Der bewiesene Rechteck-Rasterpfad bleibt erhalten. Native DXF-Kreise werden analytisch und konzentrisch mit G2/G3 geräumt.</p>
 {/if}
 
 <style>
