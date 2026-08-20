@@ -81,21 +81,31 @@ Jeder Innenoffset wird konservativ separat auf Safe-Z angefahren und senkrecht e
 
 Ein ungültiger Offset, kollabierender Bogen, zu großes Werkzeug oder nicht sicher geräumter Kern setzt die Operation auf **FAIL**. Eine lineare Rampe bleibt für Konturparallel ebenfalls **FAIL**.
 
-### Operationsmodell
+### UX und Operationsmodell
 
-`PocketStrategy` enthält nun auch `parallel`. Die Bearbeitungsliste kann die Strategie als `Konturparallel` ausweisen. `Automatisch` reicht bereits für den verbindlichen Referenztest; die explizite Auswahl in der kompakten Strategie-UX wird als kleiner UI-Abschluss innerhalb 8B behandelt und verändert den Maschinenpfad nicht.
+`PocketStrategy` enthält `auto | raster | concentric | parallel`.
+
+Unter `04 · Bearbeiten → Tasche → Räumstrategie` stehen jetzt ausdrücklich vier ruhige Optionen zur Verfügung:
+
+- `Automatisch`,
+- `Raster`,
+- `Kreis`,
+- `Konturparallel`.
+
+`Automatisch` wählt weiterhin deterministisch anhand der erkannten Geometrie. Die explizite Auswahl `Konturparallel` erzwingt den Gate-8B-Pfad und führt bei nicht unterstützter Geometrie bewusst zu FAIL. Die Bearbeitungsliste weist `Konturparallel` ebenfalls namentlich aus.
 
 ### Gate-8B-Realtest
 
 PASS erst wenn `Test(1).dxf`:
 
 1. als Tasche mit `Automatisch` erkannt und intern auf `parallel` aufgelöst wird,
-2. Preflight freigabefähig ist,
-3. `.nc` native G1- und G2/G3-Segmente enthält,
-4. keine Offsetbahn die CAD-Sollwand überschreitet,
-5. der Innenraum vollständig geräumt wird,
-6. CAMotics und NC Viewer die erwartete Langlochtasche zeigen,
-7. Rechteck-Raster und Kreis-Konzentrisch regressionsfrei bleiben.
+2. alternativ explizit `Konturparallel` gewählt werden kann,
+3. Preflight freigabefähig ist,
+4. `.nc` native G1- und G2/G3-Segmente enthält,
+5. keine Offsetbahn die CAD-Sollwand überschreitet,
+6. der Innenraum vollständig geräumt wird,
+7. CAMotics und NC Viewer die erwartete Langlochtasche zeigen,
+8. Rechteck-Raster und Kreis-Konzentrisch regressionsfrei bleiben.
 
 ### Scope-Grenze
 
