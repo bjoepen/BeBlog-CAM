@@ -56,6 +56,6 @@ export function operationSummary(operation:CamOperation):string {
     return `${source} · ${operation.curveIds.length} Linie${operation.curveIds.length===1?'':'n'} · ${tool}`;
   }
   if(operation.kind==='contour')return `${operation.contourId===null?'Keine Kontur':`Kontur ${operation.contourId+1}`} · ${operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie'} · ${tool}`;
-  const strategy=operation.strategy==='auto'?'Auto':operation.strategy==='raster'?'Raster':'Kreis';
+  const strategy=operation.strategy==='auto'?'Auto':operation.strategy==='raster'?'Raster':operation.strategy==='concentric'?'Kreis':'Konturparallel';
   return `${operation.contourId===null?'Keine Kontur':`Kontur ${operation.contourId+1}`} · ${strategy} · ${operation.stepoverPercent}% Zustellung · ${tool}`;
 }
