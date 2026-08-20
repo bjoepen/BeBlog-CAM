@@ -12,6 +12,17 @@ export type PocketPath = {
   cleanup:Point2[];
   passesAcross:number;
 };
+export type CircularPocketPath={
+  ok:boolean;
+  error?:string;
+  center:Point2;
+  pocketRadiusMm:number;
+  toolRadiusMm:number;
+  maxCenterRadiusMm:number;
+  requestedStepoverMm:number;
+  actualStepoverMm:number;
+  ringRadiiMm:number[];
+};
 export type PocketRamp = { ok:boolean; error?:string; lengthMm:number; availableMm:number; end?:Point2 };
 
 const EPS=1e-6;
@@ -45,7 +56,7 @@ export function buildRectangularPocketPath(points:Point2[],toolDiameterMm:number
   if(!(toolDiameterMm>0))return{...empty,error:'Werkzeugdurchmesser muss größer als 0 sein.'};
   if(!(stepoverPercent>0&&stepoverPercent<=100))return{...empty,error:'Seitliche Zustellung muss zwischen 0 und 100 % liegen.'};
   const pocket=detectAxisAlignedRectangle(points);
-  if(!pocket)return{...empty,error:'001H unterstützt zunächst nur geschlossene achsparallele Rechtecktaschen.'};
+  if(!pocket)return{...empty,error:'Raster unterstützt nur geschlossene achsparallele Rechtecktaschen.'};
   const minX=pocket.minX+toolRadiusMm,maxX=pocket.maxX-toolRadiusMm,minY=pocket.minY+toolRadiusMm,maxY=pocket.maxY-toolRadiusMm;
   if(maxX-minX<=EPS||maxY-minY<=EPS)return{...empty,pocket,error:'Das Werkzeug passt nicht vollständig in die gewählte Tasche.'};
   const stepoverMm=toolDiameterMm*stepoverPercent/100,height=maxY-minY;
@@ -57,6 +68,22 @@ export function buildRectangularPocketPath(points:Point2[],toolDiameterMm:number
   }
   const cleanup:Point2[]=[{x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY},{x:minX,y:minY}];
   return{ok:true,pocket,toolRadiusMm,stepoverMm:actualStep||stepoverMm,raster,cleanup,passesAcross};
+}
+
+export function buildCircularPocketPath(center:Point2,pocketRadiusMm:number,toolDiameterMm:number,stepoverPercent:number):CircularPocketPath{
+  const toolRadiusMm=toolDiameterMm/2,requestedStepoverMm=toolDiameterMm*stepoverPercent/100;
+  const empty={ok:false,center:{...center},pocketRadiusMm,toolRadiusMm,maxCenterRadiusMm:0,requestedStepoverMm,actualStepoverMm:0,ringRadiiMm:[]};
+  if(!(pocketRadiusMm>0))return{...empty,error:'Kreistaschenradius muss größer als 0 sein.'};
+  if(!(toolDiameterMm>0))return{...empty,error:'Werkzeugdurchmesser muss größer als 0 sein.'};
+  if(!(stepoverPercent>0&&stepoverPercent<=100))return{...empty,error:'Seitliche Zustellung muss zwischen 0 und 100 % liegen.'};
+  const maxCenterRadiusMm=pocketRadiusMm-toolRadiusMm;
+  if(maxCenterRadiusMm<-EPS)return{...empty,error:'Das Werkzeug ist größer als die gewählte Kreistasche.'};
+  if(maxCenterRadiusMm<=EPS)return{...empty,ok:true,maxCenterRadiusMm:0,actualStepoverMm:0,ringRadiiMm:[]};
+  const ringCount=Math.max(1,Math.ceil(maxCenterRadiusMm/requestedStepoverMm));
+  const actualStepoverMm=maxCenterRadiusMm/ringCount;
+  const ringRadiiMm=Array.from({length:ringCount},(_,i)=>actualStepoverMm*(i+1));
+  ringRadiiMm[ringRadiiMm.length-1]=maxCenterRadiusMm;
+  return{...empty,ok:true,maxCenterRadiusMm,actualStepoverMm,ringRadiiMm};
 }
 
 export function buildPocketRamp(path:PocketPath,depthIncrementMm:number,angleDeg:number):PocketRamp{
