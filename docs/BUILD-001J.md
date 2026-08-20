@@ -14,7 +14,7 @@ Die native DXF-Kreistasche wurde analytisch und extern in CAMotics bestätigt. D
 
 ## Gate 8B — konturparallele Taschenräumung für gemischte geschlossene Konturen
 
-Status: **KERNEL IMPLEMENTIERT / PREFLIGHT & REALTEST AUSSTEHEND**
+Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
 
 ### Referenzmodell
 
@@ -28,7 +28,7 @@ Verbindliche Regel:
 
 `src/lib/parallelPocketMath.ts` erzeugt konservative konturparallele Innenoffsets auf Basis der bereits bewiesenen nativen `SemanticContour`-Geometrie.
 
-Geprüft werden derzeit:
+Geprüft werden:
 
 - unterstützte geschlossene native Kontur,
 - mindestens ein nativer ARC im Gate-8B-Scope,
@@ -43,13 +43,13 @@ Die erste Bahn liegt exakt einen Werkzeugradius innerhalb der CAD-Wand. Weitere 
 
 ### G-Code-Kern
 
-`src/lib/pocketGcode.ts` besitzt nun eine dritte interne Strategie:
+`src/lib/pocketGcode.ts` besitzt drei Strategien:
 
-- `raster`
-- `concentric`
-- `parallel`
+- `raster`,
+- `concentric`,
+- `parallel`.
 
-Bei `Automatisch` gilt im aktuellen 8B-Kernel:
+Bei `Automatisch` gilt:
 
 1. nativer Kreis → `concentric`,
 2. gültige achsparallele Rechtecktasche → `raster`,
@@ -65,31 +65,31 @@ Konturparallel wird mit nativer Semantik ausgegeben:
 
 Jeder Innenoffset wird konservativ separat auf Safe-Z angefahren und senkrecht eingetaucht. Die allgemeine Rampe bleibt für Gate 8B gesperrt.
 
-### Sicherheitsgrenze des ersten Kernschritts
+### Preflight
 
-Gate 8B ist **noch nicht PASS**. Der neue Maschinenpfad ist absichtlich noch nicht über den vollständigen Einzel-Preflight freigegeben. `05 · Prüfen` muss als nächster Schritt die neue Strategie explizit verstehen und darf nicht mehr von der alten Rechtecktaschenprüfung ausgehen.
-
-Erst danach erfolgt der Realtest mit `Test(1).dxf`.
-
-### Geplanter Preflight
-
-Der Gate-8B-Preflight muss sichtbar bestätigen:
+`05 · Prüfen` versteht die konturparallele Strategie nun explizit und bestätigt sichtbar:
 
 - erkannte native LINE/ARC-Semantik,
+- Anzahl LINE- und ARC-Segmente,
 - Werkzeugradius,
-- Anzahl erzeugter Innenoffsets,
-- maximalen tatsächlichen Stepover,
-- minimale verbleibende Bogenradien,
-- geschlossene Segmentanschlüsse,
-- keine Selbstüberschneidung,
+- Anzahl analytisch erzeugter Innenoffsets,
+- angeforderten und tatsächlichen maximalen Stepover,
+- kleinsten verbleibenden Bogenradius,
+- Offset-Sicherheit einschließlich Kontinuität und Selbstüberschneidungsprüfung,
 - erster/Fertigumlauf exakt auf Werkzeugradius-Abstand zur CAD-Sollwand,
 - native Interpolation `G1 + G2/G3`.
+
+Ein ungültiger Offset, kollabierender Bogen, zu großes Werkzeug oder nicht sicher geräumter Kern setzt die Operation auf **FAIL**. Eine lineare Rampe bleibt für Konturparallel ebenfalls **FAIL**.
+
+### Operationsmodell
+
+`PocketStrategy` enthält nun auch `parallel`. Die Bearbeitungsliste kann die Strategie als `Konturparallel` ausweisen. `Automatisch` reicht bereits für den verbindlichen Referenztest; die explizite Auswahl in der kompakten Strategie-UX wird als kleiner UI-Abschluss innerhalb 8B behandelt und verändert den Maschinenpfad nicht.
 
 ### Gate-8B-Realtest
 
 PASS erst wenn `Test(1).dxf`:
 
-1. als Tasche mit `Automatisch` bzw. später explizit `Konturparallel` erkannt wird,
+1. als Tasche mit `Automatisch` erkannt und intern auf `parallel` aufgelöst wird,
 2. Preflight freigabefähig ist,
 3. `.nc` native G1- und G2/G3-Segmente enthält,
 4. keine Offsetbahn die CAD-Sollwand überschreitet,
