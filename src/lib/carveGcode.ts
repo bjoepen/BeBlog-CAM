@@ -37,12 +37,14 @@ export function generateCarveGcode(args:{summary:ImportSummary;stock:StockDefini
   const transform=(p:Point2):P2=>{const q=rotate(p,orientation.rotationZDeg);return{x:q.x+t.dx-origin.x,y:q.y+t.dy-origin.y}};
   const curves=summary.planarGeometry?.curves??[];const segments:Segment[]=[];for(const checked of validation.segments){const curve=curves[checked.id];if(!curve||curve.kind!=='line')return fail([`Geometrie ${checked.id+1} ist nicht mehr als DXF-Linie verfügbar.`]);segments.push({id:checked.id,start:transform(curve.start),end:transform(curve.end)});}
   const start={x:0,y:0},ordered=orderSegmentsNearest(segments,start),lines:string[]=[];
-  lines.push('( BeBlog CAM 001H )','( Carve · DXF-Centerlines · kein seitlicher Werkzeugradius-Offset )',`( ${segments.length} Linien · Werkzeug Ø${f3(operation.tool.diameterMm)} mm )`,'( Sichere Segmentwechsel ausschliesslich auf Sicherheits-Z )','G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
+  lines.push('( BeBlog CAM 001I )','( Carve · DXF-Centerlines · kein seitlicher Werkzeugradius-Offset )',`( ${segments.length} Linien · Werkzeug Ø${f3(operation.tool.diameterMm)} mm )`,'( Sichere Segmentwechsel ausschliesslich auf Sicherheits-Z )','G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
   const passes=Math.max(1,validation.passes);
   for(let pass=1;pass<=passes;pass++){
     const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);
-    for(const segment of ordered.ordered){lines.push(`G0 Z${f3(operation.safeZMm)}`,`G0 X${f3(segment.start.x)} Y${f3(segment.start.y)}`,`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`,`G1 X${f3(segment.end.x)} Y${f3(segment.end.y)} F${Math.round(operation.feedMmMin)}`,`G0 Z${f3(operation.safeZMm)}`);}
+    for(const segment of ordered.ordered){
+      lines.push(`G0 X${f3(segment.start.x)} Y${f3(segment.start.y)}`,`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`,`G1 X${f3(segment.end.x)} Y${f3(segment.end.y)} F${Math.round(operation.feedMmMin)}`,`G0 Z${f3(operation.safeZMm)}`);
+    }
   }
-  lines.push('M5',`G0 Z${f3(operation.safeZMm)}`,'M30');const code=lines.join('\n')+'\n';
+  lines.push('M5','M30');const code=lines.join('\n')+'\n';
   return{ok:true,errors:[],warnings,code,lineCount:lines.length,passes,segmentCount:segments.length,totalCenterlineLengthMm:validation.totalLengthMm,rapidSequenceLengthMm:ordered.rapid};
 }
