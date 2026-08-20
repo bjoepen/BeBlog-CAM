@@ -2,115 +2,68 @@
 
 ## Ziel
 
-001J erweitert den in 001H/001I bewiesenen 2D-CAM-Kern um echte Taschen-Räumstrategien. Die bestehenden Kontur-, Carve-, Rechtecktaschen- und Multi-Operation-Pfade bleiben unverändert und dienen als Regression.
+001J erweitert den bewiesenen 2D-CAM-Kern um echte Taschen-Räumstrategien. Kontur, Carve, Rechtecktaschen und Multi-Operation bleiben Regression.
 
 ## Gate 8A — Kreistasche / konzentrische Räumstrategie
 
 Status: **PASS / GESCHLOSSEN**
 
-Die native DXF-Kreistasche wurde analytisch und extern in CAMotics bestätigt. Der äußerste Fräsermittelbahnradius entspricht exakt `R Tasche − R Werkzeug`; die Räumung verwendet native G3-Halbkreise.
+Die native DXF-Kreistasche wurde analytisch und extern in CAMotics bestätigt. Die Werkzeugmittelbahn hält den korrekten Werkzeugradius-Abstand zur CAD-Sollwand ein; die Kreisinterpolation bleibt nativ.
 
 **Gate 8A = PASS.**
 
 ## Gate 8B — konturparallele Taschenräumung für gemischte geschlossene Konturen
 
-Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**
 
-### Referenzmodell
+Referenzmodell war `Test(1).dxf`, eine Langloch-/Kapselkontur aus LINE- und ARC-Segmenten. Degenerierte Null-Linien werden ignoriert.
 
-Verbindlicher Realtest ist `Test(1).dxf`, eine Langloch-/Kapselkontur aus zwei LINE- und zwei ARC-Segmenten. Degenerierte Null-Linien werden durch den semantischen Konturaufbau ignoriert.
+Verbindliche Regel: **Linie bleibt Linie. Bogen bleibt Bogen.**
 
-Verbindliche Regel:
+Bewiesen wurden:
 
-**Linie bleibt Linie. Bogen bleibt Bogen.**
+- konturparallele Innenoffsets,
+- Werkzeugradius-Abstand zur Sollwand,
+- Stepover-Begrenzung,
+- native LINE/ARC-Semantik bis in den Maschinenpfad,
+- Preflight gegen kollabierende oder unsichere Offsets,
+- vollständige Räumung des Langlochs,
+- korrekte Darstellung in CAMotics.
 
-### Implementierter Kern
+Der Realtest bestätigt die vollständige Räumung ohne Verletzung der Sollkontur.
 
-`src/lib/parallelPocketMath.ts` erzeugt konservative konturparallele Innenoffsets auf Basis der bereits bewiesenen nativen `SemanticContour`-Geometrie.
+**Gate 8B = PASS.**
 
-Geprüft werden:
+## Gate 8C — Safe Stay-Down Linking
 
-- unterstützte geschlossene native Kontur,
-- mindestens ein nativer ARC im Gate-8B-Scope,
-- Werkzeugdurchmesser und Stepover,
-- jeder Offset über `offsetSemanticContour(..., -correction)`,
-- bestehende analytische Offsetvermessung,
-- kollabierende Bögen,
-- angenäherte Selbstüberschneidung der resultierenden Offsetkontur,
-- sichere Kernabdeckung vor Freigabe.
+Status: **GEÖFFNET**
 
-Die erste Bahn liegt exakt einen Werkzeugradius innerhalb der CAD-Wand. Weitere Bahnen werden höchstens um den gewählten Stepover nach innen versetzt.
+### Ziel
 
-### G-Code-Kern
+Gate 8C optimiert ausschließlich die Verbindung zwischen den bereits bewiesenen konturparallelen Innenoffsets. Die Geometrie- und Offset-Mathematik aus 8B bleibt unverändert.
 
-`src/lib/pocketGcode.ts` besitzt drei Strategien:
+Der aktuelle 8B-Pfad fährt nach jedem Offset konservativ auf Sicherheits-Z, versetzt zum nächsten Offset und taucht erneut ein. 8C soll innerhalb derselben Tiefenebene unnötige Z-Bewegungen vermeiden.
 
-- `raster`,
-- `concentric`,
-- `parallel`.
+### Sicherheitsregel
 
-Bei `Automatisch` gilt:
+Stay-down ist nur erlaubt, wenn die Verbindung zwischen zwei benachbarten validierten Offsets als sicher nachgewiesen ist. Andernfalls bleibt der bewiesene Safe-Z-Retract erhalten.
 
-1. nativer Kreis → `concentric`,
-2. gültige achsparallele Rechtecktasche → `raster`,
-3. sonst unterstützte gemischte native Kontur → `parallel`.
+Für den ersten Scope gilt:
 
-Es gibt keinen stillen Rückfall auf segmentierte G1-Geometrie.
+- nur benachbarte validierte Innenoffsets,
+- Verbindung auf Arbeitstiefe nur mit kontrolliertem Schnittvorschub,
+- keine Rapid-XY-Bewegung im Material,
+- Verbindungsdistanz darf den zulässigen Stepover nicht überschreiten,
+- Verbindung muss innerhalb des freigegebenen Taschenraums liegen,
+- am Ende jeder Tiefenebene weiterhin Rückzug auf Sicherheits-Z,
+- bei fehlendem Sicherheitsnachweis automatischer Fallback auf konservativen Retract.
 
-Konturparallel wird mit nativer Semantik ausgegeben:
+### Referenztest
 
-- LINE → `G1`,
-- ARC CCW → `G3`,
-- ARC CW → `G2`.
+Wieder `Test(1).dxf`.
 
-Jeder Innenoffset wird konservativ separat auf Safe-Z angefahren und senkrecht eingetaucht. Die allgemeine Rampe bleibt für Gate 8B gesperrt.
-
-### Preflight
-
-`05 · Prüfen` versteht die konturparallele Strategie nun explizit und bestätigt sichtbar:
-
-- erkannte native LINE/ARC-Semantik,
-- Anzahl LINE- und ARC-Segmente,
-- Werkzeugradius,
-- Anzahl analytisch erzeugter Innenoffsets,
-- angeforderten und tatsächlichen maximalen Stepover,
-- kleinsten verbleibenden Bogenradius,
-- Offset-Sicherheit einschließlich Kontinuität und Selbstüberschneidungsprüfung,
-- erster/Fertigumlauf exakt auf Werkzeugradius-Abstand zur CAD-Sollwand,
-- native Interpolation `G1 + G2/G3`.
-
-Ein ungültiger Offset, kollabierender Bogen, zu großes Werkzeug oder nicht sicher geräumter Kern setzt die Operation auf **FAIL**. Eine lineare Rampe bleibt für Konturparallel ebenfalls **FAIL**.
-
-### UX und Operationsmodell
-
-`PocketStrategy` enthält `auto | raster | concentric | parallel`.
-
-Unter `04 · Bearbeiten → Tasche → Räumstrategie` stehen jetzt ausdrücklich vier ruhige Optionen zur Verfügung:
-
-- `Automatisch`,
-- `Raster`,
-- `Kreis`,
-- `Konturparallel`.
-
-`Automatisch` wählt weiterhin deterministisch anhand der erkannten Geometrie. Die explizite Auswahl `Konturparallel` erzwingt den Gate-8B-Pfad und führt bei nicht unterstützter Geometrie bewusst zu FAIL. Die Bearbeitungsliste weist `Konturparallel` ebenfalls namentlich aus.
-
-### Gate-8B-Realtest
-
-PASS erst wenn `Test(1).dxf`:
-
-1. als Tasche mit `Automatisch` erkannt und intern auf `parallel` aufgelöst wird,
-2. alternativ explizit `Konturparallel` gewählt werden kann,
-3. Preflight freigabefähig ist,
-4. `.nc` native G1- und G2/G3-Segmente enthält,
-5. keine Offsetbahn die CAD-Sollwand überschreitet,
-6. der Innenraum vollständig geräumt wird,
-7. CAMotics und NC Viewer die erwartete Langlochtasche zeigen,
-8. Rechteck-Raster und Kreis-Konzentrisch regressionsfrei bleiben.
-
-### Scope-Grenze
-
-Gate 8B behandelt noch keine allgemeinen konkaven Taschen, Inneninseln oder mehrere getrennte Innenräume. Diese benötigen eigene Topologie-Gates.
+PASS, wenn die Tasche geometrisch identisch zu 8B geräumt wird, innerhalb einer Tiefenebene die unnötigen Z-Hübe zwischen sicheren Offsets entfallen, CAMotics unveränderte Materialabtragung bestätigt und unsichere Verbindungen weiterhin automatisch einen Retract erzwingen.
 
 ## Danach
 
-Nach Gate 8B folgen getrennt allgemeinere Topologien und anschließend **Gate 9 — Bohren**.
+Nach 8C folgen allgemeinere Taschentopologien und anschließend **Gate 9 — Bohren**.
