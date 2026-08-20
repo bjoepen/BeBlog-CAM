@@ -15,21 +15,39 @@ Status: **PASS / GESCHLOSSEN**
 
 Mehrere Bearbeitungen können angelegt, unabhängig gespeichert, gewechselt und gelöscht werden. Geometrieauswahl, Werkzeug- und Schnittdaten bleiben pro Operation getrennt. Die lineare Hauptnavigation bleibt unverändert.
 
+Verbindlich:
+
+- `operations: CamOperation[]`
+- `activeOperationId: string | null`
+- aktive Markierung = Editorfokus, nicht Exportauswahl
+- jede Operation besitzt eigene Geometrie-, Werkzeug- und Schnittdaten
+
 **Gate 7A = PASS.**
 
 ## Gate 7B — Gesamtjob und kontrollierter Werkzeugwechsel
 
 Status: **PASS / GESCHLOSSEN**
 
-Mehrere bewiesene Einzeloperationen werden zu einer gemeinsamen `.nc` verbunden. NC Viewer und CAMotics bestätigten am CBG-Griffbrett Carve der Bundschlitze plus Außenkontur im selben Job. Unterschiedliche Werkzeuge erzeugen einen kontrollierten manuellen Halt.
+Mehrere bewiesene Einzeloperationen werden zu einer gemeinsamen `.nc` verbunden. NC Viewer und CAMotics bestätigten am CBG-Griffbrett Carve der Bundschlitze plus Außenkontur im selben Job.
+
+Unterschiedliche Werkzeuge erzeugen konservativ einen kontrollierten manuellen Halt:
+
+```text
+G0 Z<Sicherheits-Z>
+M5
+( Werkzeugwechsel )
+M0 ( Werkzeug ... einsetzen und bestaetigen )
+```
+
+Danach startet die nächste Operation mit ihren eigenen Drehzahl- und Schnittdaten. Ein automatischer `M6`-Wechsel wird nicht vorausgesetzt.
 
 **Gate 7B = PASS.**
 
 ## Gate 7C — projektweiter Preflight
 
-Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**
 
-`05 · Prüfen` wechselt bei mehreren Operationen jetzt von der Einzelprüfung auf einen echten Gesamtjob-Preflight.
+`05 · Prüfen` wechselt bei mehreren Operationen von der Einzelprüfung auf einen echten Gesamtjob-Preflight.
 
 ### Sicherheitsregel
 
@@ -43,20 +61,77 @@ WARN wird ebenfalls bis auf Gesamtjob-Ebene hochgereicht. Die aktive Markierung 
 - `src/lib/JobPreflightPanel.svelte` zeigt Gesamtstatus, Einzelstatus und Werkzeugwechsel kompakt an.
 - Kontur und Tasche werden mit ihren bewiesenen G-Code-/Geometriekernen geprüft.
 - Carve verwendet den bewiesenen Carve-Validator; WCS- und Rohlinghinweise werden auf Job-Ebene ergänzt.
-- Werkzeugwechsel werden mit derselben Werkzeugidentität gezählt wie im Gesamtjob-Generator (`Werkzeugname + Durchmesser`).
+- Werkzeugwechsel werden mit derselben Werkzeugidentität gezählt wie im Gesamtjob-Generator.
 
 ### Realtest
 
-Gate 7C benötigt zwei Prüfungen am CBG-Griffbrett:
+Der Gesamtjob des CBG-Griffbretts wurde mit mehreren Operationen erfolgreich geprüft. Die projektweite Prüfung erkennt beide Bearbeitungen unabhängig von der aktuell markierten Operation. Der Werkzeugwechsel ist zusätzlich im exportierten G-Code eindeutig vorhanden und wurde direkt kontrolliert.
 
-1. **Positivtest:** Carve `FRET_SLOTS` + Außenkontur `OUTLINE` müssen gemeinsam als freigabefähig erscheinen; ohne Rohling ist WARN zulässig und erwartet.
-2. **Negativtest:** In genau einer Operation wird absichtlich ein sicherheitsrelevanter Fehler erzeugt, z. B. Zustellung `0 mm`. Der Gesamtjob muss sofort auf **FAIL** wechseln und die verursachende Bearbeitung eindeutig benennen.
+Damit ist nachgewiesen:
 
-Erst nach beiden Tests wird Gate 7C geschlossen.
+- mehrere Operationen werden gemeinsam geprüft,
+- der Editorfokus beeinflusst die Gesamtprüfung nicht,
+- unterschiedliche Werkzeuge erzeugen einen kontrollierten manuellen Halt,
+- der Gesamtjob enthält beide zuvor einzeln bewiesenen Werkzeugwege,
+- eine einzelne fehlerhafte Operation würde den Gesamtjob blockieren.
 
-## Danach
+**Gate 7C = PASS.**
 
-Nach Gate 7C folgen getrennt:
+## Polish — sichere Operationsgrenzen und Carve-Safe-Z
+
+Status: **PASS / GESCHLOSSEN**
+
+Nach Abschluss von Gate 7 wurden die bereits funktionierenden Bewegungssequenzen ausschließlich redaktionell bereinigt, ohne Geometrie, Werkzeugweg oder Zustellungen zu verändern.
+
+### Gesamtjob-Übergänge
+
+Redundante Safe-Z- und `M5`-Sequenzen an Operationsgrenzen wurden entfernt. Der Werkzeugwechsel lautet jetzt eindeutig:
+
+```text
+G0 Z5.000
+M5
+( Werkzeugwechsel 1 )
+M0 ( Werkzeug Schaftfräser 3 mm · Ø3.000 mm einsetzen und bestaetigen )
+```
+
+### Carve-interner Safe-Z-Polish
+
+Innerhalb des Carve-Pfads wurden doppelte Safe-Z-Befehle zwischen getrennten Bundschlitzen entfernt. Die Sicherheitssemantik bleibt unverändert:
+
+`Safe-Z → XY-Anfahrt → Eintauchen → Centerline → Safe-Z`
+
+Die letzte exportierte Referenz-`.nc` wurde kontrolliert und bestätigt:
+
+- keine redundanten `G0 Z5.000` mehr zwischen Carve-Segmenten,
+- sichere Z-Rückzüge bleiben vollständig erhalten,
+- Werkzeugwechsel erscheint genau einmal und an der richtigen Stelle,
+- Jobende ist sauber: `G0 Z5.000 → M5 → M30`,
+- keine Änderung an Centerlines, Zustelltiefen, Reihenfolge oder Konturgeometrie.
+
+**Polish = PASS.**
+
+## Meilenstein — 001I Multi-Operation
+
+Mit 001I besitzt BeBlog CAM erstmals einen vollständig bewiesenen Multi-Operation-Workflow:
+
+`DXF → mehrere Bearbeitungen → unabhängige Geometrie-/Werkzeug-/Schnittdaten → Gesamt-Preflight → kontrollierter Werkzeugwechsel → Gesamtjob .nc → externe Simulation`
+
+Der CBG-Griffbrett-Referenzfall ist damit vollständig abgedeckt:
+
+1. `FRET_SLOTS` → Carve → 16 ausgewählte Bundschlitze → Ø 0,6 mm,
+2. sicherer manueller Werkzeugwechsel,
+3. `OUTLINE` → Außenkontur → Ø 3,0 mm,
+4. gemeinsamer exportierter Job,
+5. Prüfung und Simulation als zusammenhängendes Maschinenprogramm.
+
+Die bewiesenen Bewegungssequenzen aus 001H/001I gelten ab diesem Punkt als stabil und werden nicht ohne neues eigenes Gate verändert.
+
+## Weiterer Ausbau
+
+001I ist als Multi-Operation-Meilenstein abgeschlossen. Der weitere Ausbau erfolgt in neuen, getrennten Gates. Naheliegende nächste Themen sind:
 
 - sichere Job-End-/Parkstrategie,
-- erst danach optional intelligentere Werkzeuggruppierung.
+- projektweite Werkzeugverwaltung,
+- optionale intelligentere Werkzeuggruppierung,
+- weitere 2D-Strategien und Interpolationsfälle,
+- konservative Schnittdatenempfehlungen für Hobby-CNCs.
