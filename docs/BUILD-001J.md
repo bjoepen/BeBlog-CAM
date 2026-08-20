@@ -8,148 +8,99 @@
 
 Status: **PASS / GESCHLOSSEN**
 
-### Referenzidee
-
-Eine native DXF-Kreiskontur wird analytisch geräumt. Die CAD-Geometrie bleibt die fertige Taschenwand; daraus wird die maximal zulässige Fräsermittelbahn berechnet:
-
-`R Werkzeugbahn außen = R Tasche − R Werkzeug`
-
-Der Innenraum wird vom Zentrum nach außen über konzentrische Bahnen geräumt. Der äußerste Ring entspricht exakt der radiuskorrigierten Fertigwand.
-
-### Bewiesener Realtest
-
-Die Referenz-Kreistasche wurde extern in CAMotics geprüft und zusätzlich mathematisch am exportierten G-Code vermessen.
-
-Bestätigt wurden:
-
-- native DXF-Kreiskontur,
-- Werkzeug Ø 3,000 mm,
-- Sollradius 25,000 mm,
-- äußerster Fräsermittelbahnradius 23,500 mm,
-- Fertigwand exakt `23,500 + 1,500 = 25,000 mm`,
-- 20 konzentrische Ringe,
-- tatsächlicher radialer Stepover 1,175 mm bei maximal erlaubten 1,200 mm,
-- jeder Ring als zwei native G3-Halbkreise,
-- Z-Zustellungen sauber getrennt,
-- keine XY-Rapidfahrt im Material,
-- sauberes Jobende ohne redundante Safe-Z-Sequenzen.
+Die native DXF-Kreistasche wurde analytisch und extern in CAMotics bestätigt. Der äußerste Fräsermittelbahnradius entspricht exakt `R Tasche − R Werkzeug`; die Räumung verwendet native G3-Halbkreise.
 
 **Gate 8A = PASS.**
 
 ## Gate 8B — konturparallele Taschenräumung für gemischte geschlossene Konturen
 
-Status: **GEÖFFNET / IN ARBEIT**
+Status: **KERNEL IMPLEMENTIERT / PREFLIGHT & REALTEST AUSSTEHEND**
 
 ### Referenzmodell
 
-Verbindlicher Realtest ist die vom Nutzer bereitgestellte DXF `Test(1).dxf`.
-
-Sie repräsentiert eine typische Langloch-/Kapselkontur aus:
-
-- zwei geraden LINE-Segmenten,
-- zwei ARC-Segmenten als Halbkreise,
-- zusätzlich vorkommende degenerierte Null-Linien sind geometrisch bedeutungslos und müssen ignoriert werden.
-
-Dieses Modell ist absichtlich gewählt, weil Gate 8B nicht nur Polygonpunkte nach innen schieben darf. Die semantische Geometrie muss erhalten bleiben:
-
-**Linie bleibt Linie. Bogen bleibt Bogen.**
-
-### Zielstrategie
-
-Gate 8B führt eine neue Taschenstrategie `Konturparallel` ein.
-
-Der Innenraum wird über sukzessive innere Werkzeugmittelbahnen geräumt. Jede Bahn entsteht aus der vorherigen bzw. aus der CAD-Sollkontur über einen mathematisch geprüften Innenoffset.
-
-Für das Referenz-Langloch bedeutet das:
-
-1. erste Werkzeugmittelbahn auf `Werkzeugradius` Abstand zur CAD-Wand,
-2. weitere konturparallele Bahnen mit maximal dem eingestellten Stepover,
-3. Geraden bleiben native G1-Segmente,
-4. Halbkreise bleiben native G2/G3-Bögen,
-5. letzte gültige Innenbahn räumt den verbleibenden Kernbereich,
-6. Fertigumlauf liegt exakt auf der radiuskorrigierten Innenkontur.
-
-### UX in `04 · Bearbeiten`
-
-Die Räumstrategien werden erweitert zu:
-
-- `Automatisch`
-- `Raster`
-- `Kreis`
-- `Konturparallel`
-
-Gate-8B-Regeln:
-
-- `Raster` bleibt der bewiesene Rechteckpfad,
-- `Kreis` bleibt der bewiesene native Kreis-Pfad,
-- `Konturparallel` akzeptiert zunächst geschlossene gemischte Konturen aus unterstützten LINE-/ARC-Segmenten,
-- `Automatisch` darf Gate 8B erst dann auf `Konturparallel` wechseln, wenn die Geometrie eindeutig als unterstützt erkannt wurde,
-- keine stille Segmentierung und kein stiller Fallback.
-
-### Geometrische Sicherheitsregeln
-
-Jeder innere Offset muss vor G-Code-Freigabe geprüft werden.
-
-FAIL bei:
-
-- Werkzeug passt nicht vollständig in die Tasche,
-- Offset kollabiert oder besitzt keinen nutzbaren Innenraum mehr,
-- negativer oder nullförmiger Bogenradius,
-- Selbstüberschneidung der erzeugten Offsetkontur,
-- Segmentanschlüsse sind geometrisch nicht mehr geschlossen,
-- Offset würde die Sollwand unterschreiten,
-- nicht unterstützte Segmenttypen müssen für 8B explizit abgelehnt werden.
-
-Degenerierte Nullsegmente werden nicht als Bearbeitungsgeometrie behandelt.
-
-### Interpolation
+Verbindlicher Realtest ist `Test(1).dxf`, eine Langloch-/Kapselkontur aus zwei LINE- und zwei ARC-Segmenten. Degenerierte Null-Linien werden durch den semantischen Konturaufbau ignoriert.
 
 Verbindliche Regel:
 
-**Unterstützte native CAD-Semantik bleibt bis zum G-Code erhalten.**
+**Linie bleibt Linie. Bogen bleibt Bogen.**
 
-Für `Test(1).dxf` erwarten wir deshalb eine gemischte Werkzeugbahn aus G1 und G2/G3, keine vollständig segmentierte G1-Approximation.
+### Implementierter Kern
 
-### Eintauchen
+`src/lib/parallelPocketMath.ts` erzeugt konservative konturparallele Innenoffsets auf Basis der bereits bewiesenen nativen `SemanticContour`-Geometrie.
 
-Gate 8B startet konservativ mit senkrechtem Eintauchen.
+Geprüft werden derzeit:
 
-Die bestehende lineare Rampe bleibt ausschließlich dort freigegeben, wo ihre Geometrie analytisch bewiesen ist. Eine allgemeine Rampe oder Helix für konturparallele Taschen ist ein separates späteres Gate.
+- unterstützte geschlossene native Kontur,
+- mindestens ein nativer ARC im Gate-8B-Scope,
+- Werkzeugdurchmesser und Stepover,
+- jeder Offset über `offsetSemanticContour(..., -correction)`,
+- bestehende analytische Offsetvermessung,
+- kollabierende Bögen,
+- angenäherte Selbstüberschneidung der resultierenden Offsetkontur,
+- sichere Kernabdeckung vor Freigabe.
 
-### Preflight
+Die erste Bahn liegt exakt einen Werkzeugradius innerhalb der CAD-Wand. Weitere Bahnen werden höchstens um den gewählten Stepover nach innen versetzt.
 
-`05 · Prüfen` muss bei konturparallelen Taschen sichtbar ausweisen:
+### G-Code-Kern
 
-- erkannte Segmentsemantik,
+`src/lib/pocketGcode.ts` besitzt nun eine dritte interne Strategie:
+
+- `raster`
+- `concentric`
+- `parallel`
+
+Bei `Automatisch` gilt im aktuellen 8B-Kernel:
+
+1. nativer Kreis → `concentric`,
+2. gültige achsparallele Rechtecktasche → `raster`,
+3. sonst unterstützte gemischte native Kontur → `parallel`.
+
+Es gibt keinen stillen Rückfall auf segmentierte G1-Geometrie.
+
+Konturparallel wird mit nativer Semantik ausgegeben:
+
+- LINE → `G1`,
+- ARC CCW → `G3`,
+- ARC CW → `G2`.
+
+Jeder Innenoffset wird konservativ separat auf Safe-Z angefahren und senkrecht eingetaucht. Die allgemeine Rampe bleibt für Gate 8B gesperrt.
+
+### Sicherheitsgrenze des ersten Kernschritts
+
+Gate 8B ist **noch nicht PASS**. Der neue Maschinenpfad ist absichtlich noch nicht über den vollständigen Einzel-Preflight freigegeben. `05 · Prüfen` muss als nächster Schritt die neue Strategie explizit verstehen und darf nicht mehr von der alten Rechtecktaschenprüfung ausgehen.
+
+Erst danach erfolgt der Realtest mit `Test(1).dxf`.
+
+### Geplanter Preflight
+
+Der Gate-8B-Preflight muss sichtbar bestätigen:
+
+- erkannte native LINE/ARC-Semantik,
 - Werkzeugradius,
-- Anzahl erzeugter Offsetbahnen,
-- tatsächlichen maximalen Stepover,
-- minimale verbleibende Offsetradien,
+- Anzahl erzeugter Innenoffsets,
+- maximalen tatsächlichen Stepover,
+- minimale verbleibende Bogenradien,
 - geschlossene Segmentanschlüsse,
 - keine Selbstüberschneidung,
-- Fertigumlauf exakt auf Werkzeugradius-Abstand zur CAD-Sollwand,
-- verwendete native Interpolation G1 + G2/G3.
+- erster/Fertigumlauf exakt auf Werkzeugradius-Abstand zur CAD-Sollwand,
+- native Interpolation `G1 + G2/G3`.
 
 ### Gate-8B-Realtest
 
-Gate 8B ist erst PASS, wenn `Test(1).dxf` folgendes erfüllt:
+PASS erst wenn `Test(1).dxf`:
 
-1. als Taschenkontur auswählbar,
-2. `Konturparallel` wird akzeptiert,
-3. Preflight ist geometrisch PASS bzw. nur wegen bekannter Rohlinghinweise WARN,
-4. exportierter G-Code enthält native G1-Linien und G2/G3-Bögen,
-5. keine Offsetbahn überschreitet die CAD-Sollwand,
-6. der Innenraum wird vollständig geräumt,
-7. CAMotics und NC Viewer zeigen die erwartete Langlochtasche,
-8. bestehende Rechteck-Raster- und Kreis-Konzentrisch-Pfade zeigen keine Regression.
+1. als Tasche mit `Automatisch` bzw. später explizit `Konturparallel` erkannt wird,
+2. Preflight freigabefähig ist,
+3. `.nc` native G1- und G2/G3-Segmente enthält,
+4. keine Offsetbahn die CAD-Sollwand überschreitet,
+5. der Innenraum vollständig geräumt wird,
+6. CAMotics und NC Viewer die erwartete Langlochtasche zeigen,
+7. Rechteck-Raster und Kreis-Konzentrisch regressionsfrei bleiben.
 
 ### Scope-Grenze
 
-Gate 8B behandelt noch **keine** allgemeinen konkaven Taschen, Inneninseln oder mehrere voneinander getrennte Innenräume. Diese benötigen eigene Offset-/Topologie-Gates.
+Gate 8B behandelt noch keine allgemeinen konkaven Taschen, Inneninseln oder mehrere getrennte Innenräume. Diese benötigen eigene Topologie-Gates.
 
 ## Danach
 
-Nach Gate 8B folgen getrennt:
-
-- allgemeinere konturparallele Taschen inklusive schwierigerer Topologien,
-- anschließend der eigenständige Meilenstein **Gate 9 — Bohren**.
+Nach Gate 8B folgen getrennt allgemeinere Topologien und anschließend **Gate 9 — Bohren**.
