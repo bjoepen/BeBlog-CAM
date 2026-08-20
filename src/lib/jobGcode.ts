@@ -28,18 +28,29 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
 }
 
 /**
- * Individual generators remain the verified source of truth. Gate 7B composes
- * their already-validated programs instead of reimplementing geometry.
- * Only program wrappers (G21/G90/G17/M30) are removed; operation motion stays unchanged.
+ * Individual generators remain the verified source of truth. The composer only
+ * removes program wrappers and the final per-operation shutdown sequence.
+ * Safe-Z/M5 at operation boundaries are then emitted exactly once by the job.
  */
 function operationBody(code:string):string[]{
-  return code.split(/\r?\n/).filter(line=>{
+  const body=code.split(/\r?\n/).filter(line=>{
     const t=line.trim();
     if(!t)return false;
     if(t==='G21'||t==='G90'||t==='G17'||t==='M30')return false;
     if(/^\( BeBlog CAM /.test(t))return false;
     return true;
   });
+
+  // Einzelgeneratoren beenden ihren Job bereits sicher. Im Gesamtjob übernimmt
+  // der Composer diese Grenze, damit nicht G0 Z / M5 mehrfach hintereinander
+  // ausgegeben werden. Nur der abschließende Shutdown wird entfernt; alle
+  // eigentlichen Werkzeugbewegungen bleiben unverändert.
+  while(body.length){
+    const t=body[body.length-1].trim();
+    if(t==='M5'||/^G0\s+Z[-+]?\d+(?:\.\d+)?$/i.test(t)){body.pop();continue;}
+    break;
+  }
+  return body;
 }
 
 export function generateJobGcode(args:Args):JobGcodeResult{
@@ -60,18 +71,21 @@ export function generateJobGcode(args:Args):JobGcodeResult{
   let toolChangeCount=0;
 
   generated.forEach(({operation,result},index)=>{
-    if(index>0){
-      const previous=generated[index-1].operation;
-      if(toolKey(previous)!==toolKey(operation)){
-        toolChangeCount++;
-        const safe=Math.max(previous.safeZMm,operation.safeZMm);
-        lines.push(`G0 Z${f3(safe)}`,'M5',`( Werkzeugwechsel ${toolChangeCount} )`,`M0 ( Werkzeug ${operation.tool.name} · Ø${f3(operation.tool.diameterMm)} mm einsetzen und bestaetigen )`);
-      }else{
-        lines.push(`( Gleiches Werkzeug · ${operation.tool.name} · Ø${f3(operation.tool.diameterMm)} mm )`);
-      }
-    }
     lines.push(`( Bearbeitung ${index+1}/${operations.length} · ${label(operation)} · ${operation.name} )`);
     lines.push(...operationBody(result.code));
+
+    const next=generated[index+1]?.operation;
+    if(!next)return;
+
+    const safe=Math.max(operation.safeZMm,next.safeZMm);
+    lines.push(`G0 Z${f3(safe)}`);
+
+    if(toolKey(operation)!==toolKey(next)){
+      toolChangeCount++;
+      lines.push('M5',`( Werkzeugwechsel ${toolChangeCount} )`,`M0 ( Werkzeug ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm einsetzen und bestaetigen )`);
+    }else{
+      lines.push(`( Gleiches Werkzeug · ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm )`);
+    }
   });
 
   const finalSafe=Math.max(...operations.map(op=>op.safeZMm));
