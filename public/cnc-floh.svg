@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 120" role="img" aria-labelledby="title desc">
+  <title id="title">BeBlog CNC Floh</title>
+  <desc id="desc">Kleiner technischer Floh mit Lupe und Fräser</desc>
+  <g fill="none" stroke="#242b27" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="69" cy="58" rx="26" ry="31" fill="#3b403c"/>
+    <ellipse cx="69" cy="36" rx="21" ry="18" fill="#f7f7f2"/>
+    <circle cx="61" cy="34" r="6" fill="#fff"/>
+    <circle cx="78" cy="34" r="6" fill="#fff"/>
+    <circle cx="63" cy="35" r="2.5" fill="#242b27"/>
+    <circle cx="76" cy="35" r="2.5" fill="#242b27"/>
+    <path d="M61 46c5 5 12 5 17 0"/>
+    <path d="M52 21c-7-8-14-7-17-2 7 1 11 5 14 9M84 22c7-8 14-7 17-2-7 1-11 5-14 9" fill="#71886d"/>
+    <path d="M48 57 29 49M45 68 25 72M51 81 36 96M90 58l17-11M92 70l18 8M86 83l14 16"/>
+    <path d="M30 47 18 41M24 73l-13 4M36 96l-7 11M107 47l11-8M110 78l13 4M100 99l7 11"/>
+    <circle cx="115" cy="48" r="14"/>
+    <path d="m125 58 14 14"/>
+    <path d="M23 43h10v26H23zM25 47h6M25 52h6M25 57h6M25 62h6"/>
+  </g>
+</svg>
