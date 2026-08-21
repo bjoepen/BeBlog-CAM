@@ -4,6 +4,7 @@ import { generatePocketGcode } from './pocketGcode';
 import { optimizeParallelPocketStayDown } from './pocketStayDown';
 import { generateCarveGcode } from './carveGcode';
 import { generateDrillGcode } from './drillGcode';
+import { normalizeGcodeComments } from './gcodeComments';
 
 export type JobGcodeResult={ok:boolean;errors:string[];warnings:string[];code:string;lineCount:number;operationCount:number;toolChangeCount:number;};
 type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[]};
@@ -17,10 +18,11 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
   if(operation.kind==='contour')return generateContourGcode({...common,operation:operation as ContourOperation});
   if(operation.kind==='pocket'){
     const pocket=operation as PocketOperation,result=generatePocketGcode({...common,operation:pocket});
-    if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:optimized.code};
+    if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:normalizeGcodeComments(optimized.code)};
   }
-  if(operation.kind==='drill')return generateDrillGcode({...common,operation:operation as DrillOperation});
-  return generateCarveGcode({...common,operation:operation as CarveOperation});
+  if(operation.kind==='drill'){const r=generateDrillGcode({...common,operation:operation as DrillOperation});return{...r,code:normalizeGcodeComments(r.code)};}
+  if(operation.kind==='carve'){const r=generateCarveGcode({...common,operation:operation as CarveOperation});return{...r,code:normalizeGcodeComments(r.code)};}
+  return generateContourGcode({...common,operation:operation as ContourOperation});
 }
 
 function operationBody(code:string):string[]{
