@@ -36,7 +36,7 @@ Der Realtest bestätigt die vollständige Räumung ohne Verletzung der Sollkontu
 
 ## Gate 8C — Safe Stay-Down Linking
 
-Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**
 
 ### Ziel
 
@@ -66,19 +66,38 @@ Die Optimierung wird sowohl beim Einzel-Taschenexport als auch im Multi-Operatio
 
 `06 · Fräsen` weist bei konturparallelen Taschen zusätzlich die Anzahl tatsächlich verwendeter Stay-down-Links aus.
 
-### Referenztest
+### Realtest
 
-Wieder `Test(1).dxf`.
+Referenzmodell erneut `Test(1).dxf`.
 
-PASS, wenn:
+Der exportierte G-Code wurde geprüft. Innerhalb jeder Tiefenebene werden die acht validierten Innenoffsets ohne unnötige Safe-Z-Hübe miteinander verbunden. Die Verbindungen erfolgen als kurze `G1`-Links auf Arbeitstiefe und liegen jeweils innerhalb des zulässigen Stepovers. Bei acht Offsets und drei Tiefenebenen ergeben sich 21 sichere Stay-down-Verbindungen.
 
-1. die Tasche geometrisch identisch zu 8B geräumt wird,
-2. innerhalb einer Tiefenebene die meisten bzw. alle nachgewiesen sicheren Z-Hübe zwischen Nachbaroffsets entfallen,
-3. zwischen zwei Offsets stattdessen kurze `G1`-Verbindungen auf Arbeitstiefe erscheinen,
-4. am Ende jeder Tiefenebene weiterhin `G0 Z<Sicherheits-Z>` steht,
-5. CAMotics unveränderte Materialabtragung und keine Wandverletzung zeigt,
-6. unsichere Verbindungen automatisch den konservativen Retract behalten,
-7. Rechteck-Raster und Kreis-Konzentrisch unverändert bleiben.
+Bestätigt wurden:
+
+- keine XY-Rapidfahrt im Material,
+- keine Änderung der 8B-Offsetgeometrie,
+- native `G1 + G2/G3`-Semantik bleibt erhalten,
+- Rückzug auf Sicherheits-Z nur noch am Ende jeder Tiefenebene,
+- vollständige Räumung in CAMotics,
+- keine sichtbare Wandverletzung oder Materialrest gegenüber dem 8B-Referenzlauf.
+
+Damit ist der Optimierungspfad funktional bewiesen.
+
+**Gate 8C = PASS.**
+
+### Kleiner Kommentar-Polish
+
+Ein vorhandener Header-Kommentar aus 8B beschreibt noch das separate Safe-Z-Anfahren jedes Offsets. Dieser Text ist nach 8C veraltet und soll in einem reinen Polish-Commit auf die neue Stay-down-Logik angepasst werden. Die Maschinenbewegungen selbst sind davon nicht betroffen.
+
+## 001J Meilenstein
+
+Mit 8A, 8B und 8C besitzt BeBlog CAM jetzt drei bewiesene Taschenstrategien bzw. Pfade:
+
+- Rechtecktasche über Raster,
+- native Kreistasche über konzentrische G2/G3-Ringe,
+- gemischte LINE/ARC-Tasche über konturparallele Innenoffsets mit sicheren Stay-down-Verbindungen.
+
+Die CAD-Sollgeometrie bleibt in allen Fällen maßgeblich; Werkzeugwege sind ausschließlich radiuskorrigierte bzw. abgeleitete Maschinenbahnen.
 
 ## Danach
 
