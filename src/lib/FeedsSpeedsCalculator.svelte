@@ -1,115 +1,59 @@
 <script lang="ts">
   import { calculateFeedsSpeeds } from './feedsSpeeds';
-
-  let diameter=6;
-  let cuttingSpeed=200;
-  let flutes=2;
-  let chipLoad=.05;
-  let machineProfileEnabled=true;
-  let maxSpindleRpm=18000;
-  let maxFeedMmMin=2000;
-  let formulaOpen=false;
-
+  let diameter=6, cuttingSpeed=200, flutes=2, chipLoad=.05;
+  let maxSpindleRpm=18000, maxFeedMmMin=2000, formulaOpen=false;
   $: valid=[diameter,cuttingSpeed,flutes,chipLoad,maxSpindleRpm,maxFeedMmMin].every(v=>Number.isFinite(v)&&v>0);
   $: calculated=valid?calculateFeedsSpeeds({toolDiameterMm:diameter,cuttingSpeedMMin:cuttingSpeed,flutes,chipLoadMm:chipLoad}):null;
-  $: recommendedRpm=calculated?(machineProfileEnabled?Math.min(calculated.spindleRpm,maxSpindleRpm):calculated.spindleRpm):null;
+  $: recommendedRpm=calculated?Math.min(calculated.spindleRpm,maxSpindleRpm):null;
   $: feedAtRecommendedRpm=recommendedRpm==null?null:recommendedRpm*flutes*chipLoad;
-  $: recommendedFeed=feedAtRecommendedRpm==null?null:(machineProfileEnabled?Math.min(feedAtRecommendedRpm,maxFeedMmMin):feedAtRecommendedRpm);
-  $: rpmLimited=!!calculated&&machineProfileEnabled&&calculated.spindleRpm>maxSpindleRpm;
-  $: feedLimited=feedAtRecommendedRpm!=null&&machineProfileEnabled&&feedAtRecommendedRpm>maxFeedMmMin;
+  $: recommendedFeed=feedAtRecommendedRpm==null?null:Math.min(feedAtRecommendedRpm,maxFeedMmMin);
+  $: rpmLimited=!!calculated&&calculated.spindleRpm>maxSpindleRpm;
+  $: feedLimited=feedAtRecommendedRpm!=null&&feedAtRecommendedRpm>maxFeedMmMin;
   $: insideProfile=!rpmLimited&&!feedLimited;
-
-  const n=(value:number|null|undefined,digits=0)=>value==null?'—':value.toLocaleString('de-DE',{minimumFractionDigits:digits,maximumFractionDigits:digits});
-  function reset(){diameter=6;cuttingSpeed=200;flutes=2;chipLoad=.05;machineProfileEnabled=true;maxSpindleRpm=18000;maxFeedMmMin=2000;}
-  function setSpindlePreset(value:number){maxSpindleRpm=value;machineProfileEnabled=true;}
+  const n=(v:number|null|undefined,d=0)=>v==null?'—':v.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d});
+  function setSpindlePreset(v:number){maxSpindleRpm=v}
 </script>
 
-<div class="tool-shell">
-  <header class="tool-head">
-    <div class="tool-title">
-      <div class="endmill-icon" aria-hidden="true">▥</div>
-      <div><h1>Drehzahl & Vorschub</h1><p>Schnittdaten für Werkzeug und Material berechnen</p></div>
-    </div>
-    <label class="profile-toggle"><span>Hobby-CNC Profil</span><input type="checkbox" bind:checked={machineProfileEnabled}/><i></i></label>
-  </header>
-
-  <div class="tool-columns">
-    <div class="left-column">
-      <section class="input-card">
-        <label><span>Werkzeug-Ø</span><div class="field"><input type="number" min="0.1" step="0.1" bind:value={diameter}/><b>mm</b></div></label>
-        <label><span>Schnittgeschwindigkeit</span><div class="field"><input type="number" min="1" step="5" bind:value={cuttingSpeed}/><b>m/min</b></div></label>
-        <label><span>Schneidenzahl</span><div class="field"><input type="number" min="1" step="1" bind:value={flutes}/><b>Z</b></div></label>
-        <label><span>Zahnvorschub (fz)</span><div class="field"><input type="number" min="0.001" step="0.005" bind:value={chipLoad}/><b>mm</b></div></label>
+<div class="tools-page">
+  <nav class="tabs"><button class="active">Werkzeugdaten</button><button>Drehzahl &amp; Vorschub</button><button>Werkzeugbibliothek</button></nav>
+  <div class="content-grid">
+    <main class="main-column">
+      <header class="page-title"><span class="cutter">▥</span><div><h1>Werkzeugdaten</h1><p>Werkzeuggeometrie und Anzahl der wirksamen Schneiden definieren.</p></div></header>
+      <p class="section-label">WERKZEUG</p>
+      <section class="diameter-card">
+        <label><b>Werkzeug-Ø (d)</b><span class="input-line"><input type="number" min="0.1" step="0.1" bind:value={diameter}/><em>mm</em></span></label>
+        <div class="tool-drawing" aria-hidden="true"><svg viewBox="0 0 360 90"><g fill="none" stroke="currentColor" stroke-width="2"><path d="M15 22h180c20 0 31 12 31 23s-11 23-31 23H15z"/><path d="M15 22c35 8 47 42 84 46M50 22c35 8 47 42 84 46M85 22c35 8 47 42 84 46M120 22c28 7 40 30 68 43"/><path d="M230 15v60M225 22h10M225 68h10"/></g><text x="242" y="49" font-size="14" fill="currentColor">{n(diameter,2)} mm</text></svg></div>
       </section>
-
-      {#if !valid}<p class="validation">Alle Werte müssen größer als 0 sein.</p>{/if}
-
-      <section class="hero-result">
-        <div><span>Drehzahl (n)</span><strong>{n(recommendedRpm)} <small>1/min</small></strong></div>
-        <div class="divider"></div>
-        <div><span>Vorschub (vf)</span><strong>{n(recommendedFeed)} <small>mm/min</small></strong></div>
-        <div class:limited={!insideProfile} class="profile-state">{insideProfile?'✓ Im Maschinenprofil':'↘ Maschinenlimit aktiv'}</div>
-      </section>
-
-      <div class="advice-grid">
-        <section class="card tips">
-          <h3>Schnitttipps (Hobby-CNC)</h3>
-          <p>✓ Rechnerische Werte als Startpunkt behandeln.</p>
-          <p>✓ Bei unsicherer Aufspannung zunächst 10–20 % konservativer fahren.</p>
-          <p>✓ Kleine Fräser und lange Auskragung besonders vorsichtig behandeln.</p>
-          <p>✓ Werkzeugherstellerangaben haben Vorrang.</p>
-        </section>
-        <section class="card materials">
-          <h3>Material · Schnellwahl</h3>
-          <div class="material-buttons"><button>Holz / MDF</button><button>Kunststoff</button><button>Aluminium</button><button>Stahl</button></div>
-          <p>Material-Presets folgen erst mit dokumentierter Datenbasis. Die Auswahl verändert in 11A noch keine Werte.</p>
-        </section>
+      <div class="two-cards">
+        <section class="field-card"><label><b>Schneidenzahl (z)</b><span class="input-line"><input type="number" min="1" step="1" bind:value={flutes}/><em>Z</em></span><small>Anzahl der wirksamen Schneiden</small></label></section>
+        <section class="field-card"><label><b>Zahnvorschub (fz)</b><span class="input-line"><input type="number" min=".001" step=".005" bind:value={chipLoad}/><em>mm</em></span><small>Vorschub pro Zahn</small></label></section>
       </div>
+      <section class="recognized"><span>✓</span><div><b>Werkzeug erkannt</b><p>{flutes}-schneidiger Fräser Ø {n(diameter,2)} mm</p></div></section>
+      <button class="formula-toggle" onclick={()=>formulaOpen=!formulaOpen}><span>☷ &nbsp; Formeln &amp; Erklärung</span><b>{formulaOpen?'⌃':'⌄'}</b></button>
+      {#if formulaOpen}<section class="formula"><label>Schnittgeschwindigkeit (vc)<span class="input-line"><input type="number" min="1" step="5" bind:value={cuttingSpeed}/><em>m/min</em></span></label><code>n = (vc × 1000) / (π × d)</code><code>vf = n × z × fz</code><p>Wird die Drehzahl begrenzt, wird der Vorschub mit derselben Zahnlast neu berechnet.</p></section>{/if}
+    </main>
 
-      <section class="info-note"><strong>Hinweis</strong><span>Die Werte sind nachvollziehbare Richtwerte. Bei kleinen Werkzeugen, unsicherer Aufspannung oder einer leichten Maschine konservativ starten und das Fräsbild beobachten.</span></section>
-
-      <button class="formula-toggle" onclick={()=>formulaOpen=!formulaOpen}><span>Formeln & Erklärung</span><b>{formulaOpen?'⌃':'⌄'}</b></button>
-      {#if formulaOpen}<section class="formula"><code>n = (vc × 1000) / (π × d)</code><code>vf = n × z × fz</code><p>Wird die Spindeldrehzahl durch das Maschinenprofil begrenzt, wird der Vorschub mit derselben Zahnlast neu berechnet. So bleibt fz transparent erhalten.</p></section>{/if}
-    </div>
-
-    <aside class="right-column">
-      <section class="card calculated-card">
-        <h3>Berechnete Werte</h3>
-        <div class="metric"><span>Drehzahl (n)</span><strong>{n(calculated?.spindleRpm)} <small>1/min</small></strong></div>
-        <div class="metric"><span>Vorschub (vf)</span><strong>{n(calculated?.feedMmMin)} <small>mm/min</small></strong></div>
+    <aside class="side-column">
+      <section class="results">
+        <div class="result-head"><b>ERGEBNISSE</b><span class:warning={!insideProfile}>{insideProfile?'✓ Im Maschinenprofil':'↘ Maschinenlimit aktiv'}</span></div>
+        <div class="result-values"><div><p>Drehzahl (n)</p><strong>{n(recommendedRpm)} <small>1/min</small></strong></div><div><p>Vorschub (vf)</p><strong>{n(recommendedFeed)} <small>mm/min</small></strong></div></div>
       </section>
-
-      <section class="card machine-card">
-        <div class="card-head"><h3>Maschinenprofil</h3><button onclick={reset}>Zurücksetzen</button></div>
-        <label><span>Max. Drehzahl</span><div class="compact-field"><input type="number" min="1" step="500" bind:value={maxSpindleRpm}/><b>1/min</b></div></label>
-        <label><span>Max. Vorschub</span><div class="compact-field"><input type="number" min="1" step="100" bind:value={maxFeedMmMin}/><b>mm/min</b></div></label>
-        <div class="machine-message" class:warning={!insideProfile}>{insideProfile?'✓ Werte liegen innerhalb der Maschinenlimits.':'Maschinenlimit reduziert die rechnerischen Werte.'}</div>
-      </section>
-
-      <section class="card recommended-card">
-        <h3>Empfohlene Einstellungen</h3>
-        <div class="compare"><span>Drehzahl</span><strong>{n(calculated?.spindleRpm)} → {n(recommendedRpm)} <small>1/min</small></strong></div>
-        <div class="compare"><span>Vorschub</span><strong>{n(calculated?.feedMmMin)} → {n(recommendedFeed)} <small>mm/min</small></strong></div>
-        {#if rpmLimited}<p>Die Drehzahl ist durch die Spindel begrenzt; der Vorschub wurde passend zur Zahnlast neu berechnet.</p>{:else if feedLimited}<p>Der Vorschub ist durch das Maschinenprofil begrenzt.</p>{:else}<p>Die rechnerischen Werte benötigen keine Begrenzung.</p>{/if}
-      </section>
-
-      <section class="card preset-card">
-        <h3>Schnelle Spindel-Profile</h3>
-        <div class="presets"><button class:active={maxSpindleRpm===12000} onclick={()=>setSpindlePreset(12000)}>12.000</button><button class:active={maxSpindleRpm===18000} onclick={()=>setSpindlePreset(18000)}>18.000</button><button class:active={maxSpindleRpm===24000} onclick={()=>setSpindlePreset(24000)}>24.000</button></div>
-        <small>1/min · oder Wert oben frei eingeben</small>
-      </section>
-
-      <section class="card quick-ref"><h3>Schnell-Referenz</h3><p><span>Holz / MDF</span><b>hohe Drehzahl, passende Spanlast</b></p><p><span>Aluminium</span><b>Spanabfuhr und Steifigkeit beachten</b></p><p><span>Kunststoff</span><b>Wärme vermeiden</b></p></section>
+      <section class="card"><h3>Material · Schnellwahl</h3><div class="material-grid"><button>Holz / MDF</button><button>Kunststoff</button><button>Aluminium</button><button>Stahl</button></div><small>Material-Presets folgen erst mit dokumentierter Datenbasis. Die Auswahl verändert noch keine Werte.</small></section>
+      <div class="side-pair">
+        <section class="card"><h3>Maschinenprofil <small>(optional)</small></h3><label>Max. Drehzahl <span class="mini-input"><input type="number" bind:value={maxSpindleRpm}/><em>1/min</em></span></label><label>Max. Vorschub (XY) <span class="mini-input"><input type="number" bind:value={maxFeedMmMin}/><em>mm/min</em></span></label><p class="status" class:warning={!insideProfile}>{insideProfile?'✓ Werte liegen innerhalb der Maschinenlimits.':'Maschinenlimit reduziert die Werte.'}</p></section>
+        <section class="card"><h3>Empfohlene Einstellungen</h3><div class="kv"><span>Drehzahl</span><b>{n(recommendedRpm)} <small>1/min</small></b></div><div class="kv"><span>Vorschub</span><b>{n(recommendedFeed)} <small>mm/min</small></b></div><p class="blue-note">{rpmLimited?'Drehzahl durch Maschinenprofil begrenzt; Vorschub passend zur Zahnlast berechnet.':feedLimited?'Vorschub durch Maschinenprofil begrenzt.':'Die rechnerischen Werte benötigen keine Begrenzung.'}</p></section>
+      </div>
+      <div class="side-pair">
+        <section class="card"><h3>Schnelle Spindel-Profile</h3><div class="presets"><button class:active={maxSpindleRpm===12000} onclick={()=>setSpindlePreset(12000)}>12.000 1/min</button><button class:active={maxSpindleRpm===18000} onclick={()=>setSpindlePreset(18000)}>18.000 1/min</button><button class:active={maxSpindleRpm===24000} onclick={()=>setSpindlePreset(24000)}>24.000 1/min</button><button class:active={maxSpindleRpm===30000} onclick={()=>setSpindlePreset(30000)}>30.000 1/min</button></div></section>
+        <section class="card"><h3>Schnell-Referenz</h3><div class="ref"><span>Holz / MDF</span><b>hohe Drehzahl, hoher Vorschub</b><span>Aluminium</span><b>Spanabfuhr und Kühlung beachten</b><span>Kunststoff</span><b>mäßige Drehzahl, scharfe Werkzeuge</b></div></section>
+      </div>
+      <section class="hint"><b>ⓘ &nbsp; HINWEIS</b><p>vc-, fz- und Z-Werte sind Empfehlungen des Werkzeugherstellers oder bewährte Richtwerte. Bei Unsicherheit konservativ starten und Ergebnisse beobachten.</p></section>
     </aside>
-  </div>
-
-  <div class="flea-signoff" title="Der CNC-Floh passt auf die Zahlen auf">
-    <svg viewBox="0 0 120 76" role="img" aria-label="CNC-Floh"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="54" cy="39" rx="19" ry="23"/><circle cx="48" cy="32" r="2" fill="currentColor"/><circle cx="61" cy="32" r="2" fill="currentColor"/><path d="M47 44c5 4 10 4 15 0M37 25 25 15m13 31-17 7m20 5-12 13m40-45 13-10m-9 30 18 8m-20 5 12 12"/><path d="M82 18h15v34H82zM86 23h7M86 29h7M86 35h7M86 41h7"/></g></svg>
-    <span>Klarheit schafft präzise Späne.</span>
   </div>
 </div>
 
 <style>
-:global(.tools-workspace){grid-template-columns:1fr!important}:global(.tools-workspace .inspector){display:none!important}:global(.tools-workspace .viewport){overflow:auto!important;align-items:stretch!important;justify-content:stretch!important;background:#fafaf8!important}
-.tool-shell{box-sizing:border-box;width:100%;min-height:100%;padding:30px 34px 34px;background:#fbfbf9;color:#222b26;font-size:13px}.tool-head{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:24px}.tool-title{display:flex;align-items:center;gap:15px}.tool-title h1{margin:0;font-size:26px;letter-spacing:-.03em}.tool-title p{margin:5px 0 0;color:#666f69}.endmill-icon{width:42px;height:42px;display:grid;place-items:center;font-size:35px;transform:rotate(90deg)}.profile-toggle{display:flex;align-items:center;gap:10px;padding:8px 11px;border:1px solid #dfe3dd;border-radius:10px;background:#f3f7f2;font-weight:600}.profile-toggle input{position:absolute;opacity:0}.profile-toggle i{width:34px;height:19px;border-radius:999px;background:#c8cec9;position:relative;transition:.15s}.profile-toggle i:after{content:'';position:absolute;top:3px;left:3px;width:13px;height:13px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 3px #0002}.profile-toggle input:checked+i{background:#2f6b4d}.profile-toggle input:checked+i:after{transform:translateX(15px)}.tool-columns{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:26px}.left-column,.right-column{display:grid;align-content:start;gap:14px}.input-card,.card,.hero-result,.info-note,.formula{border:1px solid #e0e3de;border-radius:12px;background:#fff}.input-card{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px}.input-card label{display:grid;gap:7px;font-weight:600}.field,.compact-field{display:flex;align-items:center;border:1px solid #d9ddd7;border-radius:8px;background:#fff;overflow:hidden}.field input,.compact-field input{min-width:0;width:100%;border:0;outline:none;padding:9px 10px;background:transparent;color:#263029;font-weight:700}.field b,.compact-field b{padding-right:9px;white-space:nowrap;color:#69706b;font-size:11px}.validation{margin:0;padding:9px 11px;border-radius:8px;background:#fff0ee;color:#8d3029}.hero-result{display:grid;grid-template-columns:1fr auto 1fr auto;gap:22px;align-items:center;padding:20px 24px;background:#f0f7eb;border-color:#d8e8ce}.hero-result>div:not(.divider):not(.profile-state){display:grid;gap:6px}.hero-result span{font-weight:600}.hero-result strong{font-size:28px;letter-spacing:-.03em}.hero-result small,.metric small,.compare small{font-size:11px;font-weight:500}.divider{width:1px;height:54px;background:#a9c69b}.profile-state{padding:8px 10px;border-radius:8px;background:#dfeeda;color:#2f6b4d;font-weight:700;white-space:nowrap}.profile-state.limited{background:#f7edcf;color:#76591f}.advice-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}.card{padding:16px}.card h3{margin:0 0 12px;font-size:15px}.tips p{margin:8px 0;color:#49514c}.materials p{margin:11px 0 0;color:#717771;font-size:11px;line-height:1.4}.material-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.material-buttons button,.presets button,.card-head button,.formula-toggle{border:1px solid #d8ddd7;background:#fff;border-radius:8px;color:#3f4842;cursor:pointer}.material-buttons button{padding:9px}.info-note{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:13px 15px;background:#f2f8ef;border-color:#d5e6cc;line-height:1.45}.formula-toggle{display:flex;justify-content:space-between;padding:12px 14px;text-align:left}.formula{display:grid;gap:7px;padding:12px}.formula code{padding:7px;background:#f7f7f4;border-radius:6px}.formula p{margin:3px 0;color:#666e69;line-height:1.45}.metric,.compare{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}.metric strong,.compare strong{font-size:16px}.machine-card label{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:9px 0}.compact-field{width:155px}.card-head{display:flex;justify-content:space-between;align-items:center}.card-head h3{margin:0}.card-head button{padding:5px 7px;font-size:10px}.machine-message{margin-top:12px;padding:9px;border-radius:8px;background:#e6f2e2;color:#2f6b4d;font-weight:600;font-size:11px}.machine-message.warning{background:#fbf2d9;color:#76591f}.recommended-card p{margin:12px 0 0;padding:9px;border-radius:8px;background:#eef5fb;color:#536575;font-size:11px;line-height:1.4}.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.presets button{padding:8px 5px;font-size:11px}.presets button.active{background:#2f6b4d;color:#fff;border-color:#2f6b4d}.preset-card>small{display:block;margin-top:8px;color:#777}.quick-ref p{display:flex;justify-content:space-between;gap:10px;margin:8px 0;font-size:11px}.quick-ref b{text-align:right;font-weight:500;color:#636b66}.flea-signoff{display:flex;align-items:center;gap:8px;margin-top:18px;color:#59635d;font-size:11px}.flea-signoff svg{width:74px;height:48px;color:#2f3a34}.flea-signoff span{max-width:120px;font-weight:600}@media(max-width:1100px){.tool-columns{grid-template-columns:1fr}.input-card{grid-template-columns:1fr 1fr}.right-column{grid-template-columns:1fr 1fr}.quick-ref{grid-column:1/-1}}@media(max-width:760px){.tool-shell{padding:20px}.input-card,.right-column,.advice-grid{grid-template-columns:1fr}.hero-result{grid-template-columns:1fr}.divider{display:none}.tool-head{align-items:flex-start;flex-direction:column}}
+:global(.tools-workspace){grid-template-columns:1fr!important}:global(.tools-workspace .inspector){display:none!important}:global(.tools-workspace .viewport){display:block!important;overflow:auto!important;background:#fbfbf9!important;min-width:0}.tools-page{width:100%;min-height:100%;padding:0 28px 26px;color:#202622;font-size:13px}.tabs{height:58px;display:flex;align-items:end;gap:36px;border-bottom:1px solid #dddeda}.tabs button{padding:0 10px 14px;border:0;background:transparent;font:inherit;cursor:pointer}.tabs button.active{font-weight:700;border-bottom:2px solid #275b3d}.content-grid{display:grid;grid-template-columns:minmax(430px,1.05fr) minmax(390px,.95fr);gap:22px;max-width:1320px;margin:20px auto 0}.main-column{padding-right:22px;border-right:1px solid #e0e1dc;min-width:0}.page-title{display:flex;align-items:center;gap:15px}.page-title h1{margin:0;font-size:26px}.page-title p{margin:5px 0;color:#656b67}.cutter{font-size:36px;transform:rotate(90deg)}.section-label{margin:30px 0 16px;font-weight:600;letter-spacing:.06em}.diameter-card,.field-card,.card,.results,.recognized,.hint,.formula{border:1px solid #dfe1dc;border-radius:11px;background:#fff}.diameter-card{display:grid;grid-template-columns:minmax(190px,.8fr) minmax(230px,1.2fr);gap:18px;align-items:center;padding:20px}.diameter-card label,.field-card label{display:grid;gap:12px}.input-line,.mini-input{display:flex;align-items:center;gap:8px}.input-line input{width:100%;min-width:0;padding:9px 12px;border:1px solid #d6d9d3;border-radius:7px;font-weight:700}.input-line em,.mini-input em{font-style:normal;white-space:nowrap}.tool-drawing svg{width:100%;height:auto}.two-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.field-card{padding:18px}.field-card small{color:#656b67}.recognized{display:flex;gap:14px;align-items:center;margin-top:14px;padding:18px;background:#f1f7ed;border-color:#d6e5ce}.recognized>span{display:grid;place-items:center;width:28px;height:28px;border:2px solid #2e704b;border-radius:50%;color:#2e704b;font-weight:700}.recognized p{margin:5px 0 0}.formula-toggle{width:100%;display:flex;justify-content:space-between;margin-top:14px;padding:15px 18px;border:1px solid #dfe1dc;border-radius:10px;background:#fff;cursor:pointer}.formula{display:grid;gap:8px;margin-top:8px;padding:14px}.formula label{display:grid;grid-template-columns:1fr 220px;align-items:center}.formula code{padding:7px;background:#f5f5f2;border-radius:5px}.formula p{margin:0;color:#666}.side-column{display:grid;align-content:start;gap:12px;min-width:0}.results{padding:18px;background:#f0f7eb;border-color:#d4e5cc}.result-head{display:flex;justify-content:space-between;align-items:center}.result-head>span,.status{padding:6px 9px;border-radius:7px;background:#e0efda;color:#28623f;font-size:11px}.warning{background:#f8edd1!important;color:#76591f!important}.result-values{display:grid;grid-template-columns:1fr 1fr;margin-top:14px}.result-values>div+div{border-left:1px solid #cfdcc8;padding-left:24px}.result-values p{margin:0 0 8px}.result-values strong{font-size:27px;color:#255c3d}.result-values small,.kv small{font-size:11px}.card{padding:16px}.card h3{margin:0 0 13px;font-size:14px}.card h3 small{font-weight:400}.material-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.material-grid button,.presets button{padding:8px;border:1px solid #d8dad5;border-radius:6px;background:#fff;cursor:pointer}.card>small{display:block;margin-top:10px;color:#707570;font-size:10px}.side-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}.card label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:9px 0;font-size:11px}.mini-input input{width:74px;padding:7px;border:1px solid #d6d9d3;border-radius:6px;text-align:right}.mini-input em{font-size:10px}.status{margin:10px 0 0}.kv{display:flex;justify-content:space-between;margin:10px 0}.blue-note{padding:9px;border-radius:6px;background:#edf4fa;color:#49657d;font-size:10px;line-height:1.4}.presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}.presets button{font-size:10px}.presets button.active{background:#285f40;color:#fff;border-color:#285f40}.ref{display:grid;grid-template-columns:.8fr 1.2fr;gap:8px;font-size:10px}.ref b{font-weight:500;color:#535a56}.hint{padding:14px 16px;background:#f1f6fb;border-color:#cbdced;color:#275d9b}.hint p{margin:7px 0 0;color:#303b43;line-height:1.45}.tools-page:after{content:'🦟  Klarheit schafft präzise Späne.';display:block;margin:24px 0 0;font-size:12px;color:#303833}
+@media(max-width:1180px){.tools-page{padding-inline:18px}.content-grid{grid-template-columns:1fr;max-width:820px}.main-column{padding-right:0;border-right:0}.side-column{grid-template-columns:1fr}.side-pair{grid-template-columns:1fr 1fr}}
+@media(max-width:820px){.tabs{gap:12px;overflow:auto}.content-grid{margin-top:14px}.diameter-card,.two-cards,.side-pair{grid-template-columns:1fr}.tool-drawing{display:none}.result-values{grid-template-columns:1fr}.result-values>div+div{border-left:0;border-top:1px solid #cfdcc8;padding:14px 0 0;margin-top:14px}.formula label{grid-template-columns:1fr}}
 </style>
