@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import type { CamOperation, OperationKind, OperationsProject } from './types';
-import { defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultOperationsProject } from './types';
+import { defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultDrillOperation, defaultOperationsProject } from './types';
 
 export const operationsProjectStore=writable<OperationsProject>({
   operations:defaultOperationsProject.operations.map(op=>cloneOperation(op)),
@@ -10,13 +10,14 @@ export const operationsProjectStore=writable<OperationsProject>({
 function sync(project:OperationsProject){operationsProjectStore.set({operations:project.operations.map(cloneOperation),activeOperationId:project.activeOperationId});return project;}
 
 export function cloneOperation<T extends CamOperation>(operation:T):T {
-  return {...operation,tool:{...operation.tool},...(operation.kind==='carve'?{curveIds:[...operation.curveIds]}:{})} as T;
+  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{})} as T;
 }
 
 export function createOperation(kind:OperationKind,index:number):CamOperation {
   const serial=Math.max(1,index);
   if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:`Kontur ${serial}`,tool:{...defaultContourOperation.tool}};
   if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:`Tasche ${serial}`,tool:{...defaultPocketOperation.tool}};
+  if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:`Bohren ${serial}`,curveIds:[],tool:{...defaultDrillOperation.tool}};
   return {...defaultCarveOperation,id:`op-carve-${serial}`,name:`Carve ${serial}`,curveIds:[],tool:{...defaultCarveOperation.tool}};
 }
 
@@ -54,6 +55,10 @@ export function operationSummary(operation:CamOperation):string {
   if(operation.kind==='carve'){
     const source=operation.layerName??'Einzelauswahl';
     return `${source} · ${operation.curveIds.length} Linie${operation.curveIds.length===1?'':'n'} · ${tool}`;
+  }
+  if(operation.kind==='drill'){
+    const source=operation.layerName??'Einzelauswahl';
+    return `${source} · ${operation.curveIds.length} Bohrung${operation.curveIds.length===1?'':'en'} · ${tool}`;
   }
   if(operation.kind==='contour')return `${operation.contourId===null?'Keine Kontur':`Kontur ${operation.contourId+1}`} · ${operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie'} · ${tool}`;
   const strategy=operation.strategy==='auto'?'Auto':operation.strategy==='raster'?'Raster':operation.strategy==='concentric'?'Kreis':'Konturparallel';
