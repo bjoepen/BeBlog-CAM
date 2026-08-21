@@ -10,6 +10,7 @@
   export let operation: CamOperation;
   export let onSelectContour: (id: number) => void = () => {};
   export let onSelectCarveCurve: (id: number) => void = () => {};
+  export let onSelectDrillCurve: (id: number) => void = () => {};
 
   const width=1000,height=650,pad=54;
   const rotate=(p:P2):P2=>{const a=orientation.rotationZDeg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c}};
@@ -43,6 +44,15 @@
       return{kind:'carve' as const,carve};
     }
 
+    if(operation.kind==='drill'){
+      const selected=new Set(operation.curveIds);
+      const drill=movedCurves.filter(c=>c.curve.kind==='circle').map(c=>{
+        const circle=c.curve as Extract<Curve2,{kind:'circle'}>;const center=map(move(rotate(circle.center)));const edge=map(move(rotate({x:circle.center.x+circle.radius,y:circle.center.y})));const r=Math.max(5,Math.hypot(edge.x-center.x,edge.y-center.y));
+        return{id:c.id,center,r,selected:selected.has(c.id),diameter:circle.radius*2};
+      });
+      return{kind:'drill' as const,drill};
+    }
+
     const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
     let tool:P2[]|null=null;
     if(selected){
@@ -55,9 +65,9 @@
 
   $: scene=buildScene(
     operation.kind,
-    operation.kind==='carve'?operation.curveIds.join(','):operation.contourId,
-    operation.kind==='carve'?operation.selectionMode:operation.kind,
-    operation.kind==='carve'?operation.layerName:operation.kind,
+    (operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):operation.contourId,
+    (operation.kind==='carve'||operation.kind==='drill')?operation.selectionMode:operation.kind,
+    (operation.kind==='carve'||operation.kind==='drill')?operation.layerName:operation.kind,
     operation.tool.diameterMm,
     operation.kind==='contour'?operation.side:operation.kind,
     stockMode,stock.width,stock.height,
@@ -73,6 +83,13 @@
       {#each scene.carve as curve}
         <path d={path(curve.screen,false)} class:selected-carve={curve.selected} class="carve-candidate" />
         <path d={path(curve.screen,false)} class="carve-pick" onclick={()=>onSelectCarveCurve(curve.id)}><title>{curve.selected?'Aus Carve-Auswahl entfernen':'Zur Carve-Auswahl hinzufügen'}</title></path>
+      {/each}
+    {:else if scene.kind==='drill'}
+      {#each scene.drill as hole}
+        <circle cx={hole.center.x} cy={hole.center.y} r={hole.r} class:selected-drill={hole.selected} class="drill-candidate" />
+        <line x1={hole.center.x-7} y1={hole.center.y} x2={hole.center.x+7} y2={hole.center.y} class:selected-drill={hole.selected} class="drill-center" />
+        <line x1={hole.center.x} y1={hole.center.y-7} x2={hole.center.x} y2={hole.center.y+7} class:selected-drill={hole.selected} class="drill-center" />
+        <circle cx={hole.center.x} cy={hole.center.y} r={Math.max(12,hole.r)} class="drill-pick" onclick={()=>onSelectDrillCurve(hole.id)}><title>{hole.selected?'Bohrung aus Auswahl entfernen':`Bohrung Ø ${hole.diameter.toFixed(3)} mm auswählen`}</title></circle>
       {/each}
     {:else}
       {#each scene.chains as chain}
@@ -98,4 +115,7 @@
   .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}
   .carve-candidate.selected-carve{stroke:#b1453b;stroke-width:2.2}
   .carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+  .drill-candidate{fill:none;stroke:rgba(194,117,40,.25);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}.drill-candidate.selected-drill{stroke:#b1453b;stroke-width:2.4}
+  .drill-center{stroke:rgba(194,117,40,.55);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.drill-center.selected-drill{stroke:#b1453b;stroke-width:1.8}
+  .drill-pick{fill:transparent;stroke:transparent;stroke-width:12;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}
 </style>
