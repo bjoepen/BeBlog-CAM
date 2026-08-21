@@ -36,33 +36,49 @@ Der Realtest bestätigt die vollständige Räumung ohne Verletzung der Sollkontu
 
 ## Gate 8C — Safe Stay-Down Linking
 
-Status: **GEÖFFNET**
+Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
 
 ### Ziel
 
 Gate 8C optimiert ausschließlich die Verbindung zwischen den bereits bewiesenen konturparallelen Innenoffsets. Die Geometrie- und Offset-Mathematik aus 8B bleibt unverändert.
 
-Der aktuelle 8B-Pfad fährt nach jedem Offset konservativ auf Sicherheits-Z, versetzt zum nächsten Offset und taucht erneut ein. 8C soll innerhalb derselben Tiefenebene unnötige Z-Bewegungen vermeiden.
+### Implementierter Linker
 
-### Sicherheitsregel
+`src/lib/pocketStayDown.ts` arbeitet als konservativer Postprozessor ausschließlich auf dem bereits freigegebenen 8B-Konturparallel-G-Code.
 
-Stay-down ist nur erlaubt, wenn die Verbindung zwischen zwei benachbarten validierten Offsets als sicher nachgewiesen ist. Andernfalls bleibt der bewiesene Safe-Z-Retract erhalten.
+Ein Safe-Z-Retract zwischen zwei Innenoffsets wird nur entfernt, wenn gleichzeitig gilt:
 
-Für den ersten Scope gilt:
+- nächster Offset ist analytisch der direkte Nachbar,
+- Korrekturdifferenz ist größer als 0 und höchstens der konfigurierte Stepover,
+- tatsächliche XY-Verbindung zwischen aktuellem geschlossenen Loop-Endpunkt und nächstem Loop-Start ist höchstens der konfigurierte Stepover,
+- die Verbindung erfolgt als `G1` mit Schnittvorschub,
+- keine Rapid-XY-Bewegung im Material wird erzeugt.
 
-- nur benachbarte validierte Innenoffsets,
-- Verbindung auf Arbeitstiefe nur mit kontrolliertem Schnittvorschub,
-- keine Rapid-XY-Bewegung im Material,
-- Verbindungsdistanz darf den zulässigen Stepover nicht überschreiten,
-- Verbindung muss innerhalb des freigegebenen Taschenraums liegen,
-- am Ende jeder Tiefenebene weiterhin Rückzug auf Sicherheits-Z,
-- bei fehlendem Sicherheitsnachweis automatischer Fallback auf konservativen Retract.
+Ist eine Bedingung nicht eindeutig erfüllt, bleibt die originale 8B-Sequenz mit Safe-Z-Retract vollständig erhalten.
+
+### Tiefenebenen
+
+Stay-down gilt nur innerhalb derselben Z-Zustellung. Am Ende jeder Tiefenebene bleibt der Rückzug auf Sicherheits-Z unverändert erhalten. Dadurch wird der Wechsel auf die nächste Tiefenebene weiterhin konservativ ausgeführt.
+
+### Exportpfade
+
+Die Optimierung wird sowohl beim Einzel-Taschenexport als auch im Multi-Operation-Gesamtjob angewendet. Die G-Code-Vorschau zeigt exakt den optimierten Export.
+
+`06 · Fräsen` weist bei konturparallelen Taschen zusätzlich die Anzahl tatsächlich verwendeter Stay-down-Links aus.
 
 ### Referenztest
 
 Wieder `Test(1).dxf`.
 
-PASS, wenn die Tasche geometrisch identisch zu 8B geräumt wird, innerhalb einer Tiefenebene die unnötigen Z-Hübe zwischen sicheren Offsets entfallen, CAMotics unveränderte Materialabtragung bestätigt und unsichere Verbindungen weiterhin automatisch einen Retract erzwingen.
+PASS, wenn:
+
+1. die Tasche geometrisch identisch zu 8B geräumt wird,
+2. innerhalb einer Tiefenebene die meisten bzw. alle nachgewiesen sicheren Z-Hübe zwischen Nachbaroffsets entfallen,
+3. zwischen zwei Offsets stattdessen kurze `G1`-Verbindungen auf Arbeitstiefe erscheinen,
+4. am Ende jeder Tiefenebene weiterhin `G0 Z<Sicherheits-Z>` steht,
+5. CAMotics unveränderte Materialabtragung und keine Wandverletzung zeigt,
+6. unsichere Verbindungen automatisch den konservativen Retract behalten,
+7. Rechteck-Raster und Kreis-Konzentrisch unverändert bleiben.
 
 ## Danach
 
