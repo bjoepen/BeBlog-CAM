@@ -27,7 +27,7 @@ Der Realtest bestätigte:
 
 ## Gate 9B — Bohr-Maschinenpfad und vollständiger Preflight
 
-Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
+Status: **PASS / GESCHLOSSEN**
 
 ### Maschinenstrategie
 
@@ -79,7 +79,7 @@ Bohren ist außerdem in den projektweiten Preflight und den Multi-Operation-Gesa
 
 ### Kommentar-Polish
 
-Gate 9B beginnt die vereinbarte Konsolidierung der G-Code-Kommentare.
+Gate 9B konsolidiert die G-Code-Kommentare weiter.
 
 Verbindliches Schema:
 
@@ -96,18 +96,31 @@ wird im tatsächlich exportierten Taschen-G-Code durch die korrekte Stay-Down-Se
 
 ### Gate-9B-Realtest
 
-Gate 9B ist PASS, wenn eine DXF mit mehreren ausgewählten Bohrkreisen bestätigt:
+Der Realtest wurde mit einer DXF mit vier ausgewählten Bohrkreisen durchgeführt. Die exportierte `bohren-bohren.nc` wurde zusätzlich direkt geprüft und in CAMotics simuliert.
 
-1. Einzel-Preflight PASS bzw. nur erwartete WARN-Hinweise,
-2. `.nc` enthält exakt die ausgewählten Kreismittelpunkte,
-3. keine XY-Rapidfahrt erfolgt unterhalb Sicherheits-Z zwischen Bohrpositionen,
-4. Z-Tiefen entsprechen Gesamttiefe und Zustellung,
-5. Safe-Z wird zwischen Bohrpositionen eingehalten,
-6. CAMotics/NC Viewer zeigen alle gewünschten Bohrungen,
-7. Multi-Operation-Job akzeptiert Bohren und erzeugt nötige Werkzeugwechsel,
-8. bestehende Kontur-, Taschen- und Carve-Pfade bleiben regressionsfrei,
-9. der Taschen-Header enthält keine veraltete 8B-Safe-Z-Aussage mehr.
+Bestätigt wurden:
+
+- vier Bohrpositionen werden exakt an den DXF-Kreismittelpunkten angefahren,
+- die getesteten Positionen liegen bei X/Y 10/10, 20/20, 30/30 und 40/40 mm,
+- Gesamttiefe 3,000 mm bei maximaler Zustellung 1,000 mm wird als -1 / -2 / -3 mm ausgegeben,
+- zwischen Bohrpositionen erfolgt der XY-Rapid ausschließlich nach Rückzug auf Sicherheits-Z 5,000 mm,
+- innerhalb derselben Bohrung erfolgt zwischen den Zustellungen ein kontrollierter Rückzug auf Z0,000,
+- keine Canned Cycles werden verwendet,
+- Spindelstart, Safe-Z, M5 und M30 sind vollständig und eindeutig,
+- CAMotics stellt alle gewünschten Bohrungen korrekt dar.
+
+Die aktuelle Zwischenzustellungslogik mit Rückzug auf Z0,000 ist Bestandteil des bewiesenen 9B-Grundpfads. Ein späteres echtes Peck-Drilling-Gate darf diese Semantik gezielt erweitern oder ersetzen, aber nur mit eigenem Preflight und eigenem Realtest.
+
+**Gate 9B = PASS.**
+
+## Meilenstein 001K
+
+BeBlog CAM besitzt nun den bewiesenen klassischen 2D-Operationssatz:
+
+`Kontur · Tasche · Carve · Bohren`
+
+Bohren ist dabei vollständig in Auswahl, Preflight, Einzel-Export und Multi-Operation-Gesamtjob integriert.
 
 ## Danach
 
-Nach Gate 9B kann **Peck Drilling** als eigenes Gate folgen. Zusätzlich bleiben spätere Erweiterungen wie DXF-POINT-Unterstützung, STEP-Bohrungserkennung und Helix-Aufbohren getrennte Themen.
+Als nächstes kann **Peck Drilling** als eigenes Gate folgen. Zusätzlich bleiben spätere Erweiterungen wie DXF-POINT-Unterstützung, STEP-Bohrungserkennung und Helix-Aufbohren getrennte Themen.
