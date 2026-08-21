@@ -4,6 +4,7 @@
   import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, PocketOperation } from './types';
   import { generatePocketGcode } from './pocketGcode';
   import { optimizeParallelPocketStayDown } from './pocketStayDown';
+  import { normalizeGcodeComments } from './gcodeComments';
   import JobGCodePanel from './JobGCodePanel.svelte';
   import { operationsProjectStore } from './operationsProject';
 
@@ -12,7 +13,7 @@
   $: multiJob=$operationsProjectStore.operations.length>1&&$operationsProjectStore.activeOperationId===operation.id;
   $: result=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
   $: stayDown=result.ok?optimizeParallelPocketStayDown(result.code,operation):{code:result.code,links:0,retainedRetracts:0};
-  $: displayCode=stayDown.code;
+  $: displayCode=normalizeGcodeComments(stayDown.code);
   $: displayLineCount=displayCode?displayCode.trimEnd().split(/\r?\n/).length:0;
   function defaultNcName(){const base=(summary.fileName||'beblog-cam').replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9äöüÄÖÜß._ -]+/g,'-').trim()||'beblog-cam';return `${base}-tasche.nc`;}
   async function copyCode(){if(!result.ok||!displayCode)return;await navigator.clipboard.writeText(displayCode);copied=true;setTimeout(()=>copied=false,1200);}
@@ -34,7 +35,7 @@
 {:else}
   <div class="release fail"><strong>FAIL</strong><span>Taschen-G-Code wird nur erzeugt, wenn Geometrie und gewählte Räumstrategie freigabefähig sind.</span></div>{#each result.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}{#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
 {/if}
-<p class="note"><strong>001J Gate 8C:</strong> Konturparallel nutzt Safe Stay-Down Linking nur dann, wenn sowohl Offsetabstand als auch tatsächliche XY-Verbindung innerhalb des freigegebenen Stepovers liegen. Andernfalls bleibt der konservative Safe-Z-Retract bestehen.</p>
+<p class="note"><strong>001K Kommentar-Polish:</strong> Operation, Strategie und besondere Bahnmerkmale werden im exportierten G-Code jetzt konsistent benannt. Der veraltete 8B-Hinweis zum separaten Safe-Z-Anfahren wurde entfernt.</p>
 {/if}
 
 <style>
