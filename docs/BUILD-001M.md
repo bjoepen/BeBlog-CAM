@@ -10,7 +10,7 @@ Der Werkzeugschritt soll nicht zu einem Maschinenbau-CMS werden. Er bleibt Teil 
 
 ## Gate 11A — Rechenkern aus Maker Tools
 
-Status: **IMPLEMENTIERT / UX-VERDRAHTUNG AUSSTEHEND**
+Status: **IMPLEMENTIERT / TESTBEREIT**
 
 ### Übernommene Mathematik
 
@@ -39,11 +39,13 @@ Gate 11A enthält ausdrücklich **keine versteckten Materialtabellen, Maschinenf
 
 Die Ausgabe ist zunächst ein mathematisch nachvollziehbarer Ausgangspunkt. Das entspricht der ursprünglichen Maker-Tools-DNA und verhindert eine scheinbar präzise Empfehlung, deren Annahmen der Nutzer nicht sehen kann.
 
-### Vorbereitete UX
+### UX
 
 Neue Komponente:
 
 - `src/lib/FeedsSpeedsCalculator.svelte`
+
+Die Komponente ist nun verbindlich in **03 · Werkzeuge** eingehängt. Der bisherige Platzhalter ist ersetzt.
 
 Eingaben:
 
@@ -57,7 +59,23 @@ Ausgaben:
 - rechnerische Spindeldrehzahl,
 - rechnerischer Vorschub.
 
-Die Formel bleibt in der Oberfläche sichtbar.
+Die beiden zugrunde liegenden Formeln bleiben in der Oberfläche sichtbar. Ungültige Werte werden direkt zurückgewiesen. Ein Zurücksetzen stellt die neutralen Referenzwerte des Rechners wieder her.
+
+Der Build-Indikator der App steht für diesen Entwicklungszweig auf `001M`.
+
+### Gate-11A-Test
+
+Gate 11A ist PASS, wenn folgende Punkte bestätigt sind:
+
+1. `pnpm check` läuft ohne Fehler.
+2. `03 · Werkzeuge` öffnet den neuen Rechner statt des bisherigen Platzhalters.
+3. Die Referenzwerte `d = 6 mm`, `vc = 200 m/min`, `z = 2`, `fz = 0,05 mm` ergeben ungefähr `10.610 1/min` und `1.061 mm/min`.
+4. Änderungen an allen vier Eingaben aktualisieren die Ergebnisse unmittelbar.
+5. Eingaben kleiner oder gleich 0 liefern keine scheinbar gültige Empfehlung.
+6. `Zurücksetzen` stellt die Referenzwerte wieder her.
+7. Die sichtbaren Formeln stimmen mit dem Rechenkern überein.
+8. Noch keine Material- oder Maschinenkorrektur wird still angewendet.
+9. Die bestehenden Schritte `Bauteil`, `Rohling`, `Bearbeiten`, `Prüfen` und `Fräsen` bleiben regressionsfrei.
 
 ## Gate 11B — Hobby-CNC-Empfehlungs-Layer
 
