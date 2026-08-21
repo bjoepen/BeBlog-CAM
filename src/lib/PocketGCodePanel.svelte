@@ -3,6 +3,7 @@
   import { save } from '@tauri-apps/plugin-dialog';
   import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, PocketOperation } from './types';
   import { generatePocketGcode } from './pocketGcode';
+  import { optimizeParallelPocketStayDown } from './pocketStayDown';
   import JobGCodePanel from './JobGCodePanel.svelte';
   import { operationsProjectStore } from './operationsProject';
 
@@ -10,9 +11,12 @@
   let copied=false;let exportState:''|'saved'|'error'='';let exportMessage='';
   $: multiJob=$operationsProjectStore.operations.length>1&&$operationsProjectStore.activeOperationId===operation.id;
   $: result=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
+  $: stayDown=result.ok?optimizeParallelPocketStayDown(result.code,operation):{code:result.code,links:0,retainedRetracts:0};
+  $: displayCode=stayDown.code;
+  $: displayLineCount=displayCode?displayCode.trimEnd().split(/\r?\n/).length:0;
   function defaultNcName(){const base=(summary.fileName||'beblog-cam').replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9äöüÄÖÜß._ -]+/g,'-').trim()||'beblog-cam';return `${base}-tasche.nc`;}
-  async function copyCode(){if(!result.ok||!result.code)return;await navigator.clipboard.writeText(result.code);copied=true;setTimeout(()=>copied=false,1200);}
-  async function saveNc(){if(!result.ok||!result.code)return;exportState='';exportMessage='';try{let path=await save({defaultPath:defaultNcName(),filters:[{name:'NC-Programm',extensions:['nc']}]});if(!path)return;if(!path.toLowerCase().endsWith('.nc'))path=`${path}.nc`;await invoke('save_nc_file',{path,code:result.code});exportState='saved';exportMessage=`Gespeichert: ${path}`;}catch(error){exportState='error';exportMessage=String(error)}}
+  async function copyCode(){if(!result.ok||!displayCode)return;await navigator.clipboard.writeText(displayCode);copied=true;setTimeout(()=>copied=false,1200);}
+  async function saveNc(){if(!result.ok||!displayCode)return;exportState='';exportMessage='';try{let path=await save({defaultPath:defaultNcName(),filters:[{name:'NC-Programm',extensions:['nc']}]});if(!path)return;if(!path.toLowerCase().endsWith('.nc'))path=`${path}.nc`;await invoke('save_nc_file',{path,code:displayCode});exportState='saved';exportMessage=`Gespeichert: ${path}`;}catch(error){exportState='error';exportMessage=String(error)}}
 </script>
 
 {#if multiJob}
@@ -21,16 +25,16 @@
 <p class="eyebrow">06 · Fräsen</p><h2>Tasche</h2>
 {#if result.ok}
   <div class="release pass"><strong>PASS</strong><span>Die geprüfte Taschenstrategie kann als Maschinenprogramm ausgegeben werden.</span></div>
-  <div class="facts"><span>{result.passes} Zustellung{result.passes===1?'':'en'}</span>{#if result.strategy==='raster'}<span>{result.rasterPasses} Rasterbahnen</span>{:else if result.strategy==='concentric'}<span>{result.concentricRings} Kreisring{result.concentricRings===1?'':'e'}</span>{:else}<span>{result.parallelLoops} Innenoffset{result.parallelLoops===1?'':'s'}</span>{/if}<span>Stepover {result.stepoverMm.toFixed(3)} mm</span><span>Radius {result.toolRadiusMm.toFixed(3)} mm</span><span>{result.lineCount} G-Code-Zeilen</span></div>
-  <p class="note"><strong>Strategie:</strong> {result.strategy==='concentric'?'Konzentrische Kreistasche · Zentrum zuerst · native G2/G3-Halbkreise · äußerster Ring als radiuskorrigierte Fertigwand.':result.strategy==='parallel'?'Konturparallel · analytische Innenoffsets · LINE bleibt G1, ARC bleibt G2/G3 · äußerster Offset liegt exakt einen Werkzeugradius innerhalb der CAD-Wand.':operation.entry==='ramp'?'Rechteck-Raster · lineare Rampe · Zickzack-Räumung · abschließender Wandumlauf.':'Rechteck-Raster · senkrecht eintauchen · Zickzack-Räumung · abschließender Wandumlauf.'}</p>
+  <div class="facts"><span>{result.passes} Zustellung{result.passes===1?'':'en'}</span>{#if result.strategy==='raster'}<span>{result.rasterPasses} Rasterbahnen</span>{:else if result.strategy==='concentric'}<span>{result.concentricRings} Kreisring{result.concentricRings===1?'':'e'}</span>{:else}<span>{result.parallelLoops} Innenoffset{result.parallelLoops===1?'':'s'}</span>{/if}{#if result.strategy==='parallel'}<span>{stayDown.links} Stay-down-Link{stayDown.links===1?'':'s'}</span>{/if}<span>Stepover {result.stepoverMm.toFixed(3)} mm</span><span>Radius {result.toolRadiusMm.toFixed(3)} mm</span><span>{displayLineCount} G-Code-Zeilen</span></div>
+  <p class="note"><strong>Strategie:</strong> {result.strategy==='concentric'?'Konzentrische Kreistasche · Zentrum zuerst · native G2/G3-Halbkreise · äußerster Ring als radiuskorrigierte Fertigwand.':result.strategy==='parallel'?`Konturparallel · analytische Innenoffsets · LINE bleibt G1, ARC bleibt G2/G3 · ${stayDown.links} sicher nachgewiesene Verbindungen bleiben auf Schnitttiefe.`:operation.entry==='ramp'?'Rechteck-Raster · lineare Rampe · Zickzack-Räumung · abschließender Wandumlauf.':'Rechteck-Raster · senkrecht eintauchen · Zickzack-Räumung · abschließender Wandumlauf.'}</p>
   {#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
   <div class="export-box"><div><strong>NC-Datei</strong><span>Speichert exakt den aktuell angezeigten Taschen-G-Code als .nc.</span></div><button class="primary-export" onclick={saveNc}>G-Code speichern …</button></div>
   {#if exportMessage}<p class:export-ok={exportState==='saved'} class:export-error={exportState==='error'} class="export-message">{exportMessage}</p>{/if}
-  <div class="code-head"><span>Vorschau · identisch zur .nc-Datei</span><button onclick={copyCode}>{copied?'Kopiert':'G-Code kopieren'}</button></div><pre>{result.code}</pre>
+  <div class="code-head"><span>Vorschau · identisch zur .nc-Datei</span><button onclick={copyCode}>{copied?'Kopiert':'G-Code kopieren'}</button></div><pre>{displayCode}</pre>
 {:else}
   <div class="release fail"><strong>FAIL</strong><span>Taschen-G-Code wird nur erzeugt, wenn Geometrie und gewählte Räumstrategie freigabefähig sind.</span></div>{#each result.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}{#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
 {/if}
-<p class="note"><strong>001J Gate 8B:</strong> Auto erkennt Rechteck, Kreis oder eine unterstützte gemischte LINE/ARC-Kontur. Konturparallel bleibt konservativ auf analytisch geprüfte native Innenoffsets begrenzt.</p>
+<p class="note"><strong>001J Gate 8C:</strong> Konturparallel nutzt Safe Stay-Down Linking nur dann, wenn sowohl Offsetabstand als auch tatsächliche XY-Verbindung innerhalb des freigegebenen Stepovers liegen. Andernfalls bleibt der konservative Safe-Z-Retract bestehen.</p>
 {/if}
 
 <style>
