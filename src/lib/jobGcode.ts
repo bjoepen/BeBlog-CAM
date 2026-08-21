@@ -18,11 +18,12 @@ type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;place
 
 type OperationCode={ok:boolean;errors:string[];warnings:string[];code:string};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
-const label=(op:CamOperation)=>op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':'Carve';
+const label=(op:CamOperation)=>op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':'Bohren';
 const toolKey=(op:CamOperation)=>`${op.tool.name}|${op.tool.diameterMm.toFixed(6)}`;
 
 function generateOperation(args:Args,operation:CamOperation):OperationCode{
   const common={summary:args.summary,stock:args.stock,stockMode:args.stockMode,placement:args.placement,orientation:args.orientation,wcs:args.wcs};
+  if(operation.kind==='drill')return{ok:false,errors:['Gate 9A definiert Bohrauswahl und Operationsmodell. Maschinenpfad folgt in Gate 9B.'],warnings:[],code:''};
   if(operation.kind==='contour')return generateContourGcode({...common,operation:operation as ContourOperation});
   if(operation.kind==='pocket'){
     const pocket=operation as PocketOperation,result=generatePocketGcode({...common,operation:pocket});
@@ -33,11 +34,6 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
   return generateCarveGcode({...common,operation:operation as CarveOperation});
 }
 
-/**
- * Individual generators remain the verified source of truth. The composer only
- * removes program wrappers and the final per-operation shutdown sequence.
- * Safe-Z/M5 at operation boundaries are then emitted exactly once by the job.
- */
 function operationBody(code:string):string[]{
   const body=code.split(/\r?\n/).filter(line=>{
     const t=line.trim();
@@ -69,7 +65,7 @@ export function generateJobGcode(args:Args):JobGcodeResult{
   if(errors.length)return{ok:false,errors,warnings,code:'',lineCount:0,operationCount:operations.length,toolChangeCount:0};
 
   const lines:string[]=[];
-  lines.push('( BeBlog CAM 001J )','( Gesamtjob · mehrere gepruefte 2D-Bearbeitungen )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');
+  lines.push('( BeBlog CAM 001K )','( Gesamtjob · mehrere gepruefte 2D-Bearbeitungen )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');
   let toolChangeCount=0;
 
   generated.forEach(({operation,result},index)=>{
