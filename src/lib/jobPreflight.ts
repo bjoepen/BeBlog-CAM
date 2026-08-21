@@ -2,6 +2,7 @@ import type { CamOperation, ImportSummary, StockDefinition, StockMode, PartPlace
 import { generateContourGcode } from './gcode';
 import { generatePocketGcode } from './pocketGcode';
 import { validateCarveOperation } from './carveMath';
+import { validateDrillOperation } from './drillGcode';
 
 export type JobPreflightLevel='pass'|'warn'|'fail';
 export type JobPreflightOperation={id:string;index:number;kind:CamOperation['kind'];label:string;detail:string;level:JobPreflightLevel;errors:string[];warnings:string[]};
@@ -16,17 +17,17 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
   const operations:JobPreflightOperation[]=[];const errors:string[]=[];const warnings:string[]=[];
   enabled.forEach((operation,index)=>{
     let opErrors:string[]=[];let opWarnings:string[]=[];let detail='';
-    if(operation.kind==='drill'){
-      const circles=(summary.planarGeometry?.curves??[]).filter((curve,i)=>operation.curveIds.includes(i)&&curve.kind==='circle').length;
-      if(!operation.curveIds.length)opErrors.push('Keine Bohrgeometrie ausgewählt.');
-      else if(circles!==operation.curveIds.length)opErrors.push('Gate 9A akzeptiert für Bohren ausschließlich native DXF-Kreise.');
-      opErrors.push('Gate 9A definiert Auswahl und Operationsmodell; Maschinenpfad folgt in Gate 9B.');
-      detail=`${circles} Bohrposition${circles===1?'':'en'} · Maschinenpfad noch gesperrt`;
-    }else if(operation.kind==='carve'){
+    if(operation.kind==='carve'){
       const r=validateCarveOperation(summary,operation);opErrors=[...r.errors];opWarnings=[...r.warnings];
       if(stockMode==='none')opWarnings.push('Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.');
       if(wcs.z!=='top')opErrors.push('WCS Unterseite ist für Carve noch nicht freigegeben.');
       detail=`${r.segments.length} Linien · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
+    }else if(operation.kind==='drill'){
+      const r=validateDrillOperation(summary,operation);opErrors=[...r.errors];opWarnings=[...r.warnings];
+      if(stockMode==='none')opWarnings.push('Kein Rohling definiert: Materialgrenzen können nur eingeschränkt geprüft werden.');
+      if(stockMode!=='none'&&operation.totalDepthMm>stock.thickness)opWarnings.push(`Bohrtiefe ${operation.totalDepthMm.toFixed(3)} mm überschreitet die Rohlingdicke ${stock.thickness.toFixed(3)} mm.`);
+      if(wcs.z!=='top')opErrors.push('WCS Unterseite ist für Bohren in Gate 9B noch nicht freigegeben.');
+      detail=`${r.holeCount} Bohrposition${r.holeCount===1?'':'en'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }else if(operation.kind==='pocket'){
       const r=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`Tasche · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }else{
