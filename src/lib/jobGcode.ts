@@ -1,6 +1,7 @@
 import type { CamOperation, ContourOperation, PocketOperation, CarveOperation, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
 import { generateContourGcode } from './gcode';
 import { generatePocketGcode } from './pocketGcode';
+import { optimizeParallelPocketStayDown } from './pocketStayDown';
 import { generateCarveGcode } from './carveGcode';
 
 export type JobGcodeResult={
@@ -23,7 +24,12 @@ const toolKey=(op:CamOperation)=>`${op.tool.name}|${op.tool.diameterMm.toFixed(6
 function generateOperation(args:Args,operation:CamOperation):OperationCode{
   const common={summary:args.summary,stock:args.stock,stockMode:args.stockMode,placement:args.placement,orientation:args.orientation,wcs:args.wcs};
   if(operation.kind==='contour')return generateContourGcode({...common,operation:operation as ContourOperation});
-  if(operation.kind==='pocket')return generatePocketGcode({...common,operation:operation as PocketOperation});
+  if(operation.kind==='pocket'){
+    const pocket=operation as PocketOperation,result=generatePocketGcode({...common,operation:pocket});
+    if(!result.ok)return result;
+    const optimized=optimizeParallelPocketStayDown(result.code,pocket);
+    return{...result,code:optimized.code};
+  }
   return generateCarveGcode({...common,operation:operation as CarveOperation});
 }
 
@@ -41,10 +47,6 @@ function operationBody(code:string):string[]{
     return true;
   });
 
-  // Einzelgeneratoren beenden ihren Job bereits sicher. Im Gesamtjob übernimmt
-  // der Composer diese Grenze, damit nicht G0 Z / M5 mehrfach hintereinander
-  // ausgegeben werden. Nur der abschließende Shutdown wird entfernt; alle
-  // eigentlichen Werkzeugbewegungen bleiben unverändert.
   while(body.length){
     const t=body[body.length-1].trim();
     if(t==='M5'||/^G0\s+Z[-+]?\d+(?:\.\d+)?$/i.test(t)){body.pop();continue;}
@@ -67,7 +69,7 @@ export function generateJobGcode(args:Args):JobGcodeResult{
   if(errors.length)return{ok:false,errors,warnings,code:'',lineCount:0,operationCount:operations.length,toolChangeCount:0};
 
   const lines:string[]=[];
-  lines.push('( BeBlog CAM 001I )','( Gesamtjob · mehrere gepruefte 2D-Bearbeitungen )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');
+  lines.push('( BeBlog CAM 001J )','( Gesamtjob · mehrere gepruefte 2D-Bearbeitungen )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');
   let toolChangeCount=0;
 
   generated.forEach(({operation,result},index)=>{
