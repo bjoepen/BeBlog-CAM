@@ -1,4 +1,4 @@
-export type PostProcessorId='generic'|'estlcam';
+export type PostProcessorId='grbl'|'estlcam'|'linuxcnc';
 
 export interface PostProcessResult{
   ok:boolean;
@@ -17,6 +17,18 @@ function normalizeMotion(line:string):string|null{
   if(!m)return null;
   const code=m[1].toUpperCase().replace(/^G0([0-3])$/,'G$1');
   return `${code}${m[2]}`.trim();
+}
+
+/**
+ * GRBL reference output.
+ *
+ * The verified BeBlog CAM generator already emits a GRBL-compatible subset:
+ * G21, G90, G17, G0/G1/G2/G3, S/M3, M5, M0 and M30. The postprocessor therefore
+ * preserves the proven source program and only gives that dialect an explicit
+ * controller identity instead of treating it as an unnamed generic output.
+ */
+export function postProcessGrbl(source:string):PostProcessResult{
+  return{ok:true,code:source,errors:[],warnings:[],removedLines:0,transformedLines:0};
 }
 
 /**
@@ -43,8 +55,6 @@ export function postProcessEstlcam(source:string):PostProcessResult{
     if(!line)continue;
     if(isComment(line)){out.push(line);continue;}
 
-    // Estlcam ignores these modal codes, but removing them makes the exported
-    // program explicit and avoids a false impression that they are evaluated.
     if(/^(G17|G20|G21|G40|G49|G54|G55|G56|G57|G58|G59|G80|G90|G91)\b/i.test(line)){
       if(/^G91\b/i.test(line))errors.push('Inkrementelle Koordinaten (G91) sind für Estlcam nicht zulässig.');
       if(/^G20\b/i.test(line))errors.push('Zollmodus (G20) ist für den BeBlog-Estlcam-Postprozessor nicht freigegeben.');
@@ -53,14 +63,8 @@ export function postProcessEstlcam(source:string):PostProcessResult{
     if(/^M30\b/i.test(line)){removedLines++;continue;}
 
     const motion=normalizeMotion(line);
-    if(motion){
-      // Estlcam requires every motion line to repeat its G command. The source
-      // already does this; this branch also normalizes G00..G03 to G0..G3.
-      out.push(motion);if(motion!==line)transformedLines++;continue;
-    }
+    if(motion){out.push(motion);if(motion!==line)transformedLines++;continue;}
 
-    // Split spindle speed + M3 when emitted on one line. Estlcam accepts S and
-    // M words, but one command per line is the least ambiguous real-world form.
     let m=line.match(/^S([^\s]+)\s+M0?3$/i);
     if(m){out.push(`S${m[1]}`,'M3');transformedLines++;continue;}
 
@@ -68,24 +72,58 @@ export function postProcessEstlcam(source:string):PostProcessResult{
     if(/^F[-+]?\d+(?:[.,]\d+)?$/i.test(line)){out.push(line.toUpperCase());continue;}
 
     m=line.match(/^M0?(0|1|3|5|6|8|9|10|11)(?:\s+(.*))?$/i);
-    if(m){
-      const n=Number(m[1]);const normalized=`M${n}${m[2]?` ${m[2]}`:''}`;
-      out.push(normalized);if(normalized!==line)transformedLines++;continue;
-    }
+    if(m){const n=Number(m[1]);const normalized=`M${n}${m[2]?` ${m[2]}`:''}`;out.push(normalized);if(normalized!==line)transformedLines++;continue;}
 
-    // Tool-change comments using M0 ( ... ) are valid; keep exactly one M word.
     m=line.match(/^M0?0\s+(\(.*\))$/i);
     if(m){out.push(`M0 ${m[1]}`);if(line!==`M0 ${m[1]}`)transformedLines++;continue;}
 
-    // A standalone unsupported command must never silently reach the machine.
     if(/^[GMT]\d+/i.test(line))errors.push(`Nicht unterstützter Estlcam-Befehl: ${line}`);
     else warnings.push(`Unbekannte Zeile wurde unverändert übernommen: ${line}`);
     if(!/^[GMT]\d+/i.test(line))out.push(line);
   }
 
-  // Always end with spindle off. M30 is intentionally omitted because Estlcam
-  // does not list it as a supported M command.
   if(out[out.length-1]?.trim()!=='M5')out.push('M5');
+  const code=out.join('\n')+'\n';
+  return{ok:errors.length===0,code,errors,warnings,removedLines,transformedLines};
+}
+
+/**
+ * LinuxCNC reference output.
+ *
+ * LinuxCNC explicitly supports the modal preamble used by BeBlog CAM (G17, G21,
+ * G90), G0/G1/G2/G3 motion with I/J arcs, spindle control M3/M5, program pause M0
+ * and program end M30. The postprocessor therefore keeps the proven geometry and
+ * makes the controller contract explicit while validating that no unexpected
+ * controller-specific command slips through unnoticed.
+ */
+export function postProcessLinuxCnc(source:string):PostProcessResult{
+  const errors:string[]=[],warnings:string[]=[],out:string[]=[];
+  let removedLines=0,transformedLines=0;
+  const lines=source.split(/\r?\n/);
+
+  for(const raw of lines){
+    const line=raw.trim();
+    if(!line)continue;
+    if(isComment(line)){out.push(line);continue;}
+
+    const motion=normalizeMotion(line);
+    if(motion){out.push(motion);if(motion!==line)transformedLines++;continue;}
+
+    if(/^(G17|G21|G40|G49|G80|G90|G94)\b/i.test(line)){out.push(line.toUpperCase());continue;}
+    if(/^G20\b/i.test(line)){errors.push('Zollmodus G20 ist für den BeBlog-LinuxCNC-Postprozessor nicht freigegeben.');continue;}
+    if(/^G91\b/i.test(line)){errors.push('Inkrementelle Koordinaten G91 sind für den BeBlog-LinuxCNC-Postprozessor nicht freigegeben.');continue;}
+
+    let m=line.match(/^S([^\s]+)\s+M0?3$/i);
+    if(m){out.push(`S${m[1]} M3`);if(line!==`S${m[1]} M3`)transformedLines++;continue;}
+    if(/^S[-+]?\d+(?:[.,]\d+)?$/i.test(line)){out.push(line.toUpperCase());continue;}
+    if(/^F[-+]?\d+(?:[.,]\d+)?$/i.test(line)){out.push(line.toUpperCase());continue;}
+
+    m=line.match(/^M0?(0|1|2|3|4|5|7|8|9|30)(?:\s+(.*))?$/i);
+    if(m){const n=Number(m[1]);const normalized=`M${n}${m[2]?` ${m[2]}`:''}`;out.push(normalized);if(normalized!==line)transformedLines++;continue;}
+
+    if(/^[GMT]\d+/i.test(line))errors.push(`Nicht unterstützter LinuxCNC-Befehl im aktuellen Gate: ${line}`);
+    else{warnings.push(`Unbekannte Zeile wurde unverändert übernommen: ${line}`);out.push(line);}
+  }
 
   const code=out.join('\n')+'\n';
   return{ok:errors.length===0,code,errors,warnings,removedLines,transformedLines};
@@ -93,5 +131,6 @@ export function postProcessEstlcam(source:string):PostProcessResult{
 
 export function postProcessGcode(source:string,id:PostProcessorId):PostProcessResult{
   if(id==='estlcam')return postProcessEstlcam(source);
-  return{ok:true,code:source,errors:[],warnings:[],removedLines:0,transformedLines:0};
+  if(id==='linuxcnc')return postProcessLinuxCnc(source);
+  return postProcessGrbl(source);
 }
