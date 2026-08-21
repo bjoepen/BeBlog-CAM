@@ -2,11 +2,11 @@
 
 ## Ziel
 
-001L ergänzt einen echten Postprozessor-Layer zwischen dem bewiesenen generischen Maschinenpfad und der controller-spezifischen `.nc`-Ausgabe. Der erste Zielcontroller ist **Estlcam** für den bevorstehenden Real-World-Test an der CNC.
+001L ergänzt einen echten Postprozessor-Layer zwischen dem bewiesenen internen Maschinenpfad und der controller-spezifischen `.nc`-Ausgabe.
 
 Die Werkzeugweg-Generatoren aus 001H–001K bleiben unverändert. Der Postprozessor darf keine Geometrie neu berechnen und keine freigegebene Bahn verändern.
 
-## Gate 10A — Estlcam Postprozessor
+## Gate 10A — Postprozessor-Basis für Real-World-Tests
 
 Status: **IMPLEMENTIERT / REALTEST AUSSTEHEND**
 
@@ -18,16 +18,41 @@ Neuer Kern:
 - `src/lib/postProcessorStore.ts`
 - `src/lib/PostProcessorPicker.svelte`
 
-Der Export kann zwischen zwei Ausgaben wählen:
+Der Export kann nun zwischen drei expliziten Zielsystemen wählen:
 
-- `Standard` — unveränderte bisherige BeBlog-CAM-Ausgabe,
-- `Estlcam` — controller-spezifisch normalisierte Ausgabe.
+- `GRBL`
+- `Estlcam`
+- `LinuxCNC`
 
-Die Auswahl wird zentral im aktuellen App-Lauf gehalten und gilt damit konsistent für Kontur, Tasche, Carve, Bohren und Gesamtjob.
+Die Auswahl wird zentral im aktuellen App-Lauf gehalten und gilt konsistent für Kontur, Tasche, Carve, Bohren und Gesamtjob.
 
-### Estlcam-Regeln
+Verbindliches Architekturprinzip:
 
-Der Postprozessor folgt den offiziellen Anforderungen des Estlcam-CNC-Interpreters:
+**interner CAM-Werkzeugweg → Postprozessor → controller-spezifische `.nc`-Datei**
+
+Der bisherige namenlose `Standard`-Pfad wird damit ausdrücklich als **GRBL** benannt. Er bleibt geometrisch und maschinell identisch zum bereits bewiesenen bisherigen Standard-G-Code.
+
+## GRBL
+
+GRBL ist der explizite Referenz-Postprozessor für den bisherigen BeBlog-CAM-G-Code.
+
+Der bewiesene Generator verwendet bereits den benötigten Kern:
+
+- `G21` Millimeter,
+- `G90` absolute Koordinaten,
+- `G17` XY-Ebene,
+- `G0/G1/G2/G3`,
+- relative `I/J` bei Bögen,
+- `S... M3`,
+- `M5`,
+- `M0` für manuellen Werkzeugwechsel,
+- `M30` als Programmende.
+
+Der GRBL-Postprozessor verändert den bewiesenen Quellpfad daher derzeit bewusst nicht. Seine Aufgabe in 001L ist die explizite Controller-Zuordnung statt eines unklaren `Standard`-Labels.
+
+## Estlcam
+
+Der Estlcam-Postprozessor folgt dem bereits für den Real-World-Test vorbereiteten konservativen Dialekt:
 
 - Bewegungen nur mit `G0`, `G1`, `G2`, `G3`,
 - absolute XYZ-Koordinaten,
@@ -38,26 +63,17 @@ Der Postprozessor folgt den offiziellen Anforderungen des Estlcam-CNC-Interprete
 - Kommentare in Klammern,
 - unterstützte M-Befehle werden explizit beibehalten.
 
-BeBlog CAM erfüllt die geometrischen Voraussetzungen bereits im Generator:
-
-- Koordinaten sind absolut,
-- I/J ist relativ zum jeweiligen Bogenstart,
-- Kreise werden in zwei Halbkreise geteilt,
-- Bohrungen werden als explizite G0/G1-Folgen ausgegeben.
-
-### Normalisierung
-
 Für Estlcam werden insbesondere:
 
-- `G21`, `G90`, `G17` aus der Datei entfernt, weil Estlcam diese nicht als aktive Interpreterbefehle benötigt,
+- `G21`, `G90`, `G17` aus der Datei entfernt,
 - `M30` entfernt,
 - `S... M3` in getrennte `S...`- und `M3`-Zeilen zerlegt,
-- `G00`–`G03` auf eindeutige `G0`–`G3`-Schreibweise normalisiert,
-- nicht unterstützte G-/M-/T-Befehle nicht stillschweigend ausgegeben, sondern als Postprozessor-FAIL behandelt.
+- `G00`–`G03` auf `G0`–`G3` normalisiert,
+- nicht unterstützte G-/M-/T-Befehle als Postprozessor-FAIL behandelt.
 
 Der Postprozessor fügt am Programmende `M5` hinzu, falls der Quellcode nicht bereits mit Spindel-Aus endet.
 
-### Werkzeugwechsel
+### Werkzeugwechsel in Estlcam
 
 Für den ersten Real-World-Test bleibt die bewiesene manuelle Werkzeugwechsel-Semantik erhalten:
 
@@ -67,13 +83,34 @@ Für den ersten Real-World-Test bleibt die bewiesene manuelle Werkzeugwechsel-Se
 - manuelles Bestätigen,
 - danach Start der nächsten Operation.
 
-Estlcams `M6` wird zunächst bewusst **nicht automatisch verwendet**, da Estlcam damit abhängig von der Maschinenkonfiguration Werkzeuglängenmessung bzw. Sensorabläufe auslösen kann. Ein späterer Estlcam-M6-Modus benötigt ein eigenes Gate.
+Estlcams `M6` wird zunächst bewusst **nicht automatisch verwendet**, da damit abhängig von der Maschinenkonfiguration Werkzeuglängenmessung bzw. Sensorabläufe ausgelöst werden können.
 
-### UX
+## LinuxCNC
 
-Unter `06 · Fräsen` erscheint eine ruhige Auswahl:
+LinuxCNC erhält in 001L einen eigenen expliziten Postprozessor.
 
-`Standard | Estlcam`
+Der aktuelle BeBlog-CAM-Werkzeugweg passt sehr gut zum LinuxCNC-Interpreter. LinuxCNC unterstützt insbesondere:
+
+- `G17` für die XY-Ebene,
+- `G21` für Millimeter,
+- `G90` für absolute Koordinaten,
+- `G0/G1/G2/G3`,
+- relative `I/J` für die von BeBlog CAM erzeugten XY-Bögen,
+- `M3/M5` für die Spindel,
+- `M0` als Programmpause,
+- `M30` als Programmende.
+
+Der LinuxCNC-Postprozessor hält deshalb die bewiesene Geometrie vollständig erhalten und normalisiert lediglich die Schreibweise. Unerwartete controller-spezifische G-/M-/T-Befehle werden im aktuellen Gate nicht stillschweigend akzeptiert, sondern als FAIL behandelt.
+
+Für den ersten LinuxCNC-Scope sind `G20` und `G91` bewusst gesperrt: BeBlog CAM arbeitet im geprüften 2D-Kern mit Millimetern und absoluten Koordinaten.
+
+LinuxCNC-spezifische Möglichkeiten wie `G64`, Werkzeugtabellen, `Tn M6`, `G43`, Canned Cycles oder maschinenkoordinierte `G53`-Parkbewegungen werden **noch nicht automatisch erzeugt**. Sie benötigen später eigene Gates, weil sie Maschinenkonfiguration und Werkzeugmanagement berühren.
+
+## UX
+
+Unter `06 · Fräsen` erscheint nun die klare Auswahl:
+
+`GRBL | Estlcam | LinuxCNC`
 
 Die Vorschau zeigt immer exakt die Datei, die gespeichert wird. Ein Postprozessor-FAIL blockiert Speichern und Kopieren.
 
@@ -85,23 +122,25 @@ Der Postprozessor ist in folgende Exportpfade integriert:
 - Bohren,
 - Multi-Operation-Gesamtjob.
 
-### Real-World-Gate
+## Real-World-Gate
 
-Gate 10A ist PASS, wenn:
+Gate 10A ist vollständig PASS, wenn die jeweiligen Zielprogramme ihren Export korrekt interpretieren. Für den unmittelbar bevorstehenden Maschinenversuch liegt der Fokus zuerst auf Estlcam.
 
-1. `pnpm check` und App-Build sauber durchlaufen,
-2. Estlcam-Ausgabe keine anderen G-Befehle als G0–G3 enthält,
-3. keine unsupported `M30`-Zeile mehr vorhanden ist,
-4. alle Bewegungszeilen ihren G-Befehl explizit enthalten,
-5. G2/G3 weiterhin relative I/J-Werte verwenden,
-6. Kreise weiterhin aus Teilbögen statt Vollkreisen bestehen,
-7. Werkzeugwechsel bei Multi-Operation weiterhin sicher mit M0 anhalten,
-8. eine ausgewählte Testdatei von Estlcam ohne Interpreterfehler geladen wird,
-9. der Estlcam-Vorschaupfad geometrisch mit der zuvor in CAMotics bestätigten Bahn übereinstimmt,
-10. der erste reale Frästest an der Maschine kontrolliert erfolgreich durchgeführt wird.
+Geprüft werden insbesondere:
+
+1. `pnpm check` und App-Build laufen sauber,
+2. GRBL zeigt den bisherigen bewiesenen Referenz-G-Code unverändert,
+3. Estlcam-Ausgabe enthält nur den freigegebenen Estlcam-Dialekt,
+4. LinuxCNC behält `G17/G21/G90`, G0–G3, Spindelsteuerung und Programmende korrekt bei,
+5. G2/G3 verwenden weiterhin relative I/J-Werte,
+6. Kreise bleiben aus Teilbögen statt Vollkreisen aufgebaut,
+7. Werkzeugwechsel halten weiterhin sicher mit M0 an,
+8. eine ausgewählte Testdatei wird vom jeweiligen Zielsystem ohne Interpreterfehler geladen,
+9. die controller-spezifische Vorschau bleibt geometrisch identisch zur zuvor in CAMotics bestätigten Bahn,
+10. der reale Frästest mit Estlcam wird kontrolliert erfolgreich durchgeführt.
 
 ## Sicherheitsgrenze
 
 Der erste reale Test beginnt mit konservativen Schnittdaten und einem bereits in CAMotics bestätigten einfachen Werkstück. Änderungen an Werkzeugwegen, Zustellstrategien oder Geometrie sind ausdrücklich nicht Bestandteil von Gate 10A.
 
-**Ziel von 001L ist ausschließlich: bewiesenen BeBlog-CAM-G-Code sicher in Estlcams Controller-Dialekt auszugeben.**
+**001L trennt damit erstmals sauber zwischen CAM-Geometrie und Controller-Dialekt, ohne den bewiesenen 001K-Kern zu verändern.**
