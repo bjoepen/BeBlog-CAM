@@ -29,8 +29,8 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
       const r=validateDrillOperation(summary,operation);opErrors=[...r.errors];opWarnings=[...r.warnings];
       if(stockMode==='none')opWarnings.push('Kein Rohling definiert: Materialgrenzen können nur eingeschränkt geprüft werden.');
       if(stockMode!=='none'&&operation.totalDepthMm>stock.thickness)opWarnings.push(`Bohrtiefe ${operation.totalDepthMm.toFixed(3)} mm überschreitet die Rohlingdicke ${stock.thickness.toFixed(3)} mm.`);
-      if(wcs.z!=='top')opErrors.push('WCS Unterseite ist für Bohren in Gate 9B noch nicht freigegeben.');
-      detail=`${r.holeCount} Bohrposition${r.holeCount===1?'':'en'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
+      if(wcs.z!=='top')opErrors.push('WCS Unterseite ist für Bohren/Helixfräsen in 001V noch nicht freigegeben.');
+      detail=`${operation.method==='helical-mill'?'Helixfräsen':'Bohren'} · ${r.holeCount} Position${r.holeCount===1?'':'en'} · Werkzeug Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }else if(operation.kind==='pocket'){
       const r=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`Tasche · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }else{
