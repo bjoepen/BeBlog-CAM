@@ -7,6 +7,9 @@ import './floh.css';
 mount(App, { target: document.getElementById('app')! });
 
 requestAnimationFrame(() => {
+  const build = document.querySelector<HTMLElement>('.build');
+  if (build) build.textContent = '001P';
+
   const rail = document.querySelector<HTMLElement>('.rail');
   if (rail && !rail.querySelector('.cam-mascot')) {
     mount(CamMascot, { target: rail });
