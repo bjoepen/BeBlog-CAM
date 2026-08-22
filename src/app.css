@@ -22,3 +22,11 @@
 @media(max-width:1260px){.tools-page .content-grid{grid-template-columns:1fr!important;max-width:900px!important;width:100%!important}.tools-page .main-column{padding-right:0!important;border-right:0!important}.tools-page .name-card{grid-template-columns:120px minmax(220px,1fr) auto auto!important}}
 @media(max-width:860px){.tools-page .name-card{grid-template-columns:1fr!important;align-items:stretch!important}.tools-page .name-card label{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}.tools-page .name-card input[type="text"]{grid-column:auto!important;min-width:0!important}.tools-page .diameter-card,.tools-page .two-cards,.tools-page .machine-fields{grid-template-columns:1fr!important}.tools-page input[type="number"],.tools-page input[type="text"]{min-width:0!important}.tools-page .machine-fields>label{grid-template-columns:1fr!important}}
 @media(max-width:1100px){.workspace{grid-template-columns:minmax(0,1fr) 300px}.app-shell{grid-template-columns:150px 1fr}.inspector .tool-shell{left:150px}.tools-page:after{left:20px!important;width:110px!important;background-size:90px auto!important}}
+/* Gate 11C Layout-Schutz: Werkzeugname darf niemals in Nachbarspalten laufen. */
+.tools-page .name-card{display:block!important;min-width:0!important;overflow:hidden!important}
+.tools-page .name-card .field-label{display:block!important;margin:0 0 10px!important}
+.tools-page .name-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto minmax(180px,auto)!important;gap:10px!important;align-items:center!important;width:100%!important;min-width:0!important}
+.tools-page .name-row input[type="text"]{grid-column:auto!important;min-width:0!important;width:100%!important;max-width:none!important}
+.tools-page .name-row .quiet,.tools-page .name-row .primary-action{min-width:0!important;max-width:100%!important}
+@media(max-width:980px){.tools-page .name-row{grid-template-columns:minmax(0,1fr) auto!important}.tools-page .name-row .primary-action{grid-column:1/-1!important;width:100%!important}}
+@media(max-width:720px){.tools-page .name-row{grid-template-columns:1fr!important}.tools-page .name-row .quiet,.tools-page .name-row .primary-action{width:100%!important}}
