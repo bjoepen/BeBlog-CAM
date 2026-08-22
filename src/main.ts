@@ -8,7 +8,7 @@ mount(App, { target: document.getElementById('app')! });
 
 requestAnimationFrame(() => {
   const build = document.querySelector<HTMLElement>('.build');
-  if (build) build.textContent = '001P';
+  if (build) build.textContent = '001R';
 
   const rail = document.querySelector<HTMLElement>('.rail');
   if (rail && !rail.querySelector('.cam-mascot')) {
