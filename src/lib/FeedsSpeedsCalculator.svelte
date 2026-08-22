@@ -4,7 +4,7 @@
 
   type ToolTab='data'|'calculator'|'library';
   type LibraryTool={id:string;name:string;diameterMm:number;flutes:number;chipLoadMm:number};
-  export type ToolOperationTransfer={toolId:string;toolName:string;diameterMm:number;feedMmMin:number;spindleRpm:number};
+  type ToolOperationTransfer={toolId:string;toolName:string;diameterMm:number;feedMmMin:number;spindleRpm:number};
 
   export let activeOperationName='Aktive Bearbeitung';
   export let onApplyToOperation:((transfer:ToolOperationTransfer)=>void)|undefined=undefined;
