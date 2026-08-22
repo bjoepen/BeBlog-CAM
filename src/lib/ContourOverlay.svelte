@@ -24,6 +24,7 @@
   }
 
   function buildScene(..._deps: unknown[]){
+    if(operation.kind==='facing')return null;
     const curves=summary.planarGeometry?.curves??[];if(summary.kind!=='dxf'||!curves.length)return null;
     const rotatedCurves=curves.map((curve,id)=>({id,curve,points:sampleCurve(curve).map(rotate)}));
     const all=rotatedCurves.flatMap(c=>c.points);if(!all.length)return null;const partB=bounds(all);
@@ -65,7 +66,7 @@
 
   $: scene=buildScene(
     operation.kind,
-    (operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):operation.contourId,
+    operation.kind==='facing'?'facing':(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):operation.contourId,
     (operation.kind==='carve'||operation.kind==='drill')?operation.selectionMode:operation.kind,
     (operation.kind==='carve'||operation.kind==='drill')?operation.layerName:operation.kind,
     operation.tool.diameterMm,

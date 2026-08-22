@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import type { CamOperation, OperationKind, OperationsProject } from './types';
-import { defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultDrillOperation, defaultOperationsProject } from './types';
+import { defaultFacingOperation, defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultDrillOperation, defaultOperationsProject } from './types';
 
 export const operationsProjectStore=writable<OperationsProject>({
   operations:defaultOperationsProject.operations.map(op=>cloneOperation(op)),
@@ -15,6 +15,7 @@ export function cloneOperation<T extends CamOperation>(operation:T):T {
 
 export function createOperation(kind:OperationKind,index:number):CamOperation {
   const serial=Math.max(1,index);
+  if(kind==='facing') return {...defaultFacingOperation,id:`op-facing-${serial}`,name:`Planen ${serial}`,tool:{...defaultFacingOperation.tool}};
   if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:`Kontur ${serial}`,tool:{...defaultContourOperation.tool}};
   if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:`Tasche ${serial}`,tool:{...defaultPocketOperation.tool}};
   if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:`Bohren ${serial}`,curveIds:[],tool:{...defaultDrillOperation.tool}};
@@ -52,6 +53,7 @@ export function removeOperation(project:OperationsProject,id:string):OperationsP
 
 export function operationSummary(operation:CamOperation):string {
   const tool=`Ø ${operation.tool.diameterMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm`;
+  if(operation.kind==='facing')return `${operation.direction==='x'?'X-Raster':'Y-Raster'} · ${operation.stepoverPercent}% Zustellung · ${operation.totalDepthMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Abtrag · ${tool}`;
   if(operation.kind==='carve'){
     const source=operation.layerName??'Einzelauswahl';
     return `${source} · ${operation.curveIds.length} Linie${operation.curveIds.length===1?'':'n'} · ${tool}`;
