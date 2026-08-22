@@ -3,6 +3,7 @@
   import { buildClosedChains, offsetPolygon, validateOffsetSegments, buildSemanticContours, offsetSemanticContour, type OffsetValidation } from './contourMath';
   import { buildRectangularPocketPath, buildCircularPocketPath, buildPocketRamp, type PocketPath, type CircularPocketPath } from './pocketMath';
   import { buildParallelPocketPath, type ParallelPocketPath } from './parallelPocketMath';
+  import { pocketHelixRadiusMm } from './helicalMotion';
   export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let operation:ContourOperation|PocketOperation;
   type Level='pass'|'warn'|'fail';type Check={level:Level;title:string;detail:string};type PathCheck={validation:OffsetValidation;method:'circle'|'mixed'|'segmented'};
   type PocketCheck={kind:'raster';path:PocketPath}|{kind:'concentric';path:CircularPocketPath}|{kind:'parallel';path:ParallelPocketPath;lineCount:number;arcCount:number}|{kind:'error';error:string};
@@ -58,8 +59,13 @@
       }
       if(operation.stepoverPercent<=0||operation.stepoverPercent>100)out.push({level:'fail',title:'Seitliche Zustellung',detail:'Stepover muss größer als 0 % und höchstens 100 % sein.'});else{const requested=operation.tool.diameterMm*operation.stepoverPercent/100;out.push({level:'pass',title:'Seitliche Zustellung',detail:`${operation.stepoverPercent.toFixed(1)} % des Werkzeugdurchmessers = max. ${requested.toFixed(3)} mm.`});}
       if(operation.entry==='plunge')out.push({level:'pass',title:'Eintauchstrategie',detail:pocket?.kind==='concentric'?'Senkrechtes Eintauchen im Kreismittelpunkt.':pocket?.kind==='parallel'?'Senkrechtes Eintauchen; jeder konturparallele Offset wird separat auf Sicherheits-Z angefahren.':'Senkrechtes Eintauchen mit dem definierten Eintauchvorschub.'});
-      else if(pocket?.kind==='concentric')out.push({level:'fail',title:'Eintauchstrategie',detail:'Lineare Rampe ist für die Kreistasche noch nicht freigegeben. Bitte „Senkrecht“ wählen.'});
-      else if(pocket?.kind==='parallel')out.push({level:'fail',title:'Eintauchstrategie',detail:'Lineare Rampe ist für konturparallele Taschen in Gate 8B noch nicht freigegeben. Bitte „Senkrecht“ wählen.'});
+      else if(operation.entry==='helix'){
+        if(!pocket||pocket.kind!=='concentric'||!pocket.path.ok)out.push({level:'fail',title:'Eintauchstrategie',detail:'Helix-Eintauchen ist bewusst nur für eine gültige native Kreistasche freigegeben.'});
+        else if(operation.tool.kind!=='end-mill')out.push({level:'fail',title:'Eintauchstrategie',detail:'Helix-Eintauchen benötigt einen Schaftfräser aus der Werkzeugbibliothek.'});
+        else{const helixRadius=pocketHelixRadiusMm(pocket.path.maxCenterRadiusMm,operation.tool.diameterMm);out.push(helixRadius>0?{level:'pass',title:'Eintauchstrategie',detail:`Helix-Eintauchen mit Fräsermittelbahnradius ${helixRadius.toFixed(3)} mm. Jede Z-Stufe wird auf einer G3-Helix erreicht; anschließend wird die Kreistasche konzentrisch nach außen geräumt.`}:{level:'fail',title:'Eintauchstrategie',detail:'Für Werkzeug und Kreistasche bleibt kein positiver Helixbahnradius.'});}
+      }
+      else if(pocket?.kind==='concentric')out.push({level:'fail',title:'Eintauchstrategie',detail:'Lineare Rampe ist für die Kreistasche nicht freigegeben. Bitte „Senkrecht“ oder „Helix“ wählen.'});
+      else if(pocket?.kind==='parallel')out.push({level:'fail',title:'Eintauchstrategie',detail:'Lineare Rampe ist für konturparallele Taschen noch nicht freigegeben. Bitte „Senkrecht“ wählen.'});
       else if(!pocket||pocket.kind!=='raster'||!pocket.path.ok)out.push({level:'fail',title:'Eintauchstrategie',detail:'Rampe kann erst nach gültiger Raster-Taschengeometrie geprüft werden.'});
       else{const maxIncrement=Math.min(operation.stepDownMm,operation.totalDepthMm),ramp=buildPocketRamp(pocket.path,maxIncrement,operation.rampAngleDeg);out.push(ramp.ok?{level:'pass',title:'Eintauchstrategie',detail:`Lineare Rampe ${operation.rampAngleDeg.toFixed(1)}° · benötigt ${ramp.lengthMm.toFixed(3)} mm · verfügbar ${ramp.availableMm.toFixed(3)} mm.`}:{level:'fail',title:'Eintauchstrategie',detail:ramp.error??'Rampe ist geometrisch nicht möglich.'});}
     }else{
