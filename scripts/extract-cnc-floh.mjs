@@ -21,21 +21,21 @@ if (start === -1) {
 }
 
 const dataStart = start + marker.length;
-const quoteBefore = svg.lastIndexOf('"', start);
-const singleQuoteBefore = svg.lastIndexOf("'", start);
-const quoteChar = quoteBefore > singleQuoteBefore ? '"' : "'";
-const end = svg.indexOf(quoteChar, dataStart);
+const remainder = svg.slice(dataStart);
+const match = remainder.match(/^([A-Za-z0-9+/=\r\n\t ]+)/);
 
-if (end === -1) {
-  throw new Error('Embedded PNG data URL in public/cnc-floh.svg is not properly quoted.');
+if (!match) {
+  throw new Error('Embedded PNG data URL was found, but contains no Base64 payload.');
 }
 
-const base64 = svg.slice(dataStart, end).replace(/\s+/g, '');
+const base64 = match[1].replace(/\s+/g, '');
 const png = Buffer.from(base64, 'base64');
 
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 if (png.length < 8 || !png.subarray(0, 8).equals(pngSignature)) {
-  throw new Error('Embedded image data decoded, but it is not a valid PNG stream.');
+  throw new Error(
+    `Embedded image data decoded (${png.length} Bytes), but it is not a valid PNG stream.`
+  );
 }
 
 await writeFile(pngPath, png);
