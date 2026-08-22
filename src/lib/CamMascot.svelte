@@ -1,5 +1,5 @@
 <div class="cam-mascot" aria-label="BeBlog CAM Floh">
-  <img src="/cnc-floh.svg" alt="BeBlog CAM Floh" />
+  <img src="/cnc-floh.png" alt="BeBlog CAM Floh" />
   <p>Klarheit schafft präzise Späne.</p>
 </div>
 
