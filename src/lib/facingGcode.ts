@@ -66,17 +66,18 @@ export function generateFacingGcode(args:{stock:StockDefinition;stockMode:StockM
 
   for(let level=1;level<=levels;level++){
     const z=-Math.min(level*operation.stepDownMm,operation.totalDepthMm);
-    lines.push(`( Planstufe ${level}/${levels} · Z${f3(z)} )`,`G0 Z${f3(operation.safeZMm)}`);
+    const first=operation.direction==='x'?{x:startTraverse,y:lanes[0]}:{x:lanes[0],y:startTraverse};
+    lines.push(`( Planstufe ${level}/${levels} · Z${f3(z)} )`,`G0 Z${f3(operation.safeZMm)}`,`G0 X${f3(first.x)} Y${f3(first.y)}`,`G1 Z${f3(z)} F${Math.round(operation.plungeMmMin)}`);
     lanes.forEach((crossValue,index)=>{
       const forward=index%2===0;
-      const a=forward?startTraverse:endTraverse;
-      const b=forward?endTraverse:startTraverse;
-      const start=operation.direction==='x'?{x:a,y:crossValue}:{x:crossValue,y:a};
-      const end=operation.direction==='x'?{x:b,y:crossValue}:{x:crossValue,y:b};
-      lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
-      if(index===0)lines.push(`G1 Z${f3(z)} F${Math.round(operation.plungeMmMin)}`);
-      else lines.push(`G1 Z${f3(z)} F${Math.round(operation.plungeMmMin)}`);
+      const traverseValue=forward?endTraverse:startTraverse;
+      const end=operation.direction==='x'?{x:traverseValue,y:crossValue}:{x:crossValue,y:traverseValue};
       lines.push(`G1 X${f3(end.x)} Y${f3(end.y)} F${Math.round(operation.feedMmMin)}`);
+      const next=lanes[index+1];
+      if(next!==undefined){
+        const crossMove=operation.direction==='x'?{x:traverseValue,y:next}:{x:next,y:traverseValue};
+        lines.push(`G1 X${f3(crossMove.x)} Y${f3(crossMove.y)} F${Math.round(operation.feedMmMin)}`);
+      }
     });
   }
   lines.push(`G0 Z${f3(operation.safeZMm)}`,'M5','M30');
