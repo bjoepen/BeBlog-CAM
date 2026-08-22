@@ -10,15 +10,7 @@ mount(App, { target: document.getElementById('app')! });
 let materialSelector: ReturnType<typeof mount> | null = null;
 let materialHost: HTMLElement | null = null;
 
-function syncShellEnhancements() {
-  const build = document.querySelector<HTMLElement>('.build');
-  if (build) build.textContent = '001S';
-
-  const rail = document.querySelector<HTMLElement>('.rail');
-  if (rail && !rail.querySelector('.cam-mascot')) {
-    mount(CamMascot, { target: rail });
-  }
-
+function syncMaterialSelector() {
   const inspector = document.querySelector<HTMLElement>('.inspector');
   const eyebrow = inspector?.querySelector<HTMLElement>('.eyebrow');
   const isStockStep = eyebrow?.textContent?.trim().startsWith('02 · Rohling') ?? false;
@@ -41,9 +33,18 @@ function syncShellEnhancements() {
 }
 
 requestAnimationFrame(() => {
-  syncShellEnhancements();
+  const build = document.querySelector<HTMLElement>('.build');
+  if (build && build.textContent !== '001S') build.textContent = '001S';
+
+  const rail = document.querySelector<HTMLElement>('.rail');
+  if (rail && !rail.querySelector('.cam-mascot')) {
+    mount(CamMascot, { target: rail });
+  }
+
+  syncMaterialSelector();
+
   const root = document.getElementById('app');
   if (!root) return;
-  const observer = new MutationObserver(syncShellEnhancements);
+  const observer = new MutationObserver(syncMaterialSelector);
   observer.observe(root, { childList: true, subtree: true });
 });
