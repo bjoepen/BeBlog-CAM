@@ -60,7 +60,8 @@ export function operationSummary(operation:CamOperation):string {
   }
   if(operation.kind==='drill'){
     const source=operation.layerName??'Einzelauswahl';
-    return `${source} · ${operation.curveIds.length} Bohrung${operation.curveIds.length===1?'':'en'} · ${tool}`;
+    const method=operation.method==='helical-mill'?'Helixfräsen':'Bohren';
+    return `${method} · ${source} · ${operation.curveIds.length} Bohrung${operation.curveIds.length===1?'':'en'} · ${tool}`;
   }
   if(operation.kind==='contour')return `${operation.contourId===null?'Keine Kontur':`Kontur ${operation.contourId+1}`} · ${operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie'} · ${tool}`;
   const strategy=operation.strategy==='auto'?'Auto':operation.strategy==='raster'?'Raster':operation.strategy==='concentric'?'Kreis':'Konturparallel';
