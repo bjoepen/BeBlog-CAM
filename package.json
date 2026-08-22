@@ -5,9 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@10.34.5",
   "scripts": {
-    "prepare:floh": "node scripts/extract-cnc-floh.mjs",
-    "dev": "pnpm prepare:floh && vite",
-    "build": "pnpm prepare:floh && vite build",
+    "dev": "vite",
+    "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
