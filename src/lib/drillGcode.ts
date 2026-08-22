@@ -53,7 +53,7 @@ function emitAxialDrill(lines:string[],p:DrillPoint,index:number,count:number,op
 function emitHelicalMill(lines:string[],p:DrillPoint,index:number,count:number,operation:DrillOperation){
   const pathRadius=p.sourceRadiusMm-operation.tool.diameterMm/2;
   const rightX=p.x+pathRadius,leftX=p.x-pathRadius;
-  lines.push(`( Helixbohrung ${index+1}/${count} · DXF-Kreis ${p.id+1} · Soll Ø${f3(p.sourceRadiusMm*2)} mm )`,`( Fräsermittelbahnradius ${f3(pathRadius)} mm · Helix-Zustellung ${f3(operation.stepDownMm)} mm/U )`,`G0 X${f3(rightX)} Y${f3(p.y)}`,'G0 Z0.000');
+  lines.push(`( Helixbohrung ${index+1}/${count} · DXF-Kreis ${p.id+1} · Soll Ø${f3(p.sourceRadiusMm*2)} mm )`,`( Fräsermittelbahnradius ${f3(pathRadius)} mm · Helix-Zustellung ${f3(operation.stepDownMm)} mm/U )`,`G0 X${f3(rightX)} Y${f3(p.y)}`,`G1 Z0.000 F${Math.round(operation.plungeMmMin)}`);
   let depth=0,turn=0;
   while(depth<operation.totalDepthMm-1e-9){
     turn++;
