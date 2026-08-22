@@ -65,6 +65,12 @@ Alte 001S-Einträge ohne Fräsertyp werden beim Laden automatisch als **Schaftfr
 
 Werkstoffdaten bleiben weiterhin ausdrücklich getrennt und gehören zum Rohling.
 
+## Teststrategie in 001T
+
+Das Projekt besitzt aktuell noch kein allgemeines JavaScript-/TypeScript-Testframework und keinen `pnpm test`-Script. 001T führt deshalb bewusst **kein isoliertes Vitest-Setup** ein. Das Typmodell wird in diesem Build über TypeScript/Svelte-Diagnostik, den Produktionsbuild und die nachfolgenden Real-World-Gates geprüft.
+
+Ein einheitliches automatisiertes Testfundament für das gesamte CAM-Projekt sollte als eigener Infrastruktur-Schritt eingeführt werden, statt nur für eine einzelne Funktion eine zusätzliche Testabhängigkeit zu etablieren.
+
 ## Nicht Bestandteil von 001T
 
 - neue CAM-Bearbeitungsstrategien
@@ -74,6 +80,7 @@ Werkstoffdaten bleiben weiterhin ausdrücklich getrennt und gehören zum Rohling
 - Planfräs-Operation
 - werkzeugtypspezifische Materialtabellen
 - Bohrertypologie
+- Einführung eines neuen projektweiten Testframeworks
 
 Diese Punkte bauen später auf dem 001T-Typmodell auf.
 
@@ -114,7 +121,6 @@ Bei gleichem Material müssen die vorhandenen Drehzahl-/Vorschubberechnung und M
 
 ```bash
 pnpm check
-pnpm test
 pnpm build
 ```
 
@@ -130,3 +136,5 @@ Zusätzlich prüfen:
 - Rohling-/Materialauswahl funktioniert weiterhin.
 - Floh bleibt persistent.
 - Bohren, Kontur, Tasche und Carven lassen sich weiterhin auswählen.
+
+Die bestehenden Accessibility-Warnungen in `ContourOverlay.svelte` sind vor 001T vorhanden und werden in diesem Build nicht funktional verändert. Sie sind separat zu behandeln; 001T darf keine neuen Warnungen hinzufügen.
