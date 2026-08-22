@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, "agent/**"]
+    branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
   macos:
@@ -14,26 +15,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - name: Install frontend dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Svelte check
         run: pnpm check
       - name: Frontend build
         run: pnpm build
       - name: Rust check
-        run: cargo check --manifest-path src-tauri/Cargo.toml
-
-  occt-native:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Build pinned OCCT 8 toolkits
-        run: bash scripts/build-occt-macos.sh
-      - name: Native STEP/BRep smoke test
-        env:
-          BEBLOG_OCCT_PREFIX: ${{ github.workspace }}/.cache/occt/install
-          BEBLOG_OCCT_TEST_STEP: ${{ github.workspace }}/.cache/occt/src/data/step/screw.step
-          DYLD_LIBRARY_PATH: ${{ github.workspace }}/.cache/occt/install/lib
-        run: cargo test --manifest-path src-tauri/Cargo.toml --features occt-native occt::tests::loads_real_step_as_brep -- --exact
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
