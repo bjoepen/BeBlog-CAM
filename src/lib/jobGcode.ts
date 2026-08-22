@@ -37,7 +37,7 @@ export function generateJobGcode(args:Args):JobGcodeResult{
   if(!operations.length)return{ok:false,errors:['Keine aktive Bearbeitung im Projekt.'],warnings,code:'',lineCount:0,operationCount:0,toolChangeCount:0};
   const generated=operations.map((operation,index)=>{const result=generateOperation(args,operation);if(!result.ok)for(const error of result.errors)errors.push(`Bearbeitung ${index+1} · ${label(operation)}: ${error}`);for(const warning of result.warnings)warnings.push(`Bearbeitung ${index+1} · ${label(operation)}: ${warning}`);return{operation,result};});
   if(errors.length)return{ok:false,errors,warnings,code:'',lineCount:0,operationCount:operations.length,toolChangeCount:0};
-  const lines:string[]=[];lines.push('( BeBlog CAM 001U )','( Gesamtjob · mehrere gepruefte 2D-Bearbeitungen )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');let toolChangeCount=0;
+  const lines:string[]=[];lines.push('( BeBlog CAM 001W )','( Gesamtjob · mehrere gepruefte 2D-Bearbeitungen )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');let toolChangeCount=0;
   generated.forEach(({operation,result},index)=>{
     lines.push(`( Bearbeitung ${index+1}/${operations.length} · ${label(operation)} · ${operation.name} )`);lines.push(...operationBody(result.code));
     const next=generated[index+1]?.operation;if(!next)return;const safe=Math.max(operation.safeZMm,next.safeZMm);lines.push(`G0 Z${f3(safe)}`);
