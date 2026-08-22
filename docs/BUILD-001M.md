@@ -59,15 +59,15 @@ Die Material-Schnellwahl bleibt in 001M bewusst ohne automatische Schnittwerte. 
 
 ## Gate 11C — Werkzeugdaten und Werkzeugbibliothek
 
-Status: **TEIL 1 IMPLEMENTIERT / TESTBEREIT**
+Status: **TEIL 1 PASS / TEIL 2 IMPLEMENTIERT / TESTBEREIT**
 
-Die drei Werkzeug-Tabs sind jetzt echte Zustände statt rein visueller Platzhalter:
+Die drei Werkzeug-Tabs sind echte Zustände:
 
 1. **Werkzeugdaten**
 2. **Drehzahl & Vorschub**
 3. **Werkzeugbibliothek**
 
-### Werkzeugdaten
+### Teil 1 — Werkzeugdaten und Bibliothek
 
 Ein Werkzeug besitzt im aktuellen Gate:
 
@@ -76,42 +76,55 @@ Ein Werkzeug besitzt im aktuellen Gate:
 - Schneidenzahl,
 - Zahnvorschub.
 
-Der Nutzer kann ein neues Werkzeug anlegen oder ein aus der Bibliothek geladenes Werkzeug aktualisieren.
-
-### Drehzahl & Vorschub
-
-Der Rechenkern ist nun als eigener Werkzeug-Tab organisiert. Werkzeugdaten und Maschinenprofil bleiben sichtbar getrennt.
-
-Der Tab zeigt:
-
-- Schnittgeschwindigkeit,
-- Zahnvorschub,
-- rechnerische Drehzahl und Vorschub,
-- begrenzte Werte für das Maschinenprofil,
-- aktive Werkzeugdaten,
-- Material-Schnellwahl weiterhin ohne versteckte Presets.
-
-### Werkzeugbibliothek
-
 Werkzeuge können lokal gespeichert, wieder geladen, bearbeitet und gelöscht werden.
 
 Persistenz:
 
 `localStorage` unter Version-Key `beblog-cam.tool-library.v1`.
 
-Damit ist die Bibliothek bewusst lokal und benötigt weder Cloud noch Account.
+Gespeichert werden ausschließlich Werkzeugdaten. Material- und Maschinenwerte werden nicht in ein Werkzeug eingebrannt.
 
-Gespeichert werden ausschließlich Werkzeugdaten. Material- und Maschinenwerte werden nicht in ein Werkzeug eingebrannt, damit die Bibliothek nicht unbemerkt Maschinen- oder Materialannahmen transportiert.
+Das Werkzeugformular ist gegen Selbstüberlagerung geschützt und bricht bei geringerer Fensterbreite kontrolliert responsiv um.
 
-### Scope-Grenze 11C Teil 1
+### Teil 2 — Explizite Übergabe in die aktive CAM-Bearbeitung
 
-Noch **nicht** umgesetzt ist die verbindliche Übergabe eines Bibliothekswerkzeugs samt bestätigter Schnittdaten in die aktive CAM-Bearbeitung.
+Die Übergabe ist jetzt implementiert und muss als eigener Real-World-/UI-Test bestätigt werden.
 
-Dieser Übergabepunkt wird als eigener zweiter Teil von Gate 11C umgesetzt und getestet. Ziel ist:
+Im Tab **Drehzahl & Vorschub** gibt es einen expliziten Button:
 
-**Werkzeug auswählen → Schnittdaten bestätigen → aktive Bearbeitung übernimmt Werkzeug, Drehzahl und Vorschub sichtbar und explizit.**
+**Werkzeug & Schnittdaten übernehmen**
 
-Die Übergabe darf bestehende Bearbeitungen nicht still verändern und benötigt daher einen eigenen Test.
+Erst dieser Button verändert die aktive CAM-Bearbeitung. Das bloße Laden oder Auswählen eines Bibliothekswerkzeugs bleibt folgenlos für bestehende Operationen.
+
+Übernommen werden ausschließlich:
+
+- Werkzeug-ID und Werkzeugname,
+- Werkzeugdurchmesser,
+- empfohlene bzw. durch das Maschinenprofil begrenzte Spindeldrehzahl,
+- dazu passend berechneter Vorschub.
+
+Bewusst **nicht** verändert werden:
+
+- Gesamttiefe,
+- Zustellung,
+- Eintauchvorschub,
+- Sicherheits-Z,
+- operationsspezifische Geometrie- und Strategiewerte.
+
+Nach der Übergabe zeigt der Werkzeug-Tab eine sichtbare Bestätigung mit Zieloperation und den übernommenen Werten.
+
+### Testziel Teil 2
+
+1. Eine CAM-Operation als aktiv wählen.
+2. Unter **Werkzeuge → Drehzahl & Vorschub** Werkzeug und Maschinenprofil einstellen.
+3. Vor dem Übernehmen die Werte der aktiven Operation unter **Bearbeiten** notieren.
+4. **Werkzeug & Schnittdaten übernehmen** auslösen.
+5. Unter **Bearbeiten** prüfen:
+   - Werkzeugdurchmesser wurde übernommen,
+   - Vorschub wurde übernommen,
+   - Drehzahl wurde übernommen,
+   - Tiefe, Zustellung, Eintauchvorschub und Sicherheits-Z sind unverändert.
+6. Bei mehreren Operationen sicherstellen, dass ausschließlich die zum Zeitpunkt der Übergabe aktive Operation geändert wurde.
 
 ## CNC-Floh
 
