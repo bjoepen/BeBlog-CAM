@@ -1,0 +1,18 @@
+/* Persistenter BeBlog-CAM-Floh: die Sidebar bleibt ueber alle Workflow-Schritte stabil. */
+.rail{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+
+.rail > button{
+  flex:0 0 auto;
+}
+
+/* Alte Pseudoelement-Loesungen sind absichtlich deaktiviert. */
+.rail::before,
+.rail::after,
+.tools-page::after{
+  content:none!important;
+  display:none!important;
+}

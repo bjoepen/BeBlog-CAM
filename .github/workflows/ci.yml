@@ -11,8 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -25,3 +23,17 @@ jobs:
         run: pnpm build
       - name: Rust check
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+  occt-native:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build pinned OCCT 8 toolkits
+        run: bash scripts/build-occt-macos.sh
+      - name: Native STEP/BRep smoke test
+        env:
+          BEBLOG_OCCT_PREFIX: ${{ github.workspace }}/.cache/occt/install
+          BEBLOG_OCCT_TEST_STEP: ${{ github.workspace }}/.cache/occt/src/data/step/screw.step
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/.cache/occt/install/lib
+        run: cargo test --manifest-path src-tauri/Cargo.toml --features occt-native occt::tests::loads_real_step_as_brep -- --exact
