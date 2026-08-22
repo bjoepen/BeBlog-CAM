@@ -34,7 +34,7 @@ function syncMaterialSelector() {
 
 requestAnimationFrame(() => {
   const build = document.querySelector<HTMLElement>('.build');
-  if (build && build.textContent !== '001T') build.textContent = '001T';
+  if (build && build.textContent !== '001U') build.textContent = '001U';
 
   const rail = document.querySelector<HTMLElement>('.rail');
   if (rail && !rail.querySelector('.cam-mascot')) {
