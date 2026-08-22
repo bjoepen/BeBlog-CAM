@@ -6,6 +6,14 @@ src-tauri/icons/icon.png
 .vscode/
 .idea/
 
+# Local/generated build caches
+.cache/
+src-tauri/gen/
+
+# Lockfiles are intentionally tracked for reproducible application builds:
+# - pnpm-lock.yaml
+# - src-tauri/Cargo.lock
+
 # macOS
 .DS_Store
 .AppleDouble
