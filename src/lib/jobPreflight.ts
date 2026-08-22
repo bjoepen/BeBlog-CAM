@@ -1,4 +1,5 @@
 import type { CamOperation, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
+import { generateFacingGcode } from './facingGcode';
 import { generateContourGcode } from './gcode';
 import { generatePocketGcode } from './pocketGcode';
 import { validateCarveOperation } from './carveMath';
@@ -8,7 +9,7 @@ export type JobPreflightLevel='pass'|'warn'|'fail';
 export type JobPreflightOperation={id:string;index:number;kind:CamOperation['kind'];label:string;detail:string;level:JobPreflightLevel;errors:string[];warnings:string[]};
 export type JobPreflightResult={level:JobPreflightLevel;operations:JobPreflightOperation[];enabledCount:number;toolChanges:number;errors:string[];warnings:string[]};
 
-const kindLabel=(kind:CamOperation['kind'])=>kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':'Bohren';
+const kindLabel=(kind:CamOperation['kind'])=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':'Bohren';
 const toolKey=(op:CamOperation)=>`${op.tool.name}|${op.tool.diameterMm.toFixed(6)}`;
 
 export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[]}):JobPreflightResult{
@@ -17,7 +18,9 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
   const operations:JobPreflightOperation[]=[];const errors:string[]=[];const warnings:string[]=[];
   enabled.forEach((operation,index)=>{
     let opErrors:string[]=[];let opWarnings:string[]=[];let detail='';
-    if(operation.kind==='carve'){
+    if(operation.kind==='facing'){
+      const r=generateFacingGcode({stock,stockMode,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`${operation.direction==='x'?'X-Raster':'Y-Raster'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm Abtrag`;
+    }else if(operation.kind==='carve'){
       const r=validateCarveOperation(summary,operation);opErrors=[...r.errors];opWarnings=[...r.warnings];
       if(stockMode==='none')opWarnings.push('Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.');
       if(wcs.z!=='top')opErrors.push('WCS Unterseite ist für Carve noch nicht freigegeben.');
