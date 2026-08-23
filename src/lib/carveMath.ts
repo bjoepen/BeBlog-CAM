@@ -1,4 +1,5 @@
 import type { Curve2, ImportSummary, CarveOperation } from './types';
+import { validateToolCompatibility } from './validationGrammar';
 
 export type CarveSegmentCheck = {
   id:number;
@@ -19,15 +20,14 @@ export type CarvePreflightResult = {
 const length=(a:{x:number;y:number},b:{x:number;y:number})=>Math.hypot(b.x-a.x,b.y-a.y);
 
 /**
- * Gate 6C is intentionally conservative: the first verified Carve path accepts
- * exact DXF LINE entities only. ARC/open polyline selection remains visible in
- * the UX, but is rejected here until its native interpolation is regression-tested.
- * This keeps the CBG fret-slot reference mathematically simple and auditable.
+ * Carve remains intentionally conservative: the verified path accepts exact
+ * DXF LINE entities only. ARC/open polyline selection stays visible in the UX,
+ * but is rejected until native interpolation has its own regression proof.
  */
 export function validateCarveOperation(summary:ImportSummary,operation:CarveOperation):CarvePreflightResult{
   const errors:string[]=[],warnings:string[]=[];
   const segments:CarveSegmentCheck[]=[];
-  if(summary.kind!=='dxf')errors.push('Carve ist in 001H Gate 6C zunächst nur für DXF freigegeben.');
+  if(summary.kind!=='dxf')errors.push('Carve ist aktuell nur für DXF freigegeben.');
   const curves=summary.planarGeometry?.curves??[];
   const layers=summary.planarGeometry?.curveLayers??[];
   const ids=[...new Set(operation.curveIds)].sort((a,b)=>a-b);
@@ -39,7 +39,7 @@ export function validateCarveOperation(summary:ImportSummary,operation:CarveOper
     if(!curve){errors.push(`Geometrie ${id+1} existiert in der aktuellen DXF nicht.`);continue;}
     if(curve.kind!=='line'){
       const label=curve.kind==='arc'?'Bogen':curve.kind==='polyline'?'Polylinie':curve.kind==='circle'?'Kreis':'Geometrie';
-      errors.push(`Geometrie ${id+1} (${label}) ist in Gate 6C noch nicht freigegeben. Der erste Carve-Referenzpfad verwendet exakte offene DXF-Linien.`);
+      errors.push(`Geometrie ${id+1} (${label}) ist für den aktuellen Carve-Pfad noch nicht freigegeben. Der verifizierte Referenzpfad verwendet exakte offene DXF-Linien.`);
       continue;
     }
     const len=length(curve.start,curve.end);
@@ -52,6 +52,10 @@ export function validateCarveOperation(summary:ImportSummary,operation:CarveOper
   if(!(operation.stepDownMm>0))errors.push('Zustellung muss größer als 0 sein.');
   if(!(operation.feedMmMin>0&&operation.plungeMmMin>0&&operation.spindleRpm>0))errors.push('Vorschub, Eintauchvorschub und Drehzahl müssen größer als 0 sein.');
   if(!(operation.safeZMm>0))errors.push('Sicherheits-Z muss größer als 0 sein.');
+
+  const compatibility=validateToolCompatibility(operation);
+  if(compatibility.level==='fail')errors.push(compatibility.detail);
+  else if(compatibility.level==='warn')warnings.push(compatibility.detail);
 
   const passes=operation.stepDownMm>0&&operation.totalDepthMm>0?Math.ceil(operation.totalDepthMm/operation.stepDownMm):0;
   const totalLengthMm=segments.reduce((sum,s)=>sum+s.lengthMm,0);
