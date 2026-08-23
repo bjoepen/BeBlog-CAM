@@ -13,6 +13,10 @@ type OperationCode={ok:boolean;errors:string[];warnings:string[];code:string};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
 const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':'Bohren';
 const toolKey=(op:CamOperation)=>`${op.tool.name}|${op.tool.diameterMm.toFixed(6)}`;
+const operationDisplayName=(op:CamOperation,index:number)=>{
+  const expected=label(op),name=op.name.trim();
+  return name.startsWith(expected)?name:`${expected} ${index+1}`;
+};
 
 function generateOperation(args:Args,operation:CamOperation):OperationCode{
   const common={summary:args.summary,stock:args.stock,stockMode:args.stockMode,placement:args.placement,orientation:args.orientation,wcs:args.wcs};
@@ -37,9 +41,9 @@ export function generateJobGcode(args:Args):JobGcodeResult{
   if(!operations.length)return{ok:false,errors:['Keine aktive Bearbeitung im Projekt.'],warnings,code:'',lineCount:0,operationCount:0,toolChangeCount:0};
   const generated=operations.map((operation,index)=>{const result=generateOperation(args,operation);if(!result.ok)for(const error of result.errors)errors.push(`Bearbeitung ${index+1} · ${label(operation)}: ${error}`);for(const warning of result.warnings)warnings.push(`Bearbeitung ${index+1} · ${label(operation)}: ${warning}`);return{operation,result};});
   if(errors.length)return{ok:false,errors,warnings,code:'',lineCount:0,operationCount:operations.length,toolChangeCount:0};
-  const lines:string[]=[];lines.push('( BeBlog CAM 001W )','( Gesamtjob · mehrere gepruefte 2D-Bearbeitungen )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');let toolChangeCount=0;
+  const lines:string[]=[];lines.push('( BeBlog CAM 001Y )','( Gesamtjob · mehrere gepruefte 2D-Bearbeitungen )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');let toolChangeCount=0;
   generated.forEach(({operation,result},index)=>{
-    lines.push(`( Bearbeitung ${index+1}/${operations.length} · ${label(operation)} · ${operation.name} )`);lines.push(...operationBody(result.code));
+    lines.push(`( Bearbeitung ${index+1}/${operations.length} · ${label(operation)} · ${operationDisplayName(operation,index)} )`);lines.push(...operationBody(result.code));
     const next=generated[index+1]?.operation;if(!next)return;const safe=Math.max(operation.safeZMm,next.safeZMm);lines.push(`G0 Z${f3(safe)}`);
     if(toolKey(operation)!==toolKey(next)){toolChangeCount++;lines.push('M5',`( Werkzeugwechsel ${toolChangeCount} )`,`M0 ( Werkzeug ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm einsetzen und bestaetigen )`);}else lines.push(`( Gleiches Werkzeug · ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm )`);
   });
