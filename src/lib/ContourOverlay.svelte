@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation, Curve2 } from './types';
+  import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation, Curve2, OpenContourSide } from './types';
   import { buildClosedChains, offsetPolygon, sampleCurve, type P2 } from './contourMath';
   import { buildOpenChains, offsetOpenChain } from './openContour';
 
@@ -22,6 +22,15 @@
   function fit(points:P2[]){
     const b=bounds(points),sx=Math.max(b.maxX-b.minX,1e-9),sy=Math.max(b.maxY-b.minY,1e-9),scale=Math.min((width-2*pad)/sx,(height-2*pad)/sy),ox=(width-sx*scale)/2,oy=(height-sy*scale)/2;
     return(p:P2)=>({x:ox+(p.x-b.minX)*scale,y:height-(oy+(p.y-b.minY)*scale)});
+  }
+
+  function chooseClosed(id:number){
+    if(operation.kind==='contour')operation.topology='closed';
+    onSelectContour(id,'closed');
+  }
+  function chooseOpen(id:number,side:OpenContourSide){
+    if(operation.kind==='contour'){operation.topology='open';operation.openSide=side;}
+    onSelectContour(id,'open');
   }
 
   function buildScene(..._deps: unknown[]){
@@ -66,8 +75,15 @@
     const selectedOpen=operation.topology==='open'&&operation.contourId!=null?os.find(c=>c.id===operation.contourId)??null:null;
     let tool:P2[]|null=null;
     if(selectedClosed){const r=operation.tool.diameterMm/2,d=operation.side==='outside'?r:operation.side==='inside'?-r:0;tool=offsetPolygon(selectedClosed.points,d);}
-    if(selectedOpen){const off=offsetOpenChain(selectedOpen.points,operation.tool.diameterMm/2,operation.openSide,.003);tool=off.points;}
-    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open:os.map(c=>({...c,screen:c.points.map(map)})),selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,tool:tool?tool.map(map):null};
+    if(selectedOpen){tool=offsetOpenChain(selectedOpen.points,operation.tool.diameterMm/2,operation.openSide,.003).points;}
+    const radius=operation.tool.diameterMm/2;
+    const open=os.map(c=>({
+      ...c,
+      screen:c.points.map(map),
+      left:offsetOpenChain(c.points,radius,'left',.003).points.map(map),
+      right:offsetOpenChain(c.points,radius,'right',.003).points.map(map)
+    }));
+    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,tool:tool?tool.map(map):null};
   }
 
   $: scene=buildScene(
@@ -110,16 +126,21 @@
     {:else}
       {#each scene.closed as chain}
         <path d={path(chain.screen,true)} class="candidate" />
-        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id,'closed')}><title>Geschlossene Kontur {chain.id+1} auswählen</title></path>
+        <path d={path(chain.screen,true)} class="pick" onclick={()=>chooseClosed(chain.id)}><title>Geschlossene Kontur {chain.id+1} auswählen</title></path>
       {/each}
       {#each scene.open as chain}
         <path d={path(chain.screen,false)} class="open-candidate" />
-        <path d={path(chain.screen,false)} class="open-pick" onclick={()=>onSelectContour(chain.id,'open')}><title>Offene Kontur {chain.id+1} auswählen</title></path>
+        <path d={path(chain.left,false)} class="open-side-preview" />
+        <path d={path(chain.right,false)} class="open-side-preview" />
+        <path d={path(chain.left,false)} class="open-side-pick" onclick={()=>chooseOpen(chain.id,'left')}><title>Offene Kontur {chain.id+1} · Werkzeug links der Kette</title></path>
+        <path d={path(chain.right,false)} class="open-side-pick" onclick={()=>chooseOpen(chain.id,'right')}><title>Offene Kontur {chain.id+1} · Werkzeug rechts der Kette</title></path>
+        <path d={path(chain.screen,false)} class="open-center-pick" onclick={()=>chooseOpen(chain.id,'on-line')}><title>Offene Kontur {chain.id+1} · Werkzeug auf Linie</title></path>
       {/each}
       {#if scene.selected}<path d={path(scene.selected.screen,scene.selected.closed)} class="selected"/>{/if}
       {#if scene.tool}<path d={path(scene.tool,false)} class="toolpath"/>{/if}
     {/if}
   </svg>
+  {#if scene.kind==='contour'}<div class="open-help">Offene Kontur: direkt die gewünschte Werkzeugseite anklicken. Anfang und Ende bleiben offen.</div>{/if}
   <div class="caption-spacer"></div>
 </div>
 {/if}
@@ -129,10 +150,13 @@
   svg{width:100%;display:block;overflow:visible;pointer-events:auto}
   .caption-spacer{height:30px;pointer-events:none}
   .candidate{fill:none;stroke:rgba(194,117,40,.10);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}
-  .open-candidate{fill:none;stroke:rgba(76,111,139,.20);stroke-width:1.7;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;pointer-events:none}
-  .pick,.open-pick{fill:none;stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+  .open-candidate{fill:none;stroke:rgba(76,111,139,.28);stroke-width:1.7;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;pointer-events:none}
+  .open-side-preview{fill:none;stroke:rgba(177,69,59,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}
+  .pick,.open-side-pick,.open-center-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+  .open-center-pick{stroke-width:8}
   .selected{fill:none;stroke:rgba(194,117,40,.9);stroke-width:2.2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
+  .open-help{margin:-8px auto 0;width:max-content;max-width:86%;padding:6px 9px;border-radius:6px;background:rgba(250,250,248,.92);color:#666b66;font-size:.72rem;pointer-events:none}
   .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}
   .carve-candidate.selected-carve{stroke:#b1453b;stroke-width:2.2}
   .carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
