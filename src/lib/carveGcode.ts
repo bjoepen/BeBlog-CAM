@@ -20,7 +20,15 @@ function placementTranslation(summary:ImportSummary,stock:StockDefinition,stockM
 }
 function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateSystem,partBounds:{minX:number;maxX:number;minY:number;maxY:number}){const b=stockMode==='none'?partBounds:{minX:0,maxX:stock.width,minY:0,maxY:stock.height};return{x:wcs.x==='left'?b.minX:wcs.x==='right'?b.maxX:(b.minX+b.maxX)/2,y:wcs.y==='front'?b.minY:wcs.y==='back'?b.maxY:(b.minY+b.maxY)/2};}
 
-/** Nearest-neighbour ordering is only used for safe-Z positioning. Each CAD line stays geometrically unchanged; it may only be traversed in the reverse direction. */
+function offsetSegment(segment:Segment,radiusMm:number,side:CarveOperation['side']):Segment{
+  if(side==='on-line')return segment;
+  const dx=segment.end.x-segment.start.x,dy=segment.end.y-segment.start.y,len=Math.hypot(dx,dy);
+  if(len<=1e-9)return segment;
+  const sign=side==='left'?1:-1,nx=-dy/len*radiusMm*sign,ny=dx/len*radiusMm*sign;
+  return{...segment,start:{x:segment.start.x+nx,y:segment.start.y+ny},end:{x:segment.end.x+nx,y:segment.end.y+ny}};
+}
+
+/** Nearest-neighbour ordering is only used for safe-Z positioning. Each toolpath segment may only be traversed in reverse; its geometry is never otherwise changed. */
 function orderSegmentsNearest(segments:Segment[],start:P2){
   const remaining=[...segments],ordered:Segment[]=[];let current=start,rapid=0;
   while(remaining.length){let bestIndex=0,bestReverse=false,best=Infinity;for(let i=0;i<remaining.length;i++){const a=dist(current,remaining[i].start),b=dist(current,remaining[i].end);if(a<best){best=a;bestIndex=i;bestReverse=false}if(b<best){best=b;bestIndex=i;bestReverse=true}}
@@ -32,12 +40,14 @@ function orderSegmentsNearest(segments:Segment[],start:P2){
 export function generateCarveGcode(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:CarveOperation}):CarveGcodeResult{
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args,validation=validateCarveOperation(summary,operation),errors=[...validation.errors],warnings=[...validation.warnings];
   const fail=(extra:string[]=[]):CarveGcodeResult=>({ok:false,errors:[...errors,...extra],warnings,code:'',lineCount:0,passes:validation.passes,segmentCount:validation.segments.length,totalCenterlineLengthMm:validation.totalLengthMm,rapidSequenceLengthMm:0});
-  if(wcs.z!=='top')errors.push('WCS Unterseite ist für Carve in 001H noch gesperrt.');if(stockMode==='none')warnings.push('Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.');if(errors.length)return fail();
+  if(wcs.z!=='top')errors.push('WCS Unterseite ist für Carve noch gesperrt.');if(stockMode==='none')warnings.push('Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.');if(errors.length)return fail();
   const t=placementTranslation(summary,stock,stockMode,placement,orientation);if(!t)return fail(['Bauteilgeometrie konnte nicht transformiert werden.']);const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);
   const transform=(p:Point2):P2=>{const q=rotate(p,orientation.rotationZDeg);return{x:q.x+t.dx-origin.x,y:q.y+t.dy-origin.y}};
-  const curves=summary.planarGeometry?.curves??[];const segments:Segment[]=[];for(const checked of validation.segments){const curve=curves[checked.id];if(!curve||curve.kind!=='line')return fail([`Geometrie ${checked.id+1} ist nicht mehr als DXF-Linie verfügbar.`]);segments.push({id:checked.id,start:transform(curve.start),end:transform(curve.end)});}
+  const curves=summary.planarGeometry?.curves??[],radius=operation.tool.diameterMm/2,segments:Segment[]=[];
+  for(const checked of validation.segments){const curve=curves[checked.id];if(!curve||curve.kind!=='line')return fail([`Geometrie ${checked.id+1} ist nicht mehr als DXF-Linie verfügbar.`]);segments.push(offsetSegment({id:checked.id,start:transform(curve.start),end:transform(curve.end)},radius,operation.side));}
   const start={x:0,y:0},ordered=orderSegmentsNearest(segments,start),lines:string[]=[];
-  lines.push('( BeBlog CAM 001I )','( Carve · DXF-Centerlines · kein seitlicher Werkzeugradius-Offset )',`( ${segments.length} Linien · Werkzeug Ø${f3(operation.tool.diameterMm)} mm )`,'( Sichere Segmentwechsel ausschliesslich auf Sicherheits-Z )','G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
+  const sideLabel=operation.side==='left'?'links':operation.side==='right'?'rechts':'auf Linie';
+  lines.push('( BeBlog CAM 001Y )',`( Carve · Werkzeugweg ${sideLabel} der offenen DXF-Linie )`,`( ${segments.length} Linien · Werkzeug Ø${f3(operation.tool.diameterMm)} mm · Offset ${operation.side==='on-line'?'0.000':f3(radius)} mm )`,'( Sichere Segmentwechsel ausschliesslich auf Sicherheits-Z )','G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
   const passes=Math.max(1,validation.passes);
   for(let pass=1;pass<=passes;pass++){
     const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);
