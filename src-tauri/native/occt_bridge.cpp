@@ -1,4 +1,5 @@
 #include "occt_bridge.h"
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
@@ -10,8 +11,10 @@
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <iomanip>
@@ -34,6 +37,22 @@ void append_point(std::ostringstream& out, const gp_Pnt& point, bool& first) {
   if (!first) out << ',';
   out << std::setprecision(12) << point.X() << ',' << point.Y() << ',' << point.Z();
   first = false;
+}
+void append_edge(std::ostringstream& out, const TopoDS_Edge& edge, bool& first_edge) {
+  BRepAdaptor_Curve curve(edge);
+  const double first = curve.FirstParameter();
+  const double last = curve.LastParameter();
+  if (!std::isfinite(first) || !std::isfinite(last) || last < first) return;
+  const int samples = curve.GetType() == GeomAbs_Line ? 2 : 33;
+  if (!first_edge) out << ',';
+  out << '[';
+  bool first_point = true;
+  for (int i = 0; i < samples; ++i) {
+    const double t = samples == 1 ? first : first + (last - first) * static_cast<double>(i) / static_cast<double>(samples - 1);
+    append_point(out, curve.Value(t), first_point);
+  }
+  out << ']';
+  first_edge = false;
 }
 }
 
@@ -93,6 +112,11 @@ extern "C" char* beblog_occt_inspect_step(const char* path) {
       }
     }
 
+    std::ostringstream display_edges;
+    bool first_edge=true;
+    for (TopExp_Explorer it(shape, TopAbs_EDGE); it.More(); it.Next())
+      append_edge(display_edges, TopoDS::Edge(it.Current()), first_edge);
+
     std::ostringstream out;
     out << "{\"backend\":\"OCCT 8 / native C++ bridge\",\"nativeBrep\":true"
         << ",\"faces\":"<<faces<<",\"edges\":"<<edges<<",\"vertices\":"<<vertices<<",\"solids\":"<<solids
@@ -101,7 +125,8 @@ extern "C" char* beblog_occt_inspect_step(const char* path) {
         << "},{\"kind\":\"torus\",\"count\":"<<tori<<"},{\"kind\":\"other\",\"count\":"<<other<<"}]"
         << ",\"cylinderRadiiMm\":["<<radii.str()<<"],\"displayTriangles\":"<<triangles
         << ",\"displayVertices\":["<<mesh_vertices.str()<<"]"
-        << ",\"note\":\"Exaktes BRep bleibt Source of Truth; Triangulation dient ausschließlich der Darstellung.\"}";
+        << ",\"displayEdges\":["<<display_edges.str()<<"]"
+        << ",\"note\":\"Exaktes BRep bleibt Source of Truth; Triangulation und abgeleitete Kanten dienen ausschließlich der Darstellung.\"}";
     return copy_result(out.str());
   } catch (...) {
     return copy_result("{\"error\":\"OCCT-Fehler beim STEP-Import\"}");
