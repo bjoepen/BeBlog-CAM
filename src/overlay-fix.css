@@ -1,0 +1,9 @@
+/* 001Y: GeometryView and CAM selection overlay must share the same 1000×650 visual box.
+   The caption is informational and must not participate in centering the SVG itself. */
+.geometry-view .geometry-caption{
+  position:absolute!important;
+  left:0!important;
+  right:0!important;
+  top:100%!important;
+  width:100%!important;
+}

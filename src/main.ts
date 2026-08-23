@@ -4,6 +4,7 @@ import CamMascot from './lib/CamMascot.svelte';
 import StockMaterialSelector from './lib/StockMaterialSelector.svelte';
 import './app.css';
 import './floh.css';
+import './overlay-fix.css';
 
 mount(App, { target: document.getElementById('app')! });
 
@@ -34,7 +35,7 @@ function syncMaterialSelector() {
 
 requestAnimationFrame(() => {
   const build = document.querySelector<HTMLElement>('.build');
-  if (build && build.textContent !== '001X') build.textContent = '001X';
+  if (build && build.textContent !== '001Y') build.textContent = '001Y';
 
   const rail = document.querySelector<HTMLElement>('.rail');
   if (rail && !rail.querySelector('.cam-mascot')) {
