@@ -4,6 +4,7 @@ import CamMascot from './lib/CamMascot.svelte';
 import StockMaterialSelector from './lib/StockMaterialSelector.svelte';
 import './app.css';
 import './floh.css';
+import './overlay-fix.css';
 
 mount(App, { target: document.getElementById('app')! });
 
