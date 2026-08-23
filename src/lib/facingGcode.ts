@@ -1,4 +1,5 @@
 import type { FacingOperation, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
+import { validateToolCompatibility } from './validationGrammar';
 
 export type FacingPathResult={
   ok:boolean;
@@ -32,7 +33,7 @@ export function validateFacing(args:{stock:StockDefinition;stockMode:StockMode;w
   const errors:string[]=[],warnings:string[]=[];
   if(stockMode==='none')errors.push('Planen benötigt einen definierten rechteckigen Rohling.');
   if(!(stock.width>0&&stock.height>0&&stock.thickness>0))errors.push('Rohlingbreite, -länge und -dicke müssen größer als 0 sein.');
-  if(wcs.z!=='top')errors.push('Planen ist in 001U nur mit Z-Null auf der Rohlingoberseite freigegeben.');
+  if(wcs.z!=='top')errors.push('Planen ist nur mit Z-Null auf der Rohlingoberseite freigegeben.');
   if(!(operation.tool.diameterMm>0))errors.push('Werkzeugdurchmesser muss größer als 0 sein.');
   if(!(operation.stepoverPercent>0&&operation.stepoverPercent<=90))errors.push('Seitliche Zustellung muss größer als 0 % und höchstens 90 % sein.');
   if(!(operation.totalDepthMm>0))errors.push('Planabtrag muss größer als 0 sein.');
@@ -40,8 +41,9 @@ export function validateFacing(args:{stock:StockDefinition;stockMode:StockMode;w
   if(operation.totalDepthMm>stock.thickness)errors.push(`Planabtrag ${operation.totalDepthMm.toFixed(3)} mm überschreitet die Rohlingdicke ${stock.thickness.toFixed(3)} mm.`);
   if(!(operation.feedMmMin>0&&operation.plungeMmMin>0&&operation.spindleRpm>0))errors.push('Vorschub, Eintauchvorschub und Drehzahl müssen größer als 0 sein.');
   if(!(operation.safeZMm>0))errors.push('Sicherheits-Z muss größer als 0 sein.');
-  if(operation.tool.kind==='ball-nose'||operation.tool.kind==='v-bit')errors.push('Vollradius- und V-Fräser sind für Planen in 001U nicht freigegeben.');
-  else if(operation.tool.kind==='end-mill'||!operation.tool.kind)warnings.push('Schaftfräser ist zulässig; für größere Planflächen ist ein Planfräser die bevorzugte Werkzeugart.');
+  const compatibility=validateToolCompatibility(operation);
+  if(compatibility.level==='fail')errors.push(compatibility.detail);
+  else if(compatibility.level==='warn')warnings.push(compatibility.detail);
   return{errors,warnings};
 }
 
@@ -62,7 +64,7 @@ export function generateFacingGcode(args:{stock:StockDefinition;stockMode:StockM
   const endTraverse=traverse.max+radius;
   const levels=Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm));
   const lines:string[]=[];
-  lines.push('( BeBlog CAM 001U )','( Planen · rechteckiger Rohling · Zickzack )','G21','G90','G17',`S${Math.round(operation.spindleRpm)}`,'M3');
+  lines.push('( BeBlog CAM 001X )','( Planen · rechteckiger Rohling · Zickzack )','G21','G90','G17',`S${Math.round(operation.spindleRpm)}`,'M3');
 
   for(let level=1;level<=levels;level++){
     const z=-Math.min(level*operation.stepDownMm,operation.totalDepthMm);
