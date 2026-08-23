@@ -4,6 +4,7 @@
   import { projectPoint, projectTriangles, type P2, type P3, type View } from './stepView';
   import { decodeStepEdges } from './stepEdgeView';
   import { buildFaceTargetRoughing } from './faceTargetRoughing';
+  import { buildFaceTargetRasterToolpath } from './faceTargetToolpath';
 
   export let summary:ImportSummary;
   export let stock:StockDefinition;
@@ -19,6 +20,8 @@
   let showZLevels=false;
   let zLevelStepMm=2;
   let finishAllowanceMm=.5;
+  let previewToolDiameterMm=6;
+  let previewStepoverPercent=40;
   let selectedFaceIds:number[]=[];
   let selectionSource=summary.fileName;
   let s3: ReturnType<typeof scene3d>;
@@ -36,7 +39,7 @@
   function wcsPoint():P3{return{x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2,z:wcs.z==='top'?stock.thickness:0}}
   function faceFill(shade:number,selected=false){if(selected)return'hsl(31 52% 78%)';const lightness=88-Math.round(Math.max(0,Math.min(1,shade))*12);return`hsl(150 7% ${lightness}%)`}
 
-  function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number,faceSelection:number[],allowanceMm:number){
+  function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number,faceSelection:number[],allowanceMm:number,toolDiameterMm:number,stepoverPercent:number){
     const a=summary.brep?.displayVertices??[],raw:P3[]=[];
     for(let i=0;i+2<a.length;i+=3)raw.push(rotate3({x:a[i],y:a[i+1],z:a[i+2]}));
     if(!raw.length)return null;
@@ -45,18 +48,21 @@
     const part=raw.map(place3),faceIds=summary.brep?.displayFaceIds??[];
     const edgeWorld=decodeStepEdges(summary.brep?.displayEdges).map(edge=>{const points:P3[]=[];for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));return points}).filter(edge=>edge.length>=2);
     const target=includeZLevels?buildFaceTargetRoughing(part,faceIds,faceSelection,stock.thickness,Math.max(.1,sliceStepMm),Math.max(0,allowanceMm)):null;
+    const toolpath=target?buildFaceTargetRasterToolpath(target,Math.max(.1,toolDiameterMm),Math.max(1,Math.min(100,stepoverPercent))):null;
     const regionWorld=target?target.levels.map(z=>target.loops.map(loop=>loop.points.map(point=>({x:point.x,y:point.y,z})))):[];
+    const toolWorld=toolpath?.runs.map(run=>run.points.map(point=>({x:point.x,y:point.y,z:run.z})))??[];
     const m=Math.max(stock.width,stock.height)*.12+10;
     const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
     const box:P3[]=[{x:0,y:0,z:0},{x:stock.width,y:0,z:0},{x:stock.width,y:stock.height,z:0},{x:0,y:stock.height,z:0},{x:0,y:0,z:stock.thickness},{x:stock.width,y:0,z:stock.thickness},{x:stock.width,y:stock.height,z:stock.thickness},{x:0,y:stock.height,z:stock.thickness}];
     const wp=wcsPoint(),al=Math.max(35,Math.min(stock.width,stock.height)*.55),axes=[wp,{x:wp.x+al,y:wp.y,z:wp.z},wp,{x:wp.x,y:wp.y+al,z:wp.z},wp,{x:wp.x,y:wp.y,z:wp.z+al}];
-    const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>edge.map(q=>projectPoint(q,v))),rr=regionWorld.map(region=>region.map(loop=>loop.map(q=>projectPoint(q,v)))),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
-    const map=fit([...pp,...ep.flat(),...rr.flat(2),...pl,...pb,...pa]),fpl=pl.map(map),fb=pb.map(map),fa=pa.map(map),fw=map(pw);
+    const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>edge.map(q=>projectPoint(q,v))),rr=regionWorld.map(region=>region.map(loop=>loop.map(q=>projectPoint(q,v)))),tp=toolWorld.map(run=>run.map(q=>projectPoint(q,v))),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
+    const map=fit([...pp,...ep.flat(),...rr.flat(2),...tp.flat(),...pl,...pb,...pa]),fpl=pl.map(map),fb=pb.map(map),fa=pa.map(map),fw=map(pw);
     const triangles=projectTriangles(part,v,map,faceIds),edges=ep.map(edge=>path(edge.map(map))).filter(Boolean);
     const roughRegions=rr.map(region=>region.map(loop=>path(loop.map(map),true)).join(' ')).filter(Boolean);
+    const toolPaths=tp.map(run=>path(run.map(map))).filter(Boolean);
     const e=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
     const targetStatus=!includeZLevels?'':!faceSelection.length?'Zielfläche wählen':!target?'Nur horizontale, planare Zielflächen':target.levels.length?`Ziel ${target.targetZ.toFixed(2)} mm · Schruppen bis ${target.roughBottomZ.toFixed(2)} mm`:'Kein Material oberhalb der Zielfläche';
-    return{triangles,edges,roughRegions,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
+    return{triangles,edges,roughRegions,toolPaths,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,toolpathCount:toolPaths.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
   }
 
   function scene2d(){const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();if(!flat.length)return null;const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY),placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());if(noStock){const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10,plane=[{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],map=fit([...placed.flat(),...plane]),wx=wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2,wy=wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2,wp=map({x:wx,y:wy});return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),plane:path(plane.map(map),true),stock:null,wcs:wp,noStock:true}}const m=Math.max(stock.width,stock.height)*.12+10,plane=[{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],box=[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}],map=fit([...placed.flat(),...plane]),wp=map({x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2});return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),plane:path(plane.map(map),true),stock:path(box.map(map),true),wcs:wp,noStock:false}}
@@ -70,12 +76,14 @@
   function reset(){yaw=-.72;pitch=.48;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
   function updateSliceStep(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=.1)zLevelStepMm=value}
   function updateAllowance(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=0)finishAllowanceMm=value}
+  function updateToolDiameter(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>.1)previewToolDiameterMm=value}
+  function updateStepover(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=1&&value<=100)previewStepoverPercent=value}
   function toggleFace(faceId:number){if(!showZLevels||dragMoved||!s3?.facePickingAvailable)return;selectedFaceIds=selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId].sort((a,b)=>a-b)}
   function faceKey(e:KeyboardEvent,faceId:number){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleFace(faceId)}}
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;selectedFaceIds=[]}
-  $: s3=scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm);
+  $: s3=scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm,previewToolDiameterMm,previewStepoverPercent);
   $: s2=scene2d();
 </script>
 
@@ -93,30 +101,52 @@
       {#each s3.triangles as triangle}
         <path d={path(triangle.points,true)} class="step-face" class:selectable-face={showZLevels&&s3.facePickingAvailable} class:selected-face={selectedFaceIds.includes(triangle.faceId)} style={`fill:${faceFill(triangle.shade,selectedFaceIds.includes(triangle.faceId))}`} role={showZLevels&&s3.facePickingAvailable?'button':undefined} tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}><title>Fläche {triangle.faceId+1}{selectedFaceIds.includes(triangle.faceId)?' · ausgewählt':''}</title></path>
       {/each}
-      {#if showZLevels}{#each s3.roughRegions as region}<path d={region} class="roughing-region" fill-rule="evenodd"/>{/each}{/if}
+      {#if showZLevels}
+        {#each s3.roughRegions as region}<path d={region} class="roughing-region" fill-rule="evenodd"/>{/each}
+        {#each s3.toolPaths as tool}<path d={tool} class="toolpath-preview"/>{/each}
+      {/if}
       {#each s3.edges as edge}<path d={edge} class="step-edge"/>{/each}
       <path d={s3.axes[0]} class="axis x"/><path d={s3.axes[1]} class="axis y"/><path d={s3.axes[2]} class="axis z"/>
       <text x={s3.labels[0].x+7} y={s3.labels[0].y-5}>X</text><text x={s3.labels[1].x+7} y={s3.labels[1].y-5}>Y</text><text x={s3.labels[2].x+7} y={s3.labels[2].y-5}>Z</text>
-      <circle cx={s3.wcs.x} cy={s3.wcs.y} r="10" class="wcs-marker"/><circle cx={s3.wcs.x} cy={s3.wcs.y} r="3" class="wcs-dot"/><text x={s3.wcs.x+14} y={s3.wcs.y-12} class="wcs-label">WCS · X0 Y0 Z0</text>
+      <circle cx={s3.wcs.x} cy={s3.wcs.y} r="10" class="wcs-marker"/><circle cx={s3.wcs.x} cy={s3.wcs.y} r="3" class="wcs-dot"/>
+      <text x={s3.wcs.x+14} y={s3.wcs.y-12} class="wcs-label">WCS · X0 Y0 Z0</text>
     {/if}
   </svg>
   <div class="geometry-caption">
     <strong>{summary.kind==='step'?'BRep · Rohling · WCS':stockMode==='none'?'2D-Geometrie · ohne Rohling · WCS':'2D-Geometrie · Rohling · WCS'}</strong>
     {#if summary.kind==='step'}
       <span class="help">
-        <button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button><button class:active-toggle={showZLevels} onclick={()=>showZLevels=!showZLevels}>Z-Level</button>
+        <button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button>
+        <button class:active-toggle={showZLevels} onclick={()=>showZLevels=!showZLevels}>Z-Level</button>
         {#if showZLevels}
           <label class="slice-step">Zustellung <input type="number" min="0.1" step="0.1" value={zLevelStepMm} oninput={updateSliceStep}/> mm</label>
           <label class="slice-step">Schlichtaufmaß <input type="number" min="0" step="0.1" value={finishAllowanceMm} oninput={updateAllowance}/> mm</label>
-          <span>{s3?.sliceCount??0} Ebenen · {s3?.regionCount??0} Räumflächen</span>
-          <span>{s3?.targetStatus}</span>
-          {#if selectedFaceIds.length}<button onclick={()=>selectedFaceIds=[]}>Auswahl löschen</button>{/if}
+          <label class="slice-step">Werkzeug Ø <input type="number" min="0.1" step="0.1" value={previewToolDiameterMm} oninput={updateToolDiameter}/> mm</label>
+          <label class="slice-step">Stepover <input type="number" min="1" max="100" step="1" value={previewStepoverPercent} oninput={updateStepover}/> %</label>
+          <span>{s3?.sliceCount??0} Ebenen · {s3?.toolpathCount??0} Werkzeugbahnen</span>
+          {#if s3?.targetStatus}<span>{s3.targetStatus}</span>{/if}
+          {#if s3?.facePickingAvailable}<span>{selectedFaceIds.length?`${selectedFaceIds.length} Fläche${selectedFaceIds.length===1?'':'n'} gewählt`:'Zielfläche anklicken'}</span>{#if selectedFaceIds.length}<button onclick={()=>selectedFaceIds=[]}>Auswahl löschen</button>{/if}{/if}
         {/if}
         <span>Drag: drehen · Shift/Mitte: verschieben</span>
       </span>
     {/if}
   </div>
 </div>
+
 <style>
-.geometry-view{position:relative;z-index:2;width:min(92%,1100px);margin:auto;pointer-events:auto}.geometry-view>*{pointer-events:auto}svg{width:100%;display:block;touch-action:none;user-select:none}svg.interactive{cursor:grab}svg.interactive:active{cursor:grabbing}.setup-plane{fill:rgba(255,255,255,.2);stroke:rgba(70,80,75,.18);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.stock{fill:none;stroke:rgba(93,105,99,.46);stroke-width:1.35;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}.dxf{fill:none;stroke:#26342e;stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.step-face{stroke:none;outline:none;pointer-events:none}.step-face.selectable-face{pointer-events:visiblePainted;cursor:pointer}.step-face.selected-face{stroke:none}.step-face:focus,.step-face:focus-visible{outline:none}.step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.roughing-region{fill:rgba(194,117,40,.16);stroke:rgba(194,117,40,.72);stroke-width:1.35;vector-effect:non-scaling-stroke;pointer-events:none}.axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}.axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}.wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}.wcs-dot{fill:#c27528;pointer-events:none}.wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}.geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}.geometry-caption strong{color:#34423c;font-weight:600}.help{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.help button{position:relative;z-index:4;min-width:28px;border:1px solid rgba(52,66,60,.22);border-radius:7px;background:rgba(255,255,255,.72);padding:3px 7px;color:#34423c;cursor:pointer}.help button:hover{background:#fff}.help button.active-toggle{background:#f4eadf;border-color:rgba(194,117,40,.45);color:#8c551d}.slice-step{display:flex;align-items:center;gap:5px}.slice-step input{width:58px;padding:3px 5px;border:1px solid rgba(52,66,60,.22);border-radius:6px;background:rgba(255,255,255,.78);color:#34423c}@media(max-width:800px){.geometry-caption{align-items:flex-start;flex-direction:column;gap:8px}.help{flex-wrap:wrap}}
+  .geometry-view{position:relative;z-index:2;width:min(92%,1100px);margin:auto;pointer-events:auto}.geometry-view>*{pointer-events:auto}
+  svg{width:100%;display:block;touch-action:none;user-select:none}svg.interactive{cursor:grab}svg.interactive:active{cursor:grabbing}
+  .setup-plane{fill:rgba(255,255,255,.2);stroke:rgba(70,80,75,.18);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}
+  .stock{fill:none;stroke:rgba(93,105,99,.46);stroke-width:1.35;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
+  .dxf{fill:none;stroke:#26342e;stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+  .step-face{stroke:none;outline:none;pointer-events:none}.step-face.selectable-face{pointer-events:visiblePainted;cursor:pointer}.step-face.selected-face{stroke:none}.step-face:focus,.step-face:focus-visible{outline:none}
+  .step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+  .roughing-region{fill:rgba(194,117,40,.12);stroke:rgba(194,117,40,.42);stroke-width:1.05;vector-effect:non-scaling-stroke;pointer-events:none}
+  .toolpath-preview{fill:none;stroke:#327b8d;stroke-width:1.8;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+  .axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}.axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}
+  text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}.wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}.wcs-dot{fill:#c27528;pointer-events:none}.wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}
+  .geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}.geometry-caption strong{color:#34423c;font-weight:600}.help{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .help button{position:relative;z-index:4;min-width:28px;border:1px solid rgba(52,66,60,.22);border-radius:7px;background:rgba(255,255,255,.72);padding:3px 7px;color:#34423c;cursor:pointer}.help button:hover{background:#fff}.help button.active-toggle{background:#f4eadf;border-color:rgba(194,117,40,.45);color:#8c551d}
+  .slice-step{display:flex;align-items:center;gap:5px}.slice-step input{width:58px;padding:3px 5px;border:1px solid rgba(52,66,60,.22);border-radius:6px;background:rgba(255,255,255,.78);color:#34423c}
+  @media(max-width:800px){.geometry-caption{align-items:flex-start;flex-direction:column;gap:8px}.help{flex-wrap:wrap}}
 </style>
