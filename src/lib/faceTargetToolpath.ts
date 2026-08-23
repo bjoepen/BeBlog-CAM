@@ -1,0 +1,69 @@
+import type { FaceTargetRoughing } from './faceTargetRoughing';
+
+export type ToolpathPoint2={x:number;y:number};
+export type ToolpathRun={z:number;points:ToolpathPoint2[]};
+export type FaceTargetToolpath={runs:ToolpathRun[];toolDiameterMm:number;stepoverPercent:number};
+
+const EPS=1e-6;
+
+function pointInEvenOdd(loops:{points:ToolpathPoint2[]}[],p:ToolpathPoint2){
+  let inside=false;
+  for(const loop of loops){
+    const poly=loop.points;
+    for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+      const a=poly[i],b=poly[j];
+      const hit=((a.y>p.y)!==(b.y>p.y))&&p.x<((b.x-a.x)*(p.y-a.y))/(b.y-a.y||Number.EPSILON)+a.x;
+      if(hit)inside=!inside;
+    }
+  }
+  return inside;
+}
+
+function distanceToSegment(p:ToolpathPoint2,a:ToolpathPoint2,b:ToolpathPoint2){
+  const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
+  if(l2<=EPS)return Math.hypot(p.x-a.x,p.y-a.y);
+  const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l2));
+  return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));
+}
+
+function clearanceToBoundary(loops:{points:ToolpathPoint2[]}[],p:ToolpathPoint2){
+  let best=Infinity;
+  for(const loop of loops){
+    for(let i=0;i+1<loop.points.length;i++)best=Math.min(best,distanceToSegment(p,loop.points[i],loop.points[i+1]));
+  }
+  return best;
+}
+
+function safeAt(loops:{points:ToolpathPoint2[]}[],p:ToolpathPoint2,radius:number){
+  return pointInEvenOdd(loops,p)&&clearanceToBoundary(loops,p)>=radius-EPS;
+}
+
+function bounds(loops:{points:ToolpathPoint2[]}[]){
+  const pts=loops.flatMap(loop=>loop.points);
+  if(!pts.length)return null;
+  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+  return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};
+}
+
+export function buildFaceTargetRasterToolpath(target:FaceTargetRoughing,toolDiameterMm:number,stepoverPercent:number):FaceTargetToolpath|null{
+  if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!target.levels.length||!target.loops.length)return null;
+  const b=bounds(target.loops);if(!b)return null;
+  const radius=toolDiameterMm/2,stepover=Math.max(.05,toolDiameterMm*stepoverPercent/100);
+  const sampleStep=Math.max(.15,Math.min(.75,toolDiameterMm/8));
+  const runs:ToolpathRun[]=[];
+  let row=0;
+  for(let y=b.minY+radius;y<=b.maxY-radius+EPS;y+=stepover,row++){
+    const lineRuns:{a:number;b:number}[]=[];
+    let start:number|null=null,last:number|null=null;
+    for(let x=b.minX+radius;x<=b.maxX-radius+EPS;x+=sampleStep){
+      if(safeAt(target.loops,{x,y},radius)){if(start===null)start=x;last=x}
+      else if(start!==null&&last!==null){if(last-start>EPS)lineRuns.push({a:start,b:last});start=last=null}
+    }
+    if(start!==null&&last!==null&&last-start>EPS)lineRuns.push({a:start,b:last});
+    for(const segment of lineRuns){
+      const points=row%2===0?[{x:segment.a,y},{x:segment.b,y}]:[{x:segment.b,y},{x:segment.a,y}];
+      for(const z of target.levels)runs.push({z,points});
+    }
+  }
+  return{runs,toolDiameterMm,stepoverPercent};
+}
