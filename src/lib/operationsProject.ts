@@ -63,7 +63,10 @@ export function operationSummary(operation:CamOperation):string {
     const method=operation.method==='helical-mill'?'Helixfräsen':'Bohren';
     return `${method} · ${source} · ${operation.curveIds.length} Bohrung${operation.curveIds.length===1?'':'en'} · ${tool}`;
   }
-  if(operation.kind==='contour')return `${operation.contourId===null?'Keine Kontur':`Kontur ${operation.contourId+1}`} · ${operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie'} · ${tool}`;
+  if(operation.kind==='contour'){
+    const side=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');
+    return `${operation.contourId===null?'Keine Kontur':`${operation.topology==='open'?'Offene':'Kontur'} ${operation.contourId+1}`} · ${side} · ${tool}`;
+  }
   const strategy=operation.strategy==='auto'?'Auto':operation.strategy==='raster'?'Raster':operation.strategy==='concentric'?'Kreis':'Konturparallel';
   const entry=operation.entry==='helix'?'Helix':operation.entry==='ramp'?'Rampe':'Senkrecht';
   return `${operation.contourId===null?'Keine Kontur':`Kontur ${operation.contourId+1}`} · ${strategy} · ${entry} · ${operation.stepoverPercent}% Zustellung · ${tool}`;
