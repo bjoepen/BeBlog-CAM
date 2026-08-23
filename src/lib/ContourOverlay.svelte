@@ -2,6 +2,7 @@
   import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation, Curve2, OpenContourSide } from './types';
   import { buildClosedChains, offsetPolygon, sampleCurve, type P2 } from './contourMath';
   import { buildOpenChains, offsetOpenChain } from './openContour';
+  import { buildBrokenContourPath } from './brokenContour';
 
   export let summary: ImportSummary;
   export let stock: StockDefinition;
@@ -25,12 +26,16 @@
   }
 
   function chooseClosed(id:number){
-    if(operation.kind==='contour')operation.topology='closed';
+    if(operation.kind==='contour'){operation.topology='closed';operation.excludedSegmentIds=[];}
     onSelectContour(id,'closed');
   }
   function chooseOpen(id:number,side:OpenContourSide){
-    if(operation.kind==='contour'){operation.topology='open';operation.openSide=side;}
+    if(operation.kind==='contour'){operation.topology='open';operation.openSide=side;operation.excludedSegmentIds=[];}
     onSelectContour(id,'open');
+  }
+  function toggleClosedSegment(id:number){
+    if(operation.kind!=='contour'||operation.topology!=='closed'||operation.contourId===null)return;
+    const set=new Set(operation.excludedSegmentIds??[]);set.has(id)?set.delete(id):set.add(id);operation.excludedSegmentIds=[...set].sort((a,b)=>a-b);onSelectContour(operation.contourId,'closed');
   }
 
   function buildScene(..._deps: unknown[]){
@@ -73,17 +78,18 @@
 
     const selectedClosed=operation.topology==='closed'&&operation.contourId!=null?cs.find(c=>c.id===operation.contourId)??null:null;
     const selectedOpen=operation.topology==='open'&&operation.contourId!=null?os.find(c=>c.id===operation.contourId)??null:null;
-    let tool:P2[]|null=null;
-    if(selectedClosed){const r=operation.tool.diameterMm/2,d=operation.side==='outside'?r:operation.side==='inside'?-r:0;tool=offsetPolygon(selectedClosed.points,d);}
-    if(selectedOpen){tool=offsetOpenChain(selectedOpen.points,operation.tool.diameterMm/2,operation.openSide,.003).points;}
-    const radius=operation.tool.diameterMm/2;
-    const open=os.map(c=>({
-      ...c,
-      screen:c.points.map(map),
-      left:offsetOpenChain(c.points,radius,'left',.003).points.map(map),
-      right:offsetOpenChain(c.points,radius,'right',.003).points.map(map)
-    }));
-    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,tool:tool?tool.map(map):null};
+    const excluded=new Set(operation.excludedSegmentIds??[]),radius=operation.tool.diameterMm/2;
+    let toolRuns:{points:P2[];closed:boolean}[]=[];
+    let selectedSegments:{id:number;screen:P2[];excluded:boolean}[]=[];
+    if(selectedClosed){
+      const base=selectedClosed.points.slice(0,-1);
+      selectedSegments=base.map((p,i)=>({id:i,screen:[p,base[(i+1)%base.length]].map(map),excluded:excluded.has(i)}));
+      if(excluded.size){const broken=buildBrokenContourPath(selectedClosed.points,[...excluded],radius,operation.side,.003);toolRuns=broken.runs.map(points=>({points:points.map(map),closed:false}));}
+      else{const d=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;toolRuns=[{points:offsetPolygon(selectedClosed.points,d).map(map),closed:true}];}
+    }
+    if(selectedOpen){toolRuns=[{points:offsetOpenChain(selectedOpen.points,radius,operation.openSide,.003).points.map(map),closed:false}];}
+    const open=os.map(c=>({...c,screen:c.points.map(map),left:offsetOpenChain(c.points,radius,'left',.003).points.map(map),right:offsetOpenChain(c.points,radius,'right',.003).points.map(map)}));
+    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0};
   }
 
   $: scene=buildScene(
@@ -91,6 +97,7 @@
     operation.kind==='facing'?'facing':(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):operation.contourId,
     operation.kind==='contour'?operation.topology:operation.kind,
     operation.kind==='contour'?operation.openSide:operation.kind,
+    operation.kind==='contour'?(operation.excludedSegmentIds??[]).join(','):operation.kind,
     (operation.kind==='carve'||operation.kind==='drill')?operation.selectionMode:operation.kind,
     (operation.kind==='carve'||operation.kind==='drill')?operation.layerName:operation.kind,
     operation.tool.diameterMm,
@@ -132,35 +139,34 @@
         <path d={path(chain.screen,false)} class="open-candidate" />
         <path d={path(chain.left,false)} class="open-side-preview" />
         <path d={path(chain.right,false)} class="open-side-preview" />
-        <path d={path(chain.left,false)} class="open-side-pick" onclick={()=>chooseOpen(chain.id,'left')}><title>Offene Kontur {chain.id+1} · Werkzeug links der Kette</title></path>
-        <path d={path(chain.right,false)} class="open-side-pick" onclick={()=>chooseOpen(chain.id,'right')}><title>Offene Kontur {chain.id+1} · Werkzeug rechts der Kette</title></path>
-        <path d={path(chain.screen,false)} class="open-center-pick" onclick={()=>chooseOpen(chain.id,'on-line')}><title>Offene Kontur {chain.id+1} · Werkzeug auf Linie</title></path>
+        <path d={path(chain.left,false)} class="open-side-pick" onclick={()=>chooseOpen(chain.id,'left')}><title>Offene DXF-Kontur {chain.id+1} · Werkzeug links</title></path>
+        <path d={path(chain.right,false)} class="open-side-pick" onclick={()=>chooseOpen(chain.id,'right')}><title>Offene DXF-Kontur {chain.id+1} · Werkzeug rechts</title></path>
+        <path d={path(chain.screen,false)} class="open-center-pick" onclick={()=>chooseOpen(chain.id,'on-line')}><title>Offene DXF-Kontur {chain.id+1} · Werkzeug auf Linie</title></path>
       {/each}
       {#if scene.selected}<path d={path(scene.selected.screen,scene.selected.closed)} class="selected"/>{/if}
-      {#if scene.tool}<path d={path(scene.tool,false)} class="toolpath"/>{/if}
+      {#each scene.selectedSegments as segment}
+        <path d={path(segment.screen,false)} class:segment-off={segment.excluded} class="segment-state" />
+        <path d={path(segment.screen,false)} class="segment-pick" onclick={()=>toggleClosedSegment(segment.id)}><title>{segment.excluded?'Konturstrecke wieder einschalten':'Kontur hier aufbrechen / Strecke abwählen'}</title></path>
+      {/each}
+      {#each scene.toolRuns as tool}<path d={path(tool.points,tool.closed)} class="toolpath"/>{/each}
     {/if}
   </svg>
-  {#if scene.kind==='contour'}<div class="open-help">Offene Kontur: direkt die gewünschte Werkzeugseite anklicken. Anfang und Ende bleiben offen.</div>{/if}
-  <div class="caption-spacer"></div>
+  {#if scene.kind==='contour'}<div class="open-help">{scene.broken?'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{/if}
 </div>
 {/if}
 
 <style>
   .contour-overlay{position:absolute;left:50%;top:50%;z-index:3;width:min(92%,1100px);transform:translate(-50%,-50%);pointer-events:auto}
   svg{width:100%;display:block;overflow:visible;pointer-events:auto}
-  .caption-spacer{height:30px;pointer-events:none}
   .candidate{fill:none;stroke:rgba(194,117,40,.10);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}
   .open-candidate{fill:none;stroke:rgba(76,111,139,.28);stroke-width:1.7;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;pointer-events:none}
   .open-side-preview{fill:none;stroke:rgba(177,69,59,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}
-  .pick,.open-side-pick,.open-center-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+  .pick,.open-side-pick,.open-center-pick,.segment-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
   .open-center-pick{stroke-width:8}
-  .selected{fill:none;stroke:rgba(194,117,40,.9);stroke-width:2.2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
+  .selected{fill:none;stroke:rgba(194,117,40,.88);stroke-width:2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
+  .segment-state{fill:none;stroke:rgba(194,117,40,.78);stroke-width:2.3;vector-effect:non-scaling-stroke;pointer-events:none}.segment-state.segment-off{stroke:rgba(105,112,108,.5);stroke-width:2.8;stroke-dasharray:3 4}
   .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
-  .open-help{margin:-8px auto 0;width:max-content;max-width:86%;padding:6px 9px;border-radius:6px;background:rgba(250,250,248,.92);color:#666b66;font-size:.72rem;pointer-events:none}
-  .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}
-  .carve-candidate.selected-carve{stroke:#b1453b;stroke-width:2.2}
-  .carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
-  .drill-candidate{fill:none;stroke:rgba(194,117,40,.25);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}.drill-candidate.selected-drill{stroke:#b1453b;stroke-width:2.4}
-  .drill-center{stroke:rgba(194,117,40,.55);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.drill-center.selected-drill{stroke:#b1453b;stroke-width:1.8}
-  .drill-pick{fill:transparent;stroke:transparent;stroke-width:12;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}
+  .open-help{position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);width:max-content;max-width:86%;padding:6px 9px;border-radius:6px;background:rgba(250,250,248,.94);color:#666b66;font-size:.72rem;pointer-events:none;white-space:normal;text-align:center}
+  .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}.carve-candidate.selected-carve{stroke:#b1453b;stroke-width:2.2}.carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+  .drill-candidate{fill:none;stroke:rgba(194,117,40,.25);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}.drill-candidate.selected-drill{stroke:#b1453b;stroke-width:2.4}.drill-center{stroke:rgba(194,117,40,.55);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.drill-center.selected-drill{stroke:#b1453b;stroke-width:1.8}.drill-pick{fill:transparent;stroke:transparent;stroke-width:12;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}
 </style>
