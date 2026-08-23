@@ -3,6 +3,7 @@
   import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
   import { projectPoint, projectTriangles, type P2, type P3, type View } from './stepView';
   import { decodeStepEdges } from './stepEdgeView';
+  import { sliceTrianglesByStep } from './zLevelSlice';
 
   export let summary:ImportSummary;
   export let stock:StockDefinition;
@@ -15,6 +16,8 @@
   let viewport:SVGSVGElement;
   let root:HTMLDivElement;
   let yaw=-.72,pitch=.48,zoom=1,viewX=0,viewY=0,dragging=false,lastX=0,lastY=0,dragMode:'orbit'|'pan'='orbit';
+  let showZLevels=false;
+  let zLevelStepMm=2;
 
   const finite=(p:P2)=>Number.isFinite(p.x)&&Number.isFinite(p.y);
   function fit(points:P2[]){
@@ -52,16 +55,19 @@
       for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));
       return points;
     }).filter(edge=>edge.length>=2);
+    const slices=showZLevels?sliceTrianglesByStep(part,Math.max(.1,zLevelStepMm)):[];
+    const sliceWorld=slices.flatMap(slice=>slice.chains.map(chain=>chain.points.map(point=>({x:point.x,y:point.y,z:slice.z}))));
     const m=Math.max(stock.width,stock.height)*.12+10;
     const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
     const box:P3[]=[{x:0,y:0,z:0},{x:stock.width,y:0,z:0},{x:stock.width,y:stock.height,z:0},{x:0,y:stock.height,z:0},{x:0,y:0,z:stock.thickness},{x:stock.width,y:0,z:stock.thickness},{x:stock.width,y:stock.height,z:stock.thickness},{x:0,y:stock.height,z:stock.thickness}];
     const wp=wcsPoint(),al=Math.max(35,Math.min(stock.width,stock.height)*.55),axes=[wp,{x:wp.x+al,y:wp.y,z:wp.z},wp,{x:wp.x,y:wp.y+al,z:wp.z},wp,{x:wp.x,y:wp.y,z:wp.z+al}];
-    const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>edge.map(q=>projectPoint(q,v))),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
-    const map=fit([...pp,...ep.flat(),...pl,...pb,...pa]),fpl=pl.map(map),fb=pb.map(map),fa=pa.map(map),fw=map(pw);
+    const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>edge.map(q=>projectPoint(q,v))),sp=sliceWorld.map(chain=>chain.map(q=>projectPoint(q,v))),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
+    const map=fit([...pp,...ep.flat(),...sp.flat(),...pl,...pb,...pa]),fpl=pl.map(map),fb=pb.map(map),fa=pa.map(map),fw=map(pw);
     const triangles=projectTriangles(part,v,map);
     const edges=ep.map(edge=>path(edge.map(map))).filter(Boolean);
+    const slicePaths=sp.map(chain=>path(chain.map(map))).filter(Boolean);
     const e=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-    return{triangles,edges,plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
+    return{triangles,edges,slicePaths,sliceCount:slices.length,chainCount:slicePaths.length,plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
   }
 
   function scene2d(){
@@ -83,6 +89,8 @@
   function up(){dragging=false}
   function wheel(e:WheelEvent){if(summary.kind!=='step')return;e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}
   function reset(){yaw=-.72;pitch=.48;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
+  function updateSliceStep(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=.1)zLevelStepMm=value}
+
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $:s3=scene3d({yaw,pitch});
   $:s2=scene2d();
@@ -99,10 +107,9 @@
     {:else if s3}
       <path d={s3.plane} class="setup-plane"/>
       {#each s3.stock as p}<path d={p} class="stock"/>{/each}
-      {#each s3.triangles as triangle}
-        <path d={path(triangle.points,true)} class="step-face" style={`fill:${faceFill(triangle.shade)}`}/>
-      {/each}
+      {#each s3.triangles as triangle}<path d={path(triangle.points,true)} class="step-face" style={`fill:${faceFill(triangle.shade)}`}/>{/each}
       {#each s3.edges as edge}<path d={edge} class="step-edge"/>{/each}
+      {#if showZLevels}{#each s3.slicePaths as slice}<path d={slice} class="z-level"/>{/each}{/if}
       <path d={s3.axes[0]} class="axis x"/><path d={s3.axes[1]} class="axis y"/><path d={s3.axes[2]} class="axis z"/>
       <text x={s3.labels[0].x+7} y={s3.labels[0].y-5}>X</text><text x={s3.labels[1].x+7} y={s3.labels[1].y-5}>Y</text><text x={s3.labels[2].x+7} y={s3.labels[2].y-5}>Z</text>
       <circle cx={s3.wcs.x} cy={s3.wcs.y} r="10" class="wcs-marker"/><circle cx={s3.wcs.x} cy={s3.wcs.y} r="3" class="wcs-dot"/>
@@ -112,32 +119,28 @@
   <div class="geometry-caption">
     <strong>{summary.kind==='step'?'BRep · Rohling · WCS':stockMode==='none'?'2D-Geometrie · ohne Rohling · WCS':'2D-Geometrie · Rohling · WCS'}</strong>
     {#if summary.kind==='step'}
-      <span class="help"><button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button><span>Drag: drehen · Shift/Mitte: verschieben</span></span>
+      <span class="help">
+        <button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button>
+        <button class:active-toggle={showZLevels} onclick={()=>showZLevels=!showZLevels}>Z-Level</button>
+        {#if showZLevels}<label class="slice-step">Zustellung <input type="number" min="0.1" step="0.1" value={zLevelStepMm} oninput={updateSliceStep}/> mm</label><span>{s3?.sliceCount??0} Ebenen · {s3?.chainCount??0} Konturen</span>{/if}
+        <span>Drag: drehen · Shift/Mitte: verschieben</span>
+      </span>
     {/if}
   </div>
 </div>
 
 <style>
-  .geometry-view{position:relative;z-index:2;width:min(92%,1100px);margin:auto;pointer-events:auto}
-  .geometry-view>*{pointer-events:auto}
-  svg{width:100%;display:block;touch-action:none;user-select:none}
-  svg.interactive{cursor:grab}
-  svg.interactive:active{cursor:grabbing}
+  .geometry-view{position:relative;z-index:2;width:min(92%,1100px);margin:auto;pointer-events:auto}.geometry-view>*{pointer-events:auto}
+  svg{width:100%;display:block;touch-action:none;user-select:none}svg.interactive{cursor:grab}svg.interactive:active{cursor:grabbing}
   .setup-plane{fill:rgba(255,255,255,.2);stroke:rgba(70,80,75,.18);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}
   .stock{fill:none;stroke:rgba(93,105,99,.46);stroke-width:1.35;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .dxf{fill:none;stroke:#26342e;stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-  .step-face{stroke:none;pointer-events:none}
-  .step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-  .axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}
-  .axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}
-  text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}
-  .wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
-  .wcs-dot{fill:#c27528;pointer-events:none}
-  .wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}
-  .geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}
-  .geometry-caption strong{color:#34423c;font-weight:600}
-  .help{display:flex;align-items:center;gap:7px}
-  .help button{position:relative;z-index:4;min-width:28px;border:1px solid rgba(52,66,60,.22);border-radius:7px;background:rgba(255,255,255,.72);padding:3px 7px;color:#34423c;cursor:pointer}
-  .help button:hover{background:#fff}
+  .step-face{stroke:none;pointer-events:none}.step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+  .z-level{fill:none;stroke:#c27528;stroke-width:2.1;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+  .axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}.axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}
+  text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}.wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}.wcs-dot{fill:#c27528;pointer-events:none}.wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}
+  .geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}.geometry-caption strong{color:#34423c;font-weight:600}.help{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .help button{position:relative;z-index:4;min-width:28px;border:1px solid rgba(52,66,60,.22);border-radius:7px;background:rgba(255,255,255,.72);padding:3px 7px;color:#34423c;cursor:pointer}.help button:hover{background:#fff}.help button.active-toggle{background:#f4eadf;border-color:rgba(194,117,40,.45);color:#8c551d}
+  .slice-step{display:flex;align-items:center;gap:5px}.slice-step input{width:58px;padding:3px 5px;border:1px solid rgba(52,66,60,.22);border-radius:6px;background:rgba(255,255,255,.78);color:#34423c}
   @media(max-width:800px){.geometry-caption{align-items:flex-start;flex-direction:column;gap:8px}.help{flex-wrap:wrap}}
 </style>
