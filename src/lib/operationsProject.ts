@@ -56,7 +56,8 @@ export function operationSummary(operation:CamOperation):string {
   if(operation.kind==='facing')return `${operation.direction==='x'?'X-Raster':'Y-Raster'} · ${operation.stepoverPercent}% Zustellung · ${operation.totalDepthMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Abtrag · ${tool}`;
   if(operation.kind==='carve'){
     const source=operation.layerName??'Einzelauswahl';
-    return `${source} · ${operation.curveIds.length} Linie${operation.curveIds.length===1?'':'n'} · ${tool}`;
+    const side=operation.side==='left'?'Links':operation.side==='right'?'Rechts':'Auf Linie';
+    return `${source} · ${operation.curveIds.length} Linie${operation.curveIds.length===1?'':'n'} · ${side} · ${tool}`;
   }
   if(operation.kind==='drill'){
     const source=operation.layerName??'Einzelauswahl';
