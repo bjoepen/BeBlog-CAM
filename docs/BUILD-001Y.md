@@ -1,88 +1,102 @@
-# BeBlog CAM 001Y — Open Contour Machining
+# BeBlog CAM 001Y — Contour Breakout / Open Contour Machining
 
 ## Ziel
 
-001Y erweitert die bestehende **Kontur**-Bearbeitung um offene DXF-Ketten. Es entsteht ausdrücklich keine neue Bearbeitungswelt.
+001Y erweitert die bestehende **Kontur**-Bearbeitung so, dass eine **geschlossene CAD-Sollkontur gezielt für die Bearbeitung aufgebrochen** werden kann.
 
-Praxisreferenz ist die CBG-Kopfplatte: Die Kopfplattenkontur darf an drei Seiten gefräst werden, während der Übergang zum Hals offen und damit ungeschnitten bleibt.
+Praxisreferenz ist die CBG-Kopfplatte: Die Zeichnung bleibt geschlossen und maßhaltig. Für die Fertigung wird jedoch z. B. die Halsseite abgewählt, sodass nur drei Seiten gefräst werden und die Kopfplatte mit dem Hals verbunden bleibt.
+
+Zusätzlich bleibt die bereits gebaute Unterstützung für tatsächlich offene DXF-Ketten erhalten.
 
 ## Leitplanke
 
-**Eine Konturwelt, zwei Topologien:**
+**CAD-Geometrie und Bearbeitungsauswahl sind zwei verschiedene Wahrheiten.**
 
-- geschlossen
-- offen
+- Die CAD-Kontur bleibt unverändert geschlossen.
+- Der Nutzer wählt eine Kontur.
+- Danach kann er einzelne Konturstrecken direkt im Viewport aus- oder wieder einschalten.
+- Ausgeschaltete Strecken erzeugen keinen Schnitt und keine automatische Ersatzverbindung.
+- `Außen / Innen / Auf Linie` bleibt die Werkzeugseitenlogik der ursprünglichen geschlossenen Sollkontur.
 
-Eine offene Kontur darf niemals implizit zwischen ihrem letzten und ersten Punkt geschlossen werden.
+Es entsteht keine neue Bearbeitungsart und kein zusätzlicher Workflow-Schritt.
 
 ## Architektur
 
-### Offene Ketten
+### Geschlossene Sollkontur aufbrechen
 
-`src/lib/openContour.ts` baut verbundene offene Chains aus nativen DXF-Linien, Bögen und offenen Polylinien auf. Anfang und Ende bleiben explizit verschieden.
+`ContourOperation.excludedSegmentIds` speichert ausschließlich die Bearbeitungsauswahl. Die importierte DXF-Geometrie wird nicht verändert.
 
-### Werkzeugseite
+`src/lib/brokenContour.ts` zerlegt die aktive geschlossene Kontur an den abgewählten Segmenten in eine oder mehrere zusammenhängende offene Teilkonturen. Für jede aktive Teilkontur wird die Werkzeugradiuskorrektur separat berechnet.
 
-Für offene Konturen existieren drei Seitenzustände:
-
-- links
-- rechts
-- auf Linie
-
-Links/Rechts beziehen sich auf die feste Richtung der DXF-Kette. Die spätere Fahrtrichtung Gleichlauf/Gegenlauf darf diese gewählte Materialseite nicht invertieren.
+Die Zuordnung von `Außen / Innen` bleibt an der Orientierung der vollständigen geschlossenen Sollkontur gebunden. Dadurch bleibt die Materialseite auch nach dem Aufbrechen eindeutig.
 
 ### Werkzeugradiuskorrektur
 
-`offsetOpenChain()` erzeugt eine offene Fräsermittelbahn im Abstand des Werkzeugradius. Sie prüft:
+An offenen Endpunkten wird die Werkzeugbahn nicht mit einer erfundenen vierten Seite vermitert. Der Offset endet an der tatsächlichen offenen Teilkontur.
 
-- Abstand zur Sollkette
+Geprüft werden:
+
+- Werkzeugradiusabstand
 - Parallelität
 - korrekte Seite
 - Selbstüberschneidung
-- offene Endpunkte
+- mindestens eine aktive Konturstrecke
+- keine implizite Verbindung über ausgeschaltete Bereiche
 
 ### G-Code
 
-`src/lib/gcode.ts` bleibt der gemeinsame Einstiegspunkt für Kontur-G-Code und routet anhand der Topologie:
+`src/lib/gcode.ts` bleibt der gemeinsame Einstiegspunkt:
 
-- geschlossen → bewährter geschlossener Konturkern
-- offen → `openContourGcode.ts`
+- geschlossene Kontur ohne Ausschlüsse → bewährter geschlossener Kern
+- geschlossene Kontur mit Ausschlüssen → `brokenContourGcode.ts`
+- tatsächlich offene DXF-Kette → `openContourGcode.ts`
 
-Der offene Pfad wird zunächst bewusst als überprüfbare G1-Bahn ausgegeben. Native G2/G3-Erhaltung offener Bögen ist nicht Teil von 001Y.
+Bei mehreren getrennten aktiven Teilkonturen erfolgt jeder Wechsel ausschließlich auf Sicherheits-Z.
 
 ## UX
 
-Es gibt keinen neuen `+ Bearbeitung`-Button.
+Ablauf unter **Bearbeiten → Kontur**:
 
-Unter **Bearbeiten → Kontur** werden geschlossene und offene Konturen im Viewport angeboten. Bei einer offenen Kette erscheinen die beiden radiuskorrigierten Seiten als dezente Vorschau. Der Nutzer klickt direkt auf die gewünschte Werkzeugseite; ein Klick auf die Centerline wählt `Auf Linie`.
+1. geschlossene Sollkontur auswählen
+2. einzelne Konturstrecke anklicken → Strecke wird aus der Bearbeitung genommen
+3. erneut anklicken → Strecke wird wieder eingeschaltet
+4. `Außen / Innen / Auf Linie` wie gewohnt wählen
+5. Gleichlauf / Gegenlauf wie gewohnt wählen
 
-Die rote Werkzeugweg-Vorschau bleibt sichtbar und muss an beiden Enden offen bleiben.
+Aktive und ausgeschaltete Strecken werden im Viewport unterschiedlich dargestellt. Die rote Linie zeigt ausschließlich die daraus abgeleitete Fräsermittelbahn.
+
+## Canvas-Invariante
+
+Die CAM-Overlay-SVG und die Geometrie-SVG müssen exakt denselben 1000×650-Zeichenraum und denselben Mittelpunkt verwenden. Informations-Captions dürfen die Zentrierung des eigentlichen SVG nicht beeinflussen.
+
+001Y enthält deshalb einen Layout-Fix: Die GeometryView-Caption wird aus dem Zentrierungsfluss genommen. Eine Werkzeugbahn `Auf Linie` muss visuell exakt auf der schwarzen Sollgeometrie liegen. Ein sichtbarer globaler Versatz ist FAIL, selbst wenn der NC-Code mathematisch korrekt wäre.
 
 ## Prüfen
 
-001Y hängt sich in die mit 001X vereinheitlichte Prüfung ein.
+001Y hängt sich weiterhin in die 001X Validation Grammar ein.
 
-Zusätzliche offene Konturprüfungen:
+Für aufgebrochene Konturen wird zusätzlich geprüft:
 
-- offene Kontur ausgewählt
-- Werkzeugdurchmesser > 0
-- gültige Tiefen und Schnittdaten
-- gültiger Sicherheits-Z
-- Werkzeug–Operation-Kompatibilität aus der gemeinsamen Validation Grammar
-- mathematisch gültiger Offset
+- geschlossene Sollkontur vorhanden
+- mindestens eine Strecke abgewählt
+- mindestens eine Strecke aktiv
+- gültige Werkzeugradiuskorrektur aller aktiven Teilkonturen
 - keine Selbstüberschneidung
-- Rohling-/Tiefenhinweise
-
-Im Gesamtjob wird die offene Kontur über denselben `jobPreflight` wie alle anderen Operationen geprüft.
+- Werkzeugkompatibilität
+- Tiefe / Zustellung / Schnittdaten / Sicherheits-Z
+- Rohlinghinweise
 
 ## Sicherheitsinvarianten
 
-1. Eine offene Kontur wird niemals automatisch geschlossen.
-2. Es wird kein Schnitt vom letzten Endpunkt zurück zum ersten Endpunkt erzeugt.
-3. Links/Rechts ist an die DXF-Kettenrichtung gebunden, nicht an Gleichlauf/Gegenlauf.
-4. Zwischen Z-Stufen wird vor dem Rückweg zum Startpunkt auf Sicherheits-Z gefahren.
-5. Ungültige Offsetgeometrie darf keinen G-Code erzeugen.
-6. Geschlossene Konturen und Taschen behalten ihren bestehenden 001X-Prüf- und Werkzeugwegkern.
+1. Die CAD-Sollkontur wird nie verändert.
+2. Eine ausgeschaltete Strecke erzeugt keinen Schnitt.
+3. Es wird keine Ersatzverbindung über ausgeschaltete Strecken erzeugt.
+4. Außen/Innen bleibt aus der ursprünglichen geschlossenen Kontur abgeleitet.
+5. Gleichlauf/Gegenlauf ändert nur die Fahrtrichtung, nicht die Materialseite.
+6. Zwischen getrennten Teilkonturen und zwischen Z-Stufen wird vor XY-Verfahrten auf Sicherheits-Z zurückgezogen.
+7. Ungültige Offsetgeometrie blockiert G-Code.
+8. `Auf Linie` muss im Canvas ohne globalen Darstellungsversatz auf der CAD-Geometrie liegen.
+9. Geschlossene Konturen ohne Ausschlüsse behalten ihren bisherigen Kern.
 
 ## Gates
 
@@ -96,73 +110,86 @@ Erwartung: keine Fehler.
 
 ### Y2 — Geschlossene Kontur Regression
 
-Eine vorhandene geschlossene Außenkontur auswählen und G-Code erzeugen.
+Geschlossene Kontur auswählen, keine Strecke abwählen, G-Code erzeugen.
 
-Erwartung: bisheriger geschlossener Konturpfad unverändert funktionsfähig.
+Erwartung: bisheriger Konturpfad unverändert.
 
-### Y3 — Offene Kette erkennen
+### Y3 — Kontur aufbrechen
 
-Eine DXF mit einer dreiseitigen, zusammenhängenden offenen Kopfplattenkontur laden.
-
-Erwartung:
-
-- Kette erscheint als offene Auswahlgeometrie.
-- Anfang und Ende bleiben sichtbar getrennt.
-- keine künstliche vierte Seite.
-
-### Y4 — Werkzeugseite wählen
-
-Links- und Rechts-Vorschau im Viewport nacheinander anklicken.
+Ein Rechteck oder die geschlossene CBG-Kopfplattenkontur auswählen und eine Seite anklicken.
 
 Erwartung:
 
-- rote Werkzeugbahn wechselt auf die jeweilige Seite.
-- Abstand entspricht Werkzeugradius.
-- `Auf Linie` liegt exakt auf der DXF-Kette.
+- angeklickte Strecke wird sichtbar ausgeschaltet
+- CAD-Kontur bleibt sichtbar geschlossen
+- rote Werkzeugbahn enthält die ausgeschaltete Strecke nicht
+- kein automatischer Schluss zwischen den neuen Endpunkten
 
-### Y5 — Richtungsinvariante
+### Y4 — Wieder einschalten
 
-Eine Werkzeugseite wählen und danach zwischen Gleichlauf und Gegenlauf wechseln.
+Ausgeschaltete Strecke erneut anklicken.
 
-Erwartung: Die Fahrtrichtung ändert sich, die gewählte Werkzeug-/Materialseite nicht.
+Erwartung: vollständige geschlossene Bearbeitung wird wiederhergestellt.
 
-### Y6 — Preflight
+### Y5 — Werkzeugseite
 
-Gültige offene Kontur mit Schaftfräser prüfen.
-
-Erwartung: PASS bzw. nur bekannte Rohling-Hinweise. Ein ungeeigneter Werkzeugtyp folgt der 001X-Kompatibilitätsmatrix.
-
-### Y7 — NC-Sicherheitsprüfung
-
-G-Code für mehrere Z-Stufen erzeugen.
+Mit aufgebrochener Kontur nacheinander `Außen`, `Innen`, `Auf Linie` wählen.
 
 Erwartung:
 
-- jede Stufe beginnt am offenen Startpunkt
-- Schnitt endet am offenen Endpunkt
-- danach `G0 Z...` auf Sicherheits-Z
-- keine XY-Rückfahrt zum Startpunkt auf Schnitttiefe
-- keine Zeile erzeugt eine Verbindung Endpunkt → Startpunkt
+- Werkzeugbahn wechselt korrekt auf die jeweilige Seite
+- `Auf Linie` deckt sich visuell exakt mit den aktiven CAD-Strecken
+- Abstand bei Außen/Innen entspricht Werkzeugradius
 
-### Y8 — NC View
+### Y6 — Richtungsinvariante
 
-NC-Datei in NC View öffnen.
+Zwischen Gleichlauf und Gegenlauf wechseln.
 
-Erwartung: ausschließlich die ausgewählten Seiten der Kopfplatte werden bearbeitet; der Halsübergang bleibt offen.
+Erwartung: Fahrtrichtung ändert sich, gewählte Materialseite und ausgeschaltete Strecken nicht.
+
+### Y7 — Preflight
+
+Aufgebrochene Kontur prüfen.
+
+Erwartung: PASS bei gültiger Geometrie; FAIL wenn alle Strecken ausgeschaltet sind oder der Offset geometrisch ungültig wird.
+
+### Y8 — NC-Sicherheitsprüfung
+
+Mehrere Z-Stufen erzeugen.
+
+Erwartung:
+
+- keine G1/G2/G3-Verbindung über ausgeschaltete Strecken
+- getrennte Teilkonturen werden nur nach `G0 Z<Sicherheits-Z>` gewechselt
+- kein Rückweg über den geschützten Halsübergang auf Schnitttiefe
+
+### Y9 — Canvas Alignment
+
+`Auf Linie` wählen.
+
+Erwartung: rote Werkzeugbahn liegt pixelgenau auf der schwarzen CAD-Kontur. Kein konstanter X/Y-Versatz.
+
+### Y10 — NC View
+
+NC-Datei der CBG-Kopfplatte öffnen.
+
+Erwartung: nur die freigegebenen drei Seiten werden bearbeitet; der Halsübergang bleibt ungeschnitten.
+
+## Carve-Folgethema
+
+Der Hinweis `Innen / Außen / Auf Linie` für Carve ist aufgenommen. Für frei ausgewählte offene Carve-Linien ist `Innen/Außen` ohne eine zugehörige geschlossene Referenzkontur jedoch semantisch nicht eindeutig. Dieser Ausbau soll deshalb nicht als bloßer UI-Schalter erfolgen: entweder `Links / Rechts / Auf Linie` für echte offene Linien oder `Innen / Außen / Auf Linie`, wenn die Carve-Auswahl auf eine geschlossene Elternkontur bezogen ist.
 
 ## Bewusste Grenzen
 
-Nicht Bestandteil von 001Y:
+Nicht Bestandteil dieses Korrekturlaufs:
 
-- native G2/G3-Ausgabe für offene ARC-Ketten
-- STEP-Kanten als offene 2D-Kontur auswählen
+- native G2/G3-Erhaltung aufgebrochener ARC-Segmente
+- STEP-Kanten als auswählbare Teilkonturen
 - Tabs/Stege
 - Lead-in / Lead-out
-- 3D Machining Boundary
+- allgemeine 3D Machining Boundary
 - Z-Level Roughing
-
-Die offene Konturgeometrie ist jedoch bewusst als Grundlage für spätere Bearbeitungsgrenzen vorgesehen.
 
 ## Real-World-DoD
 
-001Y ist fachlich PASS, wenn die CBG-Kopfplattenkontur an drei Seiten als echte offene Kontur bearbeitet werden kann, die gewählte Werkzeugseite korrekt bleibt und weder Vorschau, Preflight noch NC-Code den Halsübergang schließen.
+001Y ist fachlich PASS, wenn eine **geschlossen gezeichnete** CBG-Kopfplattenkontur im CAM an der Halsseite durch Abwahl dieser Strecke geöffnet werden kann, die Vorschau exakt zur CAD-Geometrie ausgerichtet ist und der erzeugte NC-Code keinerlei Schnitt über den geschützten Halsübergang enthält.
