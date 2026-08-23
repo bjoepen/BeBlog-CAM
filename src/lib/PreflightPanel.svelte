@@ -4,6 +4,7 @@
   import { buildRectangularPocketPath, buildCircularPocketPath, buildPocketRamp, type PocketPath, type CircularPocketPath } from './pocketMath';
   import { buildParallelPocketPath, type ParallelPocketPath } from './parallelPocketMath';
   import { pocketHelixRadiusMm } from './helicalMotion';
+  import { validateToolCompatibility } from './validationGrammar';
   export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let operation:ContourOperation|PocketOperation;
   type Level='pass'|'warn'|'fail';type Check={level:Level;title:string;detail:string};type PathCheck={validation:OffsetValidation;method:'circle'|'mixed'|'segmented'};
   type PocketCheck={kind:'raster';path:PocketPath}|{kind:'concentric';path:CircularPocketPath}|{kind:'parallel';path:ParallelPocketPath;lineCount:number;arcCount:number}|{kind:'error';error:string};
@@ -43,6 +44,7 @@
     const out:Check[]=[];
     out.push(operation.contourId===null?{level:'fail',title:'Sollkontur',detail:'Keine geschlossene Kontur gewählt. Ohne Sollkontur darf kein Werkzeugweg freigegeben werden.'}:{level:'pass',title:'Sollkontur',detail:`Kontur ${operation.contourId+1} ist die maßgebliche CAD-Geometrie. Ihre Koordinaten bleiben das Fertigmaß.`});
     out.push(operation.tool.diameterMm>0?{level:'pass',title:'Werkzeug',detail:`Ø ${operation.tool.diameterMm.toFixed(3)} mm · Radius ${radius.toFixed(3)} mm.`}:{level:'fail',title:'Werkzeug',detail:'Werkzeugdurchmesser muss größer als 0 sein.'});
+    const compatibility=validateToolCompatibility(operation);out.push({level:compatibility.level,title:compatibility.title,detail:compatibility.detail});
 
     if(operation.kind==='pocket'){
       if(operation.contourId!==null){
@@ -67,7 +69,7 @@
       else if(pocket?.kind==='concentric')out.push({level:'fail',title:'Eintauchstrategie',detail:'Lineare Rampe ist für die Kreistasche nicht freigegeben. Bitte „Senkrecht“ oder „Helix“ wählen.'});
       else if(pocket?.kind==='parallel')out.push({level:'fail',title:'Eintauchstrategie',detail:'Lineare Rampe ist für konturparallele Taschen noch nicht freigegeben. Bitte „Senkrecht“ wählen.'});
       else if(!pocket||pocket.kind!=='raster'||!pocket.path.ok)out.push({level:'fail',title:'Eintauchstrategie',detail:'Rampe kann erst nach gültiger Raster-Taschengeometrie geprüft werden.'});
-      else{const maxIncrement=Math.min(operation.stepDownMm,operation.totalDepthMm),ramp=buildPocketRamp(pocket.path,maxIncrement,operation.rampAngleDeg);out.push(ramp.ok?{level:'pass',title:'Eintauchstrategie',detail:`Lineare Rampe ${operation.rampAngleDeg.toFixed(1)}° · benötigt ${ramp.lengthMm.toFixed(3)} mm · verfügbar ${ramp.availableMm.toFixed(3)} mm.`}:{level:'fail',title:'Eintauchstrategie',detail:ramp.error??'Rampe ist geometrisch nicht möglich.'});}
+      else{const maxIncrement=Math.min(operation.stepDownMm,operation.totalDepthMm),ramp=buildPocketRamp(pocket.path,maxIncrement,operation.rampAngleDeg);if(!ramp.ok)out.push({level:'fail',title:'Eintauchstrategie',detail:ramp.error??'Rampe konnte nicht erzeugt werden.'});else out.push({level:'pass',title:'Eintauchstrategie',detail:`Lineare Rampe ${operation.rampAngleDeg.toFixed(1)}° · benötigt ${ramp.lengthMm.toFixed(3)} mm · verfügbar ${ramp.availableMm.toFixed(3)} mm.`});}
     }else{
       out.push({level:'pass',title:'Bahnkorrektur',detail:operation.side==='outside'?`Fräsermittelbahn = Sollkontur + ${radius.toFixed(3)} mm nach außen.`:operation.side==='inside'?`Fräsermittelbahn = Sollkontur − ${radius.toFixed(3)} mm nach innen.`:'Fräsermittelbahn = Sollkontur. Keine Radiuskorrektur.'});
       if(summary.kind==='dxf'&&operation.contourId!==null){if(!pathValidation)out.push({level:'fail',title:'Bahnvermessung',detail:'Die tatsächlich erzeugte Werkzeugbahn konnte nicht gegen die Sollkontur vermessen werden.'});else if(pathValidation.ok){const method=pathCheck?.method==='circle'?'analytischer CAD-Kreis · native G2/G3-Bahn':pathCheck?.method==='mixed'?'analytische DXF-Linien/Bögen · gemischte G1/G2/G3-Bahn':'segmentierte CAM-Bahn';out.push({level:'pass',title:'Bahnvermessung',detail:`Soll ${pathValidation.expectedMm.toFixed(3)} mm · Ist ${pathValidation.measuredMinMm.toFixed(3)}–${pathValidation.measuredMaxMm.toFixed(3)} mm · max. Abweichung ${pathValidation.maxDeviationMm.toFixed(4)} mm · ${method}.`});}else out.push({level:'fail',title:'Bahnvermessung',detail:`Soll ${pathValidation.expectedMm.toFixed(3)} mm · max. Abweichung ${Number.isFinite(pathValidation.maxDeviationMm)?pathValidation.maxDeviationMm.toFixed(4):'—'} mm · ${pathValidation.sideOk?'Seite korrekt':'FALSCHE SEITE'}. ${pathValidation.diagnostic??''}`});}
