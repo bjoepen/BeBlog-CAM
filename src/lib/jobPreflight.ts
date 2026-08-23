@@ -30,8 +30,10 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
       const r=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`Tasche · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }else{
       const r=generateContourGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];
-      const contourSide=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');
-      detail=`${operation.topology==='open'?'Offene':'Geschlossene'} Kontur · ${contourSide} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
+      const excluded=operation.excludedSegmentIds??[];
+      const topology=operation.topology==='open'?'offene DXF-Kontur':excluded.length?`aufgebrochen · ${excluded.length} Strecke${excluded.length===1?'':'n'} aus`:'geschlossen';
+      const side=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');
+      detail=`${topology} · ${side} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }
 
     for(const check of validateOperationGrammar(operation,stock,stockMode,wcs)){
