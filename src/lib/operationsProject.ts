@@ -10,13 +10,13 @@ export const operationsProjectStore=writable<OperationsProject>({
 function sync(project:OperationsProject){operationsProjectStore.set({operations:project.operations.map(cloneOperation),activeOperationId:project.activeOperationId});return project;}
 
 export function cloneOperation<T extends CamOperation>(operation:T):T {
-  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{})} as T;
+  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...operation.excludedSegmentIds]}:{})} as T;
 }
 
 export function createOperation(kind:OperationKind,index:number):CamOperation {
   const serial=Math.max(1,index);
   if(kind==='facing') return {...defaultFacingOperation,id:`op-facing-${serial}`,name:`Planen ${serial}`,tool:{...defaultFacingOperation.tool}};
-  if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:`Kontur ${serial}`,tool:{...defaultContourOperation.tool}};
+  if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:`Kontur ${serial}`,excludedSegmentIds:[],tool:{...defaultContourOperation.tool}};
   if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:`Tasche ${serial}`,tool:{...defaultPocketOperation.tool}};
   if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:`Bohren ${serial}`,curveIds:[],tool:{...defaultDrillOperation.tool}};
   return {...defaultCarveOperation,id:`op-carve-${serial}`,name:`Carve ${serial}`,curveIds:[],tool:{...defaultCarveOperation.tool}};
@@ -65,7 +65,8 @@ export function operationSummary(operation:CamOperation):string {
   }
   if(operation.kind==='contour'){
     const side=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');
-    return `${operation.contourId===null?'Keine Kontur':`${operation.topology==='open'?'Offene':'Kontur'} ${operation.contourId+1}`} · ${side} · ${tool}`;
+    const broken=operation.topology==='closed'&&operation.excludedSegmentIds.length?` · ${operation.excludedSegmentIds.length} Strecke${operation.excludedSegmentIds.length===1?'':'n'} aus` : '';
+    return `${operation.contourId===null?'Keine Kontur':`${operation.topology==='open'?'Offene':'Kontur'} ${operation.contourId+1}`} · ${side}${broken} · ${tool}`;
   }
   const strategy=operation.strategy==='auto'?'Auto':operation.strategy==='raster'?'Raster':operation.strategy==='concentric'?'Kreis':'Konturparallel';
   const entry=operation.entry==='helix'?'Helix':operation.entry==='ramp'?'Rampe':'Senkrecht';
