@@ -2,50 +2,70 @@
 
 ## Ziel
 
-001Z-A führt noch keine 3D-Schruppbearbeitung und keinen G-Code ein. Der Build beweist zuerst, dass BeBlog CAM aus der vorhandenen STEP-Darstellungs-Triangulation reproduzierbare horizontale Z-Schnittkonturen ableiten, echte BRep-Flächen auswählbar machen und die Geometrievorschau im 3D-Viewport sichtbar eingrenzen kann.
+001Z-A erzeugt weiterhin noch keinen Maschinen-G-Code. Der Build beweist den praxisnahen Geometrieweg für eine 3-Achs-Schruppbearbeitung am STEP-Modell:
 
-Das exakte OCCT-BRep bleibt Source of Truth. Die Triangulation ist hier ausdrücklich eine abgeleitete Repräsentation für den ersten kontrollierten Z-Level-Geometry-Kernel; sie ersetzt weder BRep noch spätere CAM-Geometrie.
+`Rohlingoberkante → gewählte horizontale BRep-Zielfläche → Schlichtaufmaß → gestufte Abtragszone`
 
-## Datenfluss
+Das exakte OCCT-BRep bleibt Source of Truth. Triangulation und Face-IDs sind abgeleitete Daten für Darstellung und Selektion.
 
-`STEP → OCCT BRep → Face-IDs + Darstellungs-Triangulation → optionale Face-Auswahl → horizontale Schnitte → Segment-Deduplizierung → zusammenhängende 2D-Ketten je Z-Ebene → 3D-Overlay`
+## Praxisfall CBG-Kopfplatte
 
-## Kernel-Regeln
+Der reale Referenzfall ist eine eingespannt bleibende Kopfplatte. Die seitlichen Überstände des Rohlings dürfen ausdrücklich stehen bleiben. Der Nutzer wählt die obere Fläche der Kopfplatte als Zielfläche. BeBlog CAM darf nur den XY-Bereich dieser Fläche von der Rohlingoberkante bis auf die Zielhöhe plus Schlichtaufmaß abtragen.
 
-- Z-Ebenen werden von der Modelloberseite aus mit einer frei einstellbaren Zustellung erzeugt.
-- Die Unterkante des Modells wird als letzte Ebene aufgenommen, sofern sie nicht bereits durch das Raster getroffen wird.
-- Dreiecke, die vollständig koplanar zur Schnittebene liegen, erzeugen nicht blind drei Schnittsegmente.
-- Schnitte an gemeinsamen Dreieckskanten werden dedupliziert.
-- Einzelne Schnittsegmente werden über gemeinsame Endpunkte zu Ketten verbunden.
-- Geschlossene Ketten werden als solche markiert; offene Ketten bleiben offen und werden niemals künstlich geschlossen.
-- Der Kernel erzeugt noch keine Werkzeugradiuskorrektur, Räumstrategie oder Maschinenbewegung.
+Damit lautet die Semantik nicht mehr „Rohling minus Gesamtmodell komplett freiräumen“, sondern:
+
+`gewählte Zielfläche = Bearbeitungsbereich + Zielhöhe`
 
 ## BRep-Face-Auswahl
 
-OCCT liefert für jedes Darstellungsdreieck zusätzlich die ID der echten BRep-Fläche, aus der dieses Dreieck stammt. Die ID ist innerhalb eines Imports deterministisch und dient nur der Viewport-Auswahl; das BRep selbst bleibt die Geometriequelle.
+- sichtbare echte BRep-Flächen sind im Z-Level-Modus anklickbar,
+- eine Auswahl markiert die vollständige BRep-Fläche und niemals nur ein Tessellationsdreieck,
+- Mehrfachauswahl bleibt möglich,
+- erneuter Klick wählt eine Fläche ab,
+- Orbit/Drag darf keine Fläche versehentlich umschalten,
+- ausgewählte Flächen bleiben ruhig ocker hervorgehoben.
 
-Bei aktiver Z-Level-Vorschau:
+Für den Roughing-Proof müssen die ausgewählten Flächen horizontal und planar sowie bei Mehrfachauswahl koplanar sein. Nicht passende Auswahl erzeugt keine Abtragsvorschau.
 
-- eine sichtbare Modellfläche kann direkt angeklickt werden,
-- Mehrfachauswahl ist möglich,
-- erneuter Klick entfernt die Fläche wieder,
-- gewählte Flächen werden zurückhaltend ocker hervorgehoben,
-- `Auswahl löschen` stellt den Zustand `Gesamtmodell` wieder her,
-- Orbit/Pan bleiben erhalten; eine echte Drag-Bewegung darf keine Fläche umschalten.
+## Face-Target-Roughing-Kernel
 
-Ohne ausgewählte Flächen schneidet die Vorschau weiterhin das Gesamtmodell. Sobald mindestens eine Fläche gewählt ist, wird der aktuelle Geometry-Proof auf die Dreiecke dieser BRep-Flächen begrenzt. Das ist ausdrücklich **noch keine finale Machining Boundary** und noch keine Stock-minus-Part-Region. Die Face-Auswahl dient in 001Z-A als kontrollierter Selektions- und Geometrie-Gate für den späteren Roughing-Bereich.
+`src/lib/faceTargetRoughing.ts` leitet aus den Darstellungsdreiecken der ausgewählten BRep-Fläche deren äußere und innere XY-Randketten ab. Gemeinsame Dreieckskanten werden verworfen; nur echte Randkanten bleiben übrig. Dadurch bleiben Öffnungen innerhalb der Zielfläche als Aussparungen erhalten und werden nicht automatisch zu Z-Level-Bearbeitungen.
+
+Der Kernel bestimmt:
+
+- Zielhöhe `targetZ` aus der gewählten horizontalen Fläche,
+- Schrupp-Endhöhe `roughBottomZ = targetZ + Schlichtaufmaß`,
+- Rohlingoberkante aus `stock.thickness`,
+- Z-Ebenen zwischen Rohlingoberkante und Schrupp-Endhöhe anhand der Zustellung,
+- denselben ausgewählten XY-Bearbeitungsbereich auf jeder dieser Ebenen.
+
+## Schlichtaufmaß
+
+Das Schlichtaufmaß bleibt bewusst oberhalb der echten Modellfläche stehen.
+
+Beispiel:
+
+- Rohlingoberkante: 20,0 mm
+- Zielfläche: 12,0 mm
+- Schlichtaufmaß: 0,5 mm
+- Schrupp-Endhöhe: 12,5 mm
+
+Die spätere Schlichtoperation entfernt erst das verbleibende Aufmaß bis zur echten Fläche.
 
 ## UI / Visual Gate
 
-Im STEP-Viewport gibt es eine lokale Schaltfläche `Z-Level`.
+Im STEP-Viewport gibt es weiterhin den lokalen Schalter `Z-Level`.
 
 Bei aktiver Vorschau:
 
-- `Zustellung` bestimmt den Abstand der horizontalen Ebenen.
-- Die abgeleiteten Schnittkonturen werden orange über dem ruhigen BRep-Modell dargestellt.
-- Die Anzeige nennt Anzahl Ebenen, abgeleitete Konturketten und den Auswahlstatus.
+- `Zustellung` definiert den vertikalen Abstand der Schruppstufen,
+- `Schlichtaufmaß` definiert den Materialrest über der gewählten Zielfläche,
+- ohne Auswahl fordert die Anzeige zur Wahl einer Zielfläche auf,
+- mit gültiger Auswahl werden Ziel-Z und Schrupp-Endhöhe angezeigt,
+- die ockerfarbenen transparenten Flächen zeigen ausschließlich den Bereich über der gewählten Zielfläche,
+- seitliche Rohlingüberstände bleiben unberührt,
+- innere Öffnungen der gewählten Fläche bleiben ausgespart,
 - Orbit, Pan, Zoom, Rohling, WCS und echte BRep-Kanten bleiben erhalten.
-- Aktivieren/Deaktivieren sowie eine Änderung der Zustellung müssen die Vorschau unmittelbar neu berechnen; eine Kamerabewegung darf dafür nicht erforderlich sein.
 
 ## Real-World-Abnahme
 
@@ -53,38 +73,38 @@ Referenz: `CBG Headstock v1.step`.
 
 1. Start mit `pnpm native:dev`.
 2. STEP laden; Referenzdaten bleiben 16 Flächen, 72 Kanten, 2 Volumenkörper.
-3. `Z-Level` einschalten. Die orange Vorschau muss sofort erscheinen, ohne das Modell zu bewegen.
-4. Zunächst 2,0 mm Zustellung wählen.
-5. Die orange Geometrie muss ausschließlich auf horizontalen Schnitten durch das reale Modell liegen.
-6. Bohrungen und Außenform müssen abhängig von der jeweiligen Z-Höhe in den Schnittkonturen erscheinen bzw. verschwinden.
-7. Eine sichtbare BRep-Fläche anklicken. Die gesamte reale Fläche — nicht nur ein einzelnes Mesh-Dreieck — muss hervorgehoben werden.
-8. Eine zweite Fläche hinzufügen und eine gewählte Fläche wieder abwählen; Mehrfachauswahl und Toggle müssen stabil funktionieren.
-9. Bei aktiver Auswahl muss sich die Z-Level-Geometrievorschau auf die gewählten Face-Dreiecke beschränken. `Auswahl löschen` muss wieder das Gesamtmodell verwenden.
-10. Keine orange Verbindung darf durch Bereiche entstehen, in denen die jeweilige Geometrie auf dieser Z-Ebene nicht existiert.
-11. Zustellung auf z. B. 1,0 mm und 5,0 mm ändern; Anzahl der Ebenen muss unmittelbar und plausibel reagieren.
-12. Kamera drehen und zoomen; die Z-Schnitte und die Face-Auswahl müssen geometrisch am Modell haften. Ein Orbit-Drag darf keine Fläche versehentlich umschalten.
+3. `Z-Level` einschalten; ohne Auswahl darf noch keine Roughing-Zone erscheinen.
+4. Große horizontale Oberseite der Kopfplatte anklicken.
+5. Die vollständige BRep-Fläche wird ocker markiert.
+6. Die Roughing-Zone erscheint ausschließlich über der XY-Projektion dieser Fläche.
+7. Seitliche Rohlingüberstände bleiben frei von Roughing-Zonen und damit als Spannmaterial erhalten.
+8. Bohrungs-/Öffnungsbereiche innerhalb der Zielfläche bleiben ausgespart und werden nicht automatisch geräumt.
+9. Bei 2,0 mm Zustellung müssen plausible Stufen von der Rohlingoberkante bis zur Schrupp-Endhöhe entstehen.
+10. Standard-Schlichtaufmaß 0,5 mm: letzte Roughing-Ebene liegt 0,5 mm oberhalb der echten Modellfläche.
+11. Änderung von Zustellung oder Schlichtaufmaß muss die Vorschau unmittelbar aktualisieren.
+12. Orbit/Pan/Zoom dürfen Auswahl, Zielhöhe und Geometrie nicht verändern.
+13. Auswahl löschen entfernt die Face-Target-Roughing-Vorschau wieder.
 
 ## FAIL-Kriterien
 
-- Konturen schweben sichtbar neben dem Modell.
-- Offene Schnittketten werden stillschweigend geschlossen.
-- Schnitte verbinden getrennte Modellbereiche künstlich.
-- identische Segmente erscheinen mehrfach als sichtbare Dublette.
-- Face-Auswahl markiert nur ein einzelnes Tessellationsdreieck statt der zugehörigen BRep-Fläche.
-- Orbit/Drag schaltet unbeabsichtigt Flächen um.
-- Z-Level erscheint erst nach einer Kamerabewegung.
-- Aktivieren der Vorschau verändert Modell-, Rohling- oder WCS-Geometrie.
-- irgendein G-Code oder eine Bearbeitungsoperation wird aus 001Z-A erzeugt.
+- Roughing-Zonen decken den kompletten Rohling statt nur die gewählte Zielfläche ab.
+- seitliche Rohlingüberstände werden als zu entfernendes Material markiert.
+- Zielfläche wird bis auf ihre echte Modellhöhe geschruppt, obwohl ein positives Schlichtaufmaß gesetzt ist.
+- innere Öffnungen werden ungefragt zugeräumt.
+- eine nicht horizontale Fläche erzeugt stillschweigend eine Roughing-Zone.
+- Auswahl markiert nur einzelne Mesh-Dreiecke.
+- Orbit/Drag verändert die Auswahl.
+- Vorschau reagiert erst nach einer Kamerabewegung.
+- irgendein G-Code wird aus 001Z-A erzeugt.
 
 ## Ausdrücklich noch nicht enthalten
 
-- Stock-minus-Part-Berechnung
-- finale Machining Boundary / geschützter Halsübergang
-- Werkzeugradius
-- Stepover
-- Z-Level-Räumstrategie
-- Restmaterial
+- Werkzeugradiuskorrektur
+- Stepover / eigentliche Räumbahnen
+- An-/Abfahrbewegungen
+- Restmaterialmodell
 - G-Code
 - Simulation / Kollision
+- finale Schlichtoperation
 
-Diese Punkte folgen erst, wenn der Geometrie- und Selektions-Gate mit dem realen Referenzmodell bestanden ist.
+Diese Punkte folgen erst, wenn der ausgewählte Face-Target-Roughing-Proof am realen CBG-Referenzteil bestanden ist.
