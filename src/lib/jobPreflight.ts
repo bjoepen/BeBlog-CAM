@@ -29,7 +29,9 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
     }else if(operation.kind==='pocket'){
       const r=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`Tasche · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }else{
-      const r=generateContourGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`${operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
+      const r=generateContourGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];
+      const contourSide=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');
+      detail=`${operation.topology==='open'?'Offene':'Geschlossene'} Kontur · ${contourSide} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }
 
     for(const check of validateOperationGrammar(operation,stock,stockMode,wcs)){
