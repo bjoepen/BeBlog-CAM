@@ -1,8 +1,5 @@
 import type { FaceTargetRoughing } from './faceTargetRoughing';
-
-export type ToolpathPoint2={x:number;y:number};
-export type ToolpathRun={z:number;points:ToolpathPoint2[]};
-export type FaceTargetToolpath={runs:ToolpathRun[];toolDiameterMm:number;stepoverPercent:number};
+import type { CanonicalToolpath, CanonicalToolpathRun, ToolpathPoint2 } from './canonicalToolpath';
 
 const EPS=1e-6;
 
@@ -45,12 +42,12 @@ function bounds(loops:{points:ToolpathPoint2[]}[]){
   return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};
 }
 
-export function buildFaceTargetRasterToolpath(target:FaceTargetRoughing,toolDiameterMm:number,stepoverPercent:number):FaceTargetToolpath|null{
+export function buildFaceTargetRasterToolpath(target:FaceTargetRoughing,toolDiameterMm:number,stepoverPercent:number):CanonicalToolpath|null{
   if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!target.levels.length||!target.loops.length)return null;
   const b=bounds(target.loops);if(!b)return null;
   const radius=toolDiameterMm/2,stepover=Math.max(.05,toolDiameterMm*stepoverPercent/100);
   const sampleStep=Math.max(.15,Math.min(.75,toolDiameterMm/8));
-  const runs:ToolpathRun[]=[];
+  const runs:CanonicalToolpathRun[]=[];
   let row=0;
   for(let y=b.minY+radius;y<=b.maxY-radius+EPS;y+=stepover,row++){
     const lineRuns:{a:number;b:number}[]=[];
@@ -62,8 +59,15 @@ export function buildFaceTargetRasterToolpath(target:FaceTargetRoughing,toolDiam
     if(start!==null&&last!==null&&last-start>EPS)lineRuns.push({a:start,b:last});
     for(const segment of lineRuns){
       const points=row%2===0?[{x:segment.a,y},{x:segment.b,y}]:[{x:segment.b,y},{x:segment.a,y}];
-      for(const z of target.levels)runs.push({z,points});
+      for(const z of target.levels)runs.push({kind:'cut',z,points});
     }
   }
-  return{runs,toolDiameterMm,stepoverPercent};
+  return{
+    version:1,
+    operationKind:'z-level-roughing',
+    strategy:'raster',
+    tool:{diameterMm:toolDiameterMm},
+    stepoverPercent,
+    runs,
+  };
 }
