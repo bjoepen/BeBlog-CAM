@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation, Curve2 } from './types';
   import { buildClosedChains, offsetPolygon, sampleCurve, type P2 } from './contourMath';
+  import { buildOpenChains, offsetOpenChain } from './openContour';
 
   export let summary: ImportSummary;
   export let stock: StockDefinition;
@@ -8,7 +9,7 @@
   export let placement: PartPlacement;
   export let orientation: PartOrientation;
   export let operation: CamOperation;
-  export let onSelectContour: (id: number) => void = () => {};
+  export let onSelectContour: (id: number, topology?: 'closed'|'open') => void = () => {};
   export let onSelectCarveCurve: (id: number) => void = () => {};
   export let onSelectDrillCurve: (id: number) => void = () => {};
 
@@ -33,6 +34,7 @@
     const move=(p:P2)=>({x:p.x+dx,y:p.y+dy});
     const movedCurves=rotatedCurves.map(c=>({...c,points:c.points.map(move)}));
     const cs=buildClosedChains(curves,rotate).map(c=>({...c,points:c.points.map(move)}));
+    const os=buildOpenChains(curves,rotate).map(c=>({...c,points:c.points.map(move)}));
     let plane:P2[];
     if(stockMode==='none'){
       const moved=all.map(move),b=bounds(moved),m=Math.max(b.maxX-b.minX,b.maxY-b.minY)*.12+10;plane=[{x:b.minX-m,y:b.minY-m},{x:b.maxX+m,y:b.minY-m},{x:b.maxX+m,y:b.maxY+m},{x:b.minX-m,y:b.maxY+m}];
@@ -54,19 +56,25 @@
       return{kind:'drill' as const,drill};
     }
 
-    const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
-    let tool:P2[]|null=null;
-    if(selected){
-      const r=operation.tool.diameterMm/2;
-      const d=operation.kind==='pocket'?-r:operation.side==='outside'?r:operation.side==='inside'?-r:0;
-      tool=offsetPolygon(selected.points,d);
+    if(operation.kind==='pocket'){
+      const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
+      let tool:P2[]|null=null;if(selected)tool=offsetPolygon(selected.points,-operation.tool.diameterMm/2);
+      return{kind:'closed' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,tool:tool?tool.map(map):null};
     }
-    return{kind:'closed' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,tool:tool?tool.map(map):null};
+
+    const selectedClosed=operation.topology==='closed'&&operation.contourId!=null?cs.find(c=>c.id===operation.contourId)??null:null;
+    const selectedOpen=operation.topology==='open'&&operation.contourId!=null?os.find(c=>c.id===operation.contourId)??null:null;
+    let tool:P2[]|null=null;
+    if(selectedClosed){const r=operation.tool.diameterMm/2,d=operation.side==='outside'?r:operation.side==='inside'?-r:0;tool=offsetPolygon(selectedClosed.points,d);}
+    if(selectedOpen){const off=offsetOpenChain(selectedOpen.points,operation.tool.diameterMm/2,operation.openSide,.003);tool=off.points;}
+    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open:os.map(c=>({...c,screen:c.points.map(map)})),selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,tool:tool?tool.map(map):null};
   }
 
   $: scene=buildScene(
     operation.kind,
     operation.kind==='facing'?'facing':(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):operation.contourId,
+    operation.kind==='contour'?operation.topology:operation.kind,
+    operation.kind==='contour'?operation.openSide:operation.kind,
     (operation.kind==='carve'||operation.kind==='drill')?operation.selectionMode:operation.kind,
     (operation.kind==='carve'||operation.kind==='drill')?operation.layerName:operation.kind,
     operation.tool.diameterMm,
@@ -92,13 +100,24 @@
         <line x1={hole.center.x} y1={hole.center.y-7} x2={hole.center.x} y2={hole.center.y+7} class:selected-drill={hole.selected} class="drill-center" />
         <circle cx={hole.center.x} cy={hole.center.y} r={Math.max(12,hole.r)} class="drill-pick" onclick={()=>onSelectDrillCurve(hole.id)}><title>{hole.selected?'Bohrung aus Auswahl entfernen':`Bohrung Ø ${hole.diameter.toFixed(3)} mm auswählen`}</title></circle>
       {/each}
-    {:else}
+    {:else if scene.kind==='closed'}
       {#each scene.chains as chain}
         <path d={path(chain.screen,true)} class="candidate" />
-        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id)}><title>Kontur {chain.id+1} auswählen</title></path>
+        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id,'closed')}><title>Geschlossene Kontur {chain.id+1} auswählen</title></path>
       {/each}
       {#if scene.selected}<path d={path(scene.selected,true)} class="selected"/>{/if}
       {#if scene.tool}<path d={path(scene.tool,true)} class="toolpath"/>{/if}
+    {:else}
+      {#each scene.closed as chain}
+        <path d={path(chain.screen,true)} class="candidate" />
+        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id,'closed')}><title>Geschlossene Kontur {chain.id+1} auswählen</title></path>
+      {/each}
+      {#each scene.open as chain}
+        <path d={path(chain.screen,false)} class="open-candidate" />
+        <path d={path(chain.screen,false)} class="open-pick" onclick={()=>onSelectContour(chain.id,'open')}><title>Offene Kontur {chain.id+1} auswählen</title></path>
+      {/each}
+      {#if scene.selected}<path d={path(scene.selected.screen,scene.selected.closed)} class="selected"/>{/if}
+      {#if scene.tool}<path d={path(scene.tool,false)} class="toolpath"/>{/if}
     {/if}
   </svg>
   <div class="caption-spacer"></div>
@@ -110,7 +129,8 @@
   svg{width:100%;display:block;overflow:visible;pointer-events:auto}
   .caption-spacer{height:30px;pointer-events:none}
   .candidate{fill:none;stroke:rgba(194,117,40,.10);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}
-  .pick{fill:none;stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
+  .open-candidate{fill:none;stroke:rgba(76,111,139,.20);stroke-width:1.7;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;pointer-events:none}
+  .pick,.open-pick{fill:none;stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
   .selected{fill:none;stroke:rgba(194,117,40,.9);stroke-width:2.2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
   .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}
