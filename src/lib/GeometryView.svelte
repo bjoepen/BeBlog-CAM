@@ -3,8 +3,7 @@
   import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
   import { projectPoint, projectTriangles, type P2, type P3, type View } from './stepView';
   import { decodeStepEdges } from './stepEdgeView';
-  import { sliceTrianglesByStep } from './zLevelSlice';
-  import { buildZLevelRoughingRegion } from './zLevelRoughingRegion';
+  import { buildFaceTargetRoughing } from './faceTargetRoughing';
 
   export let summary:ImportSummary;
   export let stock:StockDefinition;
@@ -19,6 +18,7 @@
   let yaw=-.72,pitch=.48,zoom=1,viewX=0,viewY=0,dragging=false,lastX=0,lastY=0,dragMoved=false,dragMode:'orbit'|'pan'='orbit';
   let showZLevels=false;
   let zLevelStepMm=2;
+  let finishAllowanceMm=.5;
   let selectedFaceIds:number[]=[];
   let selectionSource=summary.fileName;
   let s3: ReturnType<typeof scene3d>;
@@ -36,7 +36,7 @@
   function wcsPoint():P3{return{x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2,z:wcs.z==='top'?stock.thickness:0}}
   function faceFill(shade:number,selected=false){if(selected)return'hsl(31 52% 78%)';const lightness=88-Math.round(Math.max(0,Math.min(1,shade))*12);return`hsl(150 7% ${lightness}%)`}
 
-  function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number,faceSelection:number[]){
+  function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number,faceSelection:number[],allowanceMm:number){
     const a=summary.brep?.displayVertices??[],raw:P3[]=[];
     for(let i=0;i+2<a.length;i+=3)raw.push(rotate3({x:a[i],y:a[i+1],z:a[i+2]}));
     if(!raw.length)return null;
@@ -44,9 +44,8 @@
     const place3=(q:P3)=>({x:q.x+p.dx,y:q.y+p.dy,z:q.z-b.minZ+placement.offsetZ});
     const part=raw.map(place3),faceIds=summary.brep?.displayFaceIds??[];
     const edgeWorld=decodeStepEdges(summary.brep?.displayEdges).map(edge=>{const points:P3[]=[];for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));return points}).filter(edge=>edge.length>=2);
-    const modelSlices=includeZLevels?sliceTrianglesByStep(part,Math.max(.1,sliceStepMm)):[];
-    const regions=modelSlices.map(slice=>buildZLevelRoughingRegion(slice.z,stock.width,stock.height,slice.chains)).filter((region):region is NonNullable<typeof region>=>region!==null);
-    const regionWorld=regions.map(region=>region.loops.map(loop=>loop.points.map(point=>({x:point.x,y:point.y,z:region.z}))));
+    const target=includeZLevels?buildFaceTargetRoughing(part,faceIds,faceSelection,stock.thickness,Math.max(.1,sliceStepMm),Math.max(0,allowanceMm)):null;
+    const regionWorld=target?target.levels.map(z=>target.loops.map(loop=>loop.points.map(point=>({x:point.x,y:point.y,z})))):[];
     const m=Math.max(stock.width,stock.height)*.12+10;
     const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
     const box:P3[]=[{x:0,y:0,z:0},{x:stock.width,y:0,z:0},{x:stock.width,y:stock.height,z:0},{x:0,y:stock.height,z:0},{x:0,y:0,z:stock.thickness},{x:stock.width,y:0,z:stock.thickness},{x:stock.width,y:stock.height,z:stock.thickness},{x:0,y:stock.height,z:stock.thickness}];
@@ -56,7 +55,8 @@
     const triangles=projectTriangles(part,v,map,faceIds),edges=ep.map(edge=>path(edge.map(map))).filter(Boolean);
     const roughRegions=rr.map(region=>region.map(loop=>path(loop.map(map),true)).join(' ')).filter(Boolean);
     const e=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-    return{triangles,edges,roughRegions,sliceCount:modelSlices.length,regionCount:roughRegions.length,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
+    const targetStatus=!includeZLevels?'':!faceSelection.length?'Zielfläche wählen':!target?'Nur horizontale, planare Zielflächen':target.levels.length?`Ziel ${target.targetZ.toFixed(2)} mm · Schruppen bis ${target.roughBottomZ.toFixed(2)} mm`:'Kein Material oberhalb der Zielfläche';
+    return{triangles,edges,roughRegions,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
   }
 
   function scene2d(){const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();if(!flat.length)return null;const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY),placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());if(noStock){const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10,plane=[{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],map=fit([...placed.flat(),...plane]),wx=wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2,wy=wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2,wp=map({x:wx,y:wy});return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),plane:path(plane.map(map),true),stock:null,wcs:wp,noStock:true}}const m=Math.max(stock.width,stock.height)*.12+10,plane=[{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],box=[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}],map=fit([...placed.flat(),...plane]),wp=map({x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2});return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),plane:path(plane.map(map),true),stock:path(box.map(map),true),wcs:wp,noStock:false}}
@@ -69,12 +69,13 @@
   function wheel(e:WheelEvent){if(summary.kind!=='step')return;e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}
   function reset(){yaw=-.72;pitch=.48;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
   function updateSliceStep(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=.1)zLevelStepMm=value}
+  function updateAllowance(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=0)finishAllowanceMm=value}
   function toggleFace(faceId:number){if(!showZLevels||dragMoved||!s3?.facePickingAvailable)return;selectedFaceIds=selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId].sort((a,b)=>a-b)}
   function faceKey(e:KeyboardEvent,faceId:number){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleFace(faceId)}}
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;selectedFaceIds=[]}
-  $: s3=scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds);
+  $: s3=scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm);
   $: s2=scene2d();
 </script>
 
@@ -102,7 +103,17 @@
   <div class="geometry-caption">
     <strong>{summary.kind==='step'?'BRep · Rohling · WCS':stockMode==='none'?'2D-Geometrie · ohne Rohling · WCS':'2D-Geometrie · Rohling · WCS'}</strong>
     {#if summary.kind==='step'}
-      <span class="help"><button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button><button class:active-toggle={showZLevels} onclick={()=>showZLevels=!showZLevels}>Z-Level</button>{#if showZLevels}<label class="slice-step">Zustellung <input type="number" min="0.1" step="0.1" value={zLevelStepMm} oninput={updateSliceStep}/> mm</label><span>{s3?.sliceCount??0} Ebenen · {s3?.regionCount??0} Räumflächen</span>{#if s3?.facePickingAvailable}<span>{selectedFaceIds.length?`${selectedFaceIds.length} Fläche${selectedFaceIds.length===1?'':'n'} gewählt · Auswahl nur Markierung`:'Rohling − Gesamtmodell'}</span>{#if selectedFaceIds.length}<button onclick={()=>selectedFaceIds=[]}>Auswahl löschen</button>{/if}{/if}{/if}<span>Drag: drehen · Shift/Mitte: verschieben</span></span>
+      <span class="help">
+        <button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button><button class:active-toggle={showZLevels} onclick={()=>showZLevels=!showZLevels}>Z-Level</button>
+        {#if showZLevels}
+          <label class="slice-step">Zustellung <input type="number" min="0.1" step="0.1" value={zLevelStepMm} oninput={updateSliceStep}/> mm</label>
+          <label class="slice-step">Schlichtaufmaß <input type="number" min="0" step="0.1" value={finishAllowanceMm} oninput={updateAllowance}/> mm</label>
+          <span>{s3?.sliceCount??0} Ebenen · {s3?.regionCount??0} Räumflächen</span>
+          <span>{s3?.targetStatus}</span>
+          {#if selectedFaceIds.length}<button onclick={()=>selectedFaceIds=[]}>Auswahl löschen</button>{/if}
+        {/if}
+        <span>Drag: drehen · Shift/Mitte: verschieben</span>
+      </span>
     {/if}
   </div>
 </div>
