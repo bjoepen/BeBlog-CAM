@@ -1,5 +1,5 @@
 import { polygonArea, type P2 } from './contourMath';
-import { offsetOpenChain, type OpenContourValidation } from './openContour';
+import { offsetOpenChain, type OpenOffsetValidation } from './openContour';
 import type { ToolpathSide } from './types';
 
 const eps=1e-8;
@@ -11,7 +11,7 @@ export type BrokenContourPath={
   segmentCount:number;
   activeSegmentCount:number;
   excludedSegmentCount:number;
-  validation:OpenContourValidation;
+  validation:OpenOffsetValidation;
 };
 
 function basePoints(input:P2[]):P2[]{
@@ -46,8 +46,8 @@ export function buildActiveClosedRuns(points:P2[],excludedIds:number[]):P2[][]{
 function sideForOpenOffset(points:P2[],side:ToolpathSide):'left'|'right'|'on-line'{
   if(side==='on-line')return'on-line';
   const area=polygonArea(points);
-  const outward: 'left'|'right'=area>=0?'right':'left';
-  const inward: 'left'|'right'=outward==='right'?'left':'right';
+  const outward:'left'|'right'=area>=0?'right':'left';
+  const inward:'left'|'right'=outward==='right'?'left':'right';
   return side==='outside'?outward:inward;
 }
 
@@ -56,7 +56,7 @@ export function buildBrokenContourPath(points:P2[],excludedIds:number[],radiusMm
   const sourceRuns=buildActiveClosedRuns(points,[...excluded]);
   const openSide=sideForOpenOffset(base,side);
   const runs:P2[][]=[];
-  let maxDeviationMm=0,maxParallelError=0,selfIntersects=false,sideOk=true,measuredMinMm=Infinity,measuredMaxMm=-Infinity;
+  let maxDeviationMm=0,maxParallelError=0,selfIntersects=false,sideOk=true,measuredMinMm=Infinity,measuredMaxMm=-Infinity,totalSegments=0;
   for(const run of sourceRuns){
     const r=offsetOpenChain(run,radiusMm,openSide,toleranceMm);
     runs.push(r.points);
@@ -67,10 +67,11 @@ export function buildBrokenContourPath(points:P2[],excludedIds:number[],radiusMm
     sideOk=sideOk&&v.sideOk;
     measuredMinMm=Math.min(measuredMinMm,v.measuredMinMm);
     measuredMaxMm=Math.max(measuredMaxMm,v.measuredMaxMm);
+    totalSegments+=v.segmentCount;
   }
   const activeSegmentCount=segmentCount-excluded.size;
   const expectedMm=side==='on-line'?0:Math.abs(radiusMm);
   const ok=segmentCount>=3&&excluded.size>0&&activeSegmentCount>0&&sourceRuns.length>0&&runs.every(r=>r.length>1)&&!selfIntersects&&sideOk&&maxDeviationMm<=toleranceMm;
-  const validation:OpenContourValidation={ok,expectedMm,measuredMinMm:Number.isFinite(measuredMinMm)?measuredMinMm:NaN,measuredMaxMm:Number.isFinite(measuredMaxMm)?measuredMaxMm:NaN,maxDeviationMm:Number.isFinite(maxDeviationMm)?maxDeviationMm:Infinity,maxParallelError,sideOk,selfIntersects};
+  const validation:OpenOffsetValidation={ok,expectedMm,measuredMinMm:Number.isFinite(measuredMinMm)?measuredMinMm:NaN,measuredMaxMm:Number.isFinite(measuredMaxMm)?measuredMaxMm:NaN,maxDeviationMm:Number.isFinite(maxDeviationMm)?maxDeviationMm:Infinity,maxParallelError,segmentCount:totalSegments,sideOk,selfIntersects};
   return{runs,sourceRuns,segmentCount,activeSegmentCount,excludedSegmentCount:excluded.size,validation};
 }
