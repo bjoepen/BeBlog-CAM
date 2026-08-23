@@ -43,7 +43,7 @@
   function wcsPoint():P3{return{x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2,z:wcs.z==='top'?stock.thickness:0}}
   function faceFill(shade:number){const lightness=88-Math.round(Math.max(0,Math.min(1,shade))*12);return`hsl(150 7% ${lightness}%)`}
 
-  function scene3d(v:View){
+  function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number){
     const a=summary.brep?.displayVertices??[],raw:P3[]=[];
     for(let i=0;i+2<a.length;i+=3)raw.push(rotate3({x:a[i],y:a[i+1],z:a[i+2]}));
     if(!raw.length)return null;
@@ -55,7 +55,7 @@
       for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));
       return points;
     }).filter(edge=>edge.length>=2);
-    const slices=showZLevels?sliceTrianglesByStep(part,Math.max(.1,zLevelStepMm)):[];
+    const slices=includeZLevels?sliceTrianglesByStep(part,Math.max(.1,sliceStepMm)):[];
     const sliceWorld=slices.flatMap(slice=>slice.chains.map(chain=>chain.points.map(point=>({x:point.x,y:point.y,z:slice.z}))));
     const m=Math.max(stock.width,stock.height)*.12+10;
     const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
@@ -92,7 +92,7 @@
   function updateSliceStep(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=.1)zLevelStepMm=value}
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
-  $:s3=(showZLevels,zLevelStepMm,scene3d({yaw,pitch}));
+  $:s3=scene3d({yaw,pitch},showZLevels,zLevelStepMm);
   $:s2=scene2d();
 </script>
 
