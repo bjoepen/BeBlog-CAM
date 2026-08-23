@@ -10,7 +10,7 @@ export const operationsProjectStore=writable<OperationsProject>({
 function sync(project:OperationsProject){operationsProjectStore.set({operations:project.operations.map(cloneOperation),activeOperationId:project.activeOperationId});return project;}
 
 export function cloneOperation<T extends CamOperation>(operation:T):T {
-  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...operation.excludedSegmentIds]}:{})} as T;
+  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...(operation.excludedSegmentIds??[])]}:{})} as T;
 }
 
 export function createOperation(kind:OperationKind,index:number):CamOperation {
@@ -65,7 +65,8 @@ export function operationSummary(operation:CamOperation):string {
   }
   if(operation.kind==='contour'){
     const side=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');
-    const broken=operation.topology==='closed'&&operation.excludedSegmentIds.length?` · ${operation.excludedSegmentIds.length} Strecke${operation.excludedSegmentIds.length===1?'':'n'} aus` : '';
+    const excluded=operation.excludedSegmentIds??[];
+    const broken=operation.topology==='closed'&&excluded.length?` · ${excluded.length} Strecke${excluded.length===1?'':'n'} aus` : '';
     return `${operation.contourId===null?'Keine Kontur':`${operation.topology==='open'?'Offene':'Kontur'} ${operation.contourId+1}`} · ${side}${broken} · ${tool}`;
   }
   const strategy=operation.strategy==='auto'?'Auto':operation.strategy==='raster'?'Raster':operation.strategy==='concentric'?'Kreis':'Konturparallel';
