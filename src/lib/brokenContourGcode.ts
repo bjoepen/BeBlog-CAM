@@ -18,10 +18,10 @@ function placementTranslation(summary:ImportSummary,stock:StockDefinition,stockM
 function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateSystem,partBounds:{minX:number;maxX:number;minY:number;maxY:number}){const b=stockMode==='none'?partBounds:{minX:0,maxX:stock.width,minY:0,maxY:stock.height};return{x:wcs.x==='left'?b.minX:wcs.x==='right'?b.maxX:(b.minX+b.maxX)/2,y:wcs.y==='front'?b.minY:wcs.y==='back'?b.maxY:(b.minY+b.maxY)/2};}
 
 export function generateBrokenContourGcode(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation}):GcodeResult{
-  const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;const errors:string[]=[],warnings:string[]=[];
+  const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;const errors:string[]=[],warnings:string[]=[],excluded=operation.excludedSegmentIds??[];
   if(summary.kind!=='dxf')errors.push('Aufgebrochene Konturen sind zunächst nur aus DXF freigegeben.');
   if(operation.contourId===null)errors.push('Keine geschlossene Sollkontur gewählt.');
-  if(!operation.excludedSegmentIds.length)errors.push('Keine Konturstrecke abgewählt. Die Kontur ist weiterhin geschlossen.');
+  if(!excluded.length)errors.push('Keine Konturstrecke abgewählt. Die Kontur ist weiterhin geschlossen.');
   if(operation.tool.diameterMm<=0)errors.push('Werkzeugdurchmesser muss größer als 0 sein.');
   if(operation.totalDepthMm<=0)errors.push('Gesamttiefe muss größer als 0 sein.');
   if(operation.stepDownMm<=0)errors.push('Zustellung muss größer als 0 sein.');
@@ -35,7 +35,7 @@ export function generateBrokenContourGcode(args:{summary:ImportSummary;stock:Sto
   const move=(p:P2)=>{const q=rotate(p,orientation.rotationZDeg);return{x:q.x+t.dx,y:q.y+t.dy}};
   const chains=buildClosedChains(summary.planarGeometry?.curves??[],move);const selected=operation.contourId===null?null:chains.find(c=>c.id===operation.contourId)??null;
   if(!selected){errors.push('Gewählte geschlossene Kontur wurde in der aktuellen Geometrie nicht gefunden.');return fail();}
-  const broken=buildBrokenContourPath(selected.points,operation.excludedSegmentIds,operation.tool.diameterMm/2,operation.side,.003);
+  const broken=buildBrokenContourPath(selected.points,excluded,operation.tool.diameterMm/2,operation.side,.003);
   if(!broken.activeSegmentCount){errors.push('Alle Konturstrecken sind abgewählt.');return fail(broken.validation);}
   if(!broken.validation.ok){errors.push(broken.validation.selfIntersects?'Die radiuskorrigierte Teilkontur schneidet sich selbst.':`Die aufgebrochene Werkzeugbahn hat die geometrische Prüfung nicht bestanden (max. Abweichung ${Number.isFinite(broken.validation.maxDeviationMm)?broken.validation.maxDeviationMm.toFixed(4):'—'} mm).`);return fail(broken.validation);}
   const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);
