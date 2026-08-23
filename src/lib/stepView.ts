@@ -30,8 +30,8 @@ export function projectTriangles(points:P3[],v:View,map:(p:P2)=>P2):ProjectedTri
     const a=points[i],b=points[i+1],c=points[i+2];
     const pa=cameraPoint(a,v),pb=cameraPoint(b,v),pc=cameraPoint(c,v);
     const n=normal(a,b,c);
-    const diffuse=Math.abs(n.x*light.x+n.y*light.y+n.z*light.z);
-    out.push({points:[map(pa),map(pb),map(pc)],depth:(pa.depth+pb.depth+pc.depth)/3,shade:.72+Math.min(.24,diffuse*.24)});
+    const diffuse=Math.min(1,Math.abs(n.x*light.x+n.y*light.y+n.z*light.z));
+    out.push({points:[map(pa),map(pb),map(pc)],depth:(pa.depth+pb.depth+pc.depth)/3,shade:diffuse});
   }
   return out.sort((a,b)=>b.depth-a.depth);
 }
