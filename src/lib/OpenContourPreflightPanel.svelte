@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { ContourOperation, ImportSummary, StockDefinition, StockMode } from './types';
   import { buildOpenChains, offsetOpenChain } from './openContour';
+  import { validateToolCompatibility } from './validationGrammar';
   export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let operation:ContourOperation;
   $: chains=buildOpenChains(summary.planarGeometry?.curves??[]);
   $: selected=operation.contourId===null?null:chains.find(c=>c.id===operation.contourId)??null;
   $: path=selected?offsetOpenChain(selected.points,operation.tool.diameterMm/2,operation.openSide,.003):null;
+  $: compatibility=validateToolCompatibility(operation);
   $: errors=[
     ...(summary.kind!=='dxf'?['Offene Konturen sind zunächst nur aus DXF freigegeben.']:[]),
     ...(operation.contourId===null?['Keine offene Kontur gewählt.']:[]),
@@ -14,9 +16,14 @@
     ...(operation.stepDownMm<=0?['Zustellung muss größer als 0 sein.']:[]),
     ...(!(operation.feedMmMin>0&&operation.plungeMmMin>0&&operation.spindleRpm>0)?['Vorschub, Eintauchvorschub und Drehzahl müssen größer als 0 sein.']:[]),
     ...(operation.safeZMm<=0?['Sicherheits-Z muss größer als 0 sein.']:[]),
-    ...(path&&!path.validation.ok?[path.validation.selfIntersects?'Die radiuskorrigierte offene Werkzeugbahn schneidet sich selbst.':'Die Werkzeugbahn hält den Werkzeugradius nicht geometrisch sauber ein.']:[])
+    ...(path&&!path.validation.ok?[path.validation.selfIntersects?'Die radiuskorrigierte offene Werkzeugbahn schneidet sich selbst.':'Die Werkzeugbahn hält den Werkzeugradius nicht geometrisch sauber ein.']:[]),
+    ...(compatibility.level==='fail'?[`${compatibility.title}: ${compatibility.detail}`]:[])
   ];
-  $: warnings=[...(stockMode==='none'?['Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.']:[]),...(stockMode!=='none'&&operation.totalDepthMm>stock.thickness?[`${operation.totalDepthMm.toFixed(3)} mm überschreiten die Rohlingdicke ${stock.thickness.toFixed(3)} mm.`]:[])];
+  $: warnings=[
+    ...(stockMode==='none'?['Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.']:[]),
+    ...(stockMode!=='none'&&operation.totalDepthMm>stock.thickness?[`${operation.totalDepthMm.toFixed(3)} mm überschreiten die Rohlingdicke ${stock.thickness.toFixed(3)} mm.`]:[]),
+    ...(compatibility.level==='warn'?[`${compatibility.title}: ${compatibility.detail}`]:[])
+  ];
   $: overall=errors.length?'fail':warnings.length?'warn':'pass';
   $: side=operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie';
   $: passes=operation.stepDownMm>0?Math.ceil(operation.totalDepthMm/operation.stepDownMm):0;
