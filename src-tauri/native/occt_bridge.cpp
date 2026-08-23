@@ -94,9 +94,12 @@ extern "C" char* beblog_occt_inspect_step(const char* path) {
     BRepMesh_IncrementalMesh mesher(shape, 0.1, false, 0.5, true);
     std::size_t triangles=0;
     std::ostringstream mesh_vertices;
+    std::ostringstream mesh_face_ids;
     bool first_vertex=true;
+    bool first_face_id=true;
     if (mesher.IsDone()) {
-      for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next()) {
+      std::size_t face_id=0;
+      for (TopExp_Explorer it(shape, TopAbs_FACE); it.More(); it.Next(), ++face_id) {
         TopLoc_Location location;
         auto triangulation=BRep_Tool::Triangulation(TopoDS::Face(it.Current()),location);
         if (triangulation.IsNull()) continue;
@@ -108,6 +111,9 @@ extern "C" char* beblog_occt_inspect_step(const char* path) {
           append_point(mesh_vertices, triangulation->Node(n1).Transformed(transform), first_vertex);
           append_point(mesh_vertices, triangulation->Node(n2).Transformed(transform), first_vertex);
           append_point(mesh_vertices, triangulation->Node(n3).Transformed(transform), first_vertex);
+          if (!first_face_id) mesh_face_ids << ',';
+          mesh_face_ids << face_id;
+          first_face_id=false;
         }
       }
     }
@@ -125,8 +131,9 @@ extern "C" char* beblog_occt_inspect_step(const char* path) {
         << "},{\"kind\":\"torus\",\"count\":"<<tori<<"},{\"kind\":\"other\",\"count\":"<<other<<"}]"
         << ",\"cylinderRadiiMm\":["<<radii.str()<<"],\"displayTriangles\":"<<triangles
         << ",\"displayVertices\":["<<mesh_vertices.str()<<"]"
+        << ",\"displayFaceIds\":["<<mesh_face_ids.str()<<"]"
         << ",\"displayEdges\":["<<display_edges.str()<<"]"
-        << ",\"note\":\"Exaktes BRep bleibt Source of Truth; Triangulation und abgeleitete Kanten dienen ausschließlich der Darstellung.\"}";
+        << ",\"note\":\"Exaktes BRep bleibt Source of Truth; Triangulation, Face-IDs und abgeleitete Kanten dienen ausschließlich der Darstellung und Auswahl.\"}";
     return copy_result(out.str());
   } catch (...) {
     return copy_result("{\"error\":\"OCCT-Fehler beim STEP-Import\"}");
