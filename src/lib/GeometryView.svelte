@@ -92,7 +92,7 @@
   function updateSliceStep(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=.1)zLevelStepMm=value}
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
-  $:s3=scene3d({yaw,pitch});
+  $:{showZLevels;zLevelStepMm;s3=scene3d({yaw,pitch});}
   $:s2=scene2d();
 </script>
 
