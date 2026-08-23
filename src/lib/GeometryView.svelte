@@ -153,7 +153,7 @@
   .setup-plane{fill:rgba(255,255,255,.2);stroke:rgba(70,80,75,.18);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}
   .stock{fill:none;stroke:rgba(93,105,99,.46);stroke-width:1.35;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .dxf{fill:none;stroke:#26342e;stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-  .step-face{stroke:none;pointer-events:none}.step-face.selectable-face{pointer-events:visiblePainted;cursor:pointer}.step-face.selected-face{stroke:rgba(194,117,40,.72);stroke-width:1.2;vector-effect:non-scaling-stroke}
+  .step-face{stroke:none;pointer-events:none}.step-face.selectable-face{pointer-events:visiblePainted;cursor:pointer;outline:none}.step-face.selected-face{stroke:none;outline:none}.step-face.selectable-face:focus,.step-face.selectable-face:focus-visible{outline:none}
   .step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
   .z-level{fill:none;stroke:#c27528;stroke-width:2.1;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
   .axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}.axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}
