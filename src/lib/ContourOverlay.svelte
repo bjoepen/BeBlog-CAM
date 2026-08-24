@@ -25,6 +25,12 @@
     return(p:P2)=>({x:ox+(p.x-b.minX)*scale,y:height-(oy+(p.y-b.minY)*scale)});
   }
 
+  function contourDepths(){
+    if(operation.kind!=='contour'||operation.totalDepthMm<=0||operation.stepDownMm<=0)return[];
+    const passes=Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm));
+    return Array.from({length:passes},(_,index)=>-Math.min(operation.totalDepthMm,(index+1)*operation.stepDownMm));
+  }
+
   function chooseClosed(id:number){
     if(operation.kind==='contour'){operation.topology='closed';operation.excludedSegmentIds=[];}
     onSelectContour(id,'closed');
@@ -107,6 +113,8 @@
     (operation.kind==='carve'||operation.kind==='drill')?operation.layerName:operation.kind,
     operation.tool.diameterMm,
     operation.kind==='contour'?operation.side:operation.kind,
+    operation.kind==='contour'?operation.totalDepthMm:operation.kind,
+    operation.kind==='contour'?operation.stepDownMm:operation.kind,
     stockMode,stock.width,stock.height,
     placement.horizontal,placement.vertical,placement.offsetX,placement.offsetY,
     orientation.rotationZDeg
@@ -114,7 +122,7 @@
 </script>
 
 {#if scene}
-<div class="contour-overlay" aria-label="Geometrieauswahl und Werkzeugweg">
+<div class="contour-overlay" aria-label="Geometrieauswahl und Werkzeugweg" data-stock-width={stockMode==='none'?undefined:stock.width}>
   <svg viewBox="0 0 1000 650">
     {#if scene.kind==='carve'}
       {#each scene.carve as curve}
@@ -154,7 +162,9 @@
         <path d={path(segment.screen,false)} class:segment-off={segment.excluded} class="segment-state" />
         <path d={path(segment.screen,false)} class="segment-pick" onclick={()=>toggleClosedSegment(segment.id)}><title>{segment.excluded?'Konturstrecke wieder einschalten':'Kontur hier aufbrechen / Strecke abwählen'}</title></path>
       {/each}
-      {#each scene.toolRuns as tool}<path d={path(tool.points,tool.closed)} class="toolpath"/>{/each}
+      {#each contourDepths() as z}
+        {#each scene.toolRuns as tool}<path d={path(tool.points,tool.closed)} class="toolpath contour-toolpath toolpath-preview" data-toolpath-z={z}/>{/each}
+      {/each}
     {/if}
   </svg>
   {#if scene.kind==='contour'}<div class="open-help">{scene.broken?'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
@@ -172,6 +182,7 @@
   .selected{fill:none;stroke:rgba(194,117,40,.88);stroke-width:2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .segment-state{fill:none;stroke:rgba(194,117,40,.78);stroke-width:2.3;vector-effect:non-scaling-stroke;pointer-events:none}.segment-state.segment-off{stroke:rgba(105,112,108,.5);stroke-width:2.8;stroke-dasharray:3 4}
   .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
+  .contour-toolpath{stroke:#327b8d;stroke-width:2.1}
   .open-help{position:absolute;left:50%;top:calc(100% + 8px);transform:translateX(-50%);width:max-content;max-width:86%;padding:6px 9px;border-radius:6px;background:rgba(250,250,248,.94);color:#666b66;font-size:.72rem;pointer-events:none;white-space:normal;text-align:center}
   .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}.carve-candidate.selected-carve{stroke:rgba(38,52,46,.55);stroke-width:1.8;stroke-dasharray:4 3}.carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
   .drill-candidate{fill:none;stroke:rgba(194,117,40,.25);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}.drill-candidate.selected-drill{stroke:#b1453b;stroke-width:2.4}.drill-center{stroke:rgba(194,117,40,.55);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.drill-center.selected-drill{stroke:#b1453b;stroke-width:1.8}.drill-pick{fill:transparent;stroke:transparent;stroke-width:12;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}
