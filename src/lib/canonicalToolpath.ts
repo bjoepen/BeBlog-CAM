@@ -1,15 +1,20 @@
 export type ToolpathPoint2={x:number;y:number};
 
+export type CanonicalToolpathSegment=
+  |{kind:'line';start:ToolpathPoint2;end:ToolpathPoint2}
+  |{kind:'arc';start:ToolpathPoint2;end:ToolpathPoint2;center:ToolpathPoint2;ccw:boolean};
+
 export type CanonicalToolpathRun={
   kind:'cut';
   z:number;
   points:ToolpathPoint2[];
+  segments?:CanonicalToolpathSegment[];
 };
 
 export type CanonicalToolpath={
   version:1;
-  operationKind:'z-level-roughing'|'facing';
-  strategy:'raster'|'zigzag';
+  operationKind:'z-level-roughing'|'facing'|'contour';
+  strategy:'raster'|'zigzag'|'contour';
   tool:{diameterMm:number};
   stepoverPercent:number;
   runs:CanonicalToolpathRun[];
