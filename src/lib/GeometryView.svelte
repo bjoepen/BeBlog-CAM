@@ -72,11 +72,11 @@
     return{triangles,edges,roughRegions,toolPaths,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,toolpathCount:toolPaths.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
   }
 
-  function scene2d(){
+  function scene2d(activeToolpath:CanonicalToolpath|null){
     const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();
     if(!flat.length)return null;
     const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY),placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());
-    const canonicalRuns=(canonicalToolpath?.runs??[]).map(run=>run.points.map(fromWcs2));
+    const canonicalRuns=(activeToolpath?.runs??[]).map(run=>run.points.map(fromWcs2));
     if(noStock){
       const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10,plane=[{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],map=fit([...placed.flat(),...plane,...canonicalRuns.flat()]),wx=wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2,wy=wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2,wp=map({x:wx,y:wy});
       return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),toolPaths:canonicalRuns.map(run=>path(run.map(map))).filter(Boolean),plane:path(plane.map(map),true),stock:null,wcs:wp,noStock:true};
@@ -102,7 +102,7 @@
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;selectedFaceIds=[]}
   $: s3=scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm,previewToolDiameterMm,previewStepoverPercent);
-  $: s2=scene2d();
+  $: s2=scene2d(canonicalToolpath);
 </script>
 
 <div class="geometry-view" bind:this={root}>
