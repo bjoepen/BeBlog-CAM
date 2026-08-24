@@ -91,9 +91,10 @@ function applyView(svg:SVGSVGElement,status:HTMLElement|null){
   });
 
   if(status){
-    status.textContent=state.tiltDeg>0
+    const text=state.tiltDeg>0
       ?`${paths.length} Ebene${paths.length===1?'':'n'} · Neigung ${Math.round(state.tiltDeg)}°`
       :`${paths.length} Ebene${paths.length===1?'':'n'} · Draufsicht`;
+    if(status.textContent!==text)status.textContent=text;
   }
 }
 
