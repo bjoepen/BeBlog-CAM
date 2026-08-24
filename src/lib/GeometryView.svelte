@@ -5,6 +5,7 @@
   import { decodeStepEdges } from './stepEdgeView';
   import { buildFaceTargetRoughing } from './faceTargetRoughing';
   import { buildFaceTargetRasterToolpath } from './faceTargetToolpath';
+  import type { CanonicalToolpath } from './canonicalToolpath';
 
   export let summary:ImportSummary;
   export let stock:StockDefinition;
@@ -12,6 +13,7 @@
   export let placement:PartPlacement;
   export let orientation:PartOrientation;
   export let wcs:WorkCoordinateSystem;
+  export let canonicalToolpath:CanonicalToolpath|null=null;
 
   const width=1000,height=650,pad=54;
   let viewport:SVGSVGElement;
@@ -65,6 +67,7 @@
     return{triangles,edges,roughRegions,toolPaths,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,toolpathCount:toolPaths.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
   }
 
+  function canonical2dPaths(){if(!canonicalToolpath)return[];const points=canonicalToolpath.runs.flatMap(run=>run.points);if(!points.length)return[];const map=fit(points);return canonicalToolpath.runs.map(run=>path(run.points.map(map))).filter(Boolean)}
   function scene2d(){const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();if(!flat.length)return null;const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY),placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());if(noStock){const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10,plane=[{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],map=fit([...placed.flat(),...plane]),wx=wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2,wy=wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2,wp=map({x:wx,y:wy});return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),plane:path(plane.map(map),true),stock:null,wcs:wp,noStock:true}}const m=Math.max(stock.width,stock.height)*.12+10,plane=[{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],box=[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}],map=fit([...placed.flat(),...plane]),wp=map({x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2});return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),plane:path(plane.map(map),true),stock:path(box.map(map),true),wcs:wp,noStock:false}}
   function currentViewBox(){const w=width/zoom,h=height/zoom;return`${viewX+(width-w)/2} ${viewY+(height-h)/2} ${w} ${h}`}
   function applyViewBox(){if(viewport)viewport.setAttribute('viewBox',currentViewBox())}
@@ -93,6 +96,7 @@
       <path d={s2.plane} class="setup-plane"/>
       {#if s2.stock}<path d={s2.stock} class="stock"/>{/if}
       {#each s2.paths as p}<path d={p} class="dxf"/>{/each}
+      {#each canonical2dPaths() as p}<path d={p} class="toolpath-preview"/>{/each}
       <circle cx={s2.wcs.x} cy={s2.wcs.y} r="9" class="wcs-marker"/>
       <text x={s2.wcs.x+13} y={s2.wcs.y-10} class="wcs-label">WCS · X0 Y0</text>
     {:else if s3}
@@ -106,6 +110,7 @@
         {#each s3.toolPaths as tool}<path d={tool} class="toolpath-preview"/>{/each}
       {/if}
       {#each s3.edges as edge}<path d={edge} class="step-edge"/>{/each}
+      {#if canonicalToolpath}{#each canonicalToolpath.runs as run}<path d={path(run.points.map(point=>fit(run.points)(point)))} class="toolpath-preview"/>{/each}{/if}
       <path d={s3.axes[0]} class="axis x"/><path d={s3.axes[1]} class="axis y"/><path d={s3.axes[2]} class="axis z"/>
       <text x={s3.labels[0].x+7} y={s3.labels[0].y-5}>X</text><text x={s3.labels[1].x+7} y={s3.labels[1].y-5}>Y</text><text x={s3.labels[2].x+7} y={s3.labels[2].y-5}>Z</text>
       <circle cx={s3.wcs.x} cy={s3.wcs.y} r="10" class="wcs-marker"/><circle cx={s3.wcs.x} cy={s3.wcs.y} r="3" class="wcs-dot"/>
