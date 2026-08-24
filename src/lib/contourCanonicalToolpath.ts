@@ -1,18 +1,13 @@
 import type { CanonicalToolpath, CanonicalToolpathSegment, ToolpathPoint2 } from './canonicalToolpath';
-import { generateContourGcode } from './gcode';
-import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
-
-type ContourArgs={
-  summary:ImportSummary;
-  stock:StockDefinition;
-  stockMode:StockMode;
-  placement:PartPlacement;
-  orientation:PartOrientation;
-  wcs:WorkCoordinateSystem;
-  operation:ContourOperation;
-};
 
 type MachineState={x:number;y:number;z:number};
+
+export type ContourCanonicalPostOptions={
+  safeZMm:number;
+  feedMmMin:number;
+  plungeMmMin:number;
+  spindleRpm:number;
+};
 
 const numberWord=(line:string,letter:string):number|null=>{
   const match=line.match(new RegExp(`${letter}(-?\\d+(?:\\.\\d+)?)`,'i'));
@@ -20,6 +15,8 @@ const numberWord=(line:string,letter:string):number|null=>{
   const value=Number(match[1]);
   return Number.isFinite(value)?value:null;
 };
+
+const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
 
 function sampleArc(start:ToolpathPoint2,end:ToolpathPoint2,center:ToolpathPoint2,ccw:boolean):ToolpathPoint2[]{
   const radius=Math.hypot(start.x-center.x,start.y-center.y);
@@ -87,7 +84,41 @@ export function canonicalContourToolpathFromGcode(code:string,toolDiameterMm:num
   return{version:1,operationKind:'contour',strategy:'contour',tool:{diameterMm:toolDiameterMm},stepoverPercent:0,runs};
 }
 
-export function buildContourCanonicalToolpath(args:ContourArgs):CanonicalToolpath|null{
-  const result=generateContourGcode(args);
-  return result.ok?canonicalContourToolpathFromGcode(result.code,args.operation.tool.diameterMm):null;
+export function postContourCanonicalToolpath(toolpath:CanonicalToolpath,options:ContourCanonicalPostOptions):string{
+  if(toolpath.operationKind!=='contour')throw new Error('Canonical toolpath is not a contour toolpath.');
+  const lines:string[]=[
+    '( BeBlog CAM 001Z-A )',
+    '( Operation: Kontur · canonical toolpath )',
+    '( Sichtbare Werkzeugbahn und Maschinenbahn verwenden dieselbe kanonische Geometrie )',
+    'G21','G90','G17',`S${Math.round(options.spindleRpm)} M3`,`G0 Z${f3(options.safeZMm)}`,
+  ];
+
+  toolpath.runs.forEach((run,index)=>{
+    if(run.points.length<2)return;
+    const start=run.points[0];
+    lines.push(`( Werkzeugbahn ${index+1}/${toolpath.runs.length} · Z${f3(run.z)} )`);
+    lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
+    lines.push(`G1 Z${f3(run.z)} F${Math.round(options.plungeMmMin)}`);
+
+    if(run.segments?.length){
+      for(const segment of run.segments){
+        if(segment.kind==='line'){
+          lines.push(`G1 X${f3(segment.end.x)} Y${f3(segment.end.y)} F${Math.round(options.feedMmMin)}`);
+        }else{
+          const code=segment.ccw?'G3':'G2';
+          const i=segment.center.x-segment.start.x,j=segment.center.y-segment.start.y;
+          lines.push(`${code} X${f3(segment.end.x)} Y${f3(segment.end.y)} I${f3(i)} J${f3(j)} F${Math.round(options.feedMmMin)}`);
+        }
+      }
+    }else{
+      for(let i=1;i<run.points.length;i++){
+        const point=run.points[i];
+        lines.push(`G1 X${f3(point.x)} Y${f3(point.y)} F${Math.round(options.feedMmMin)}`);
+      }
+    }
+    lines.push(`G0 Z${f3(options.safeZMm)}`);
+  });
+
+  lines.push('M5','M30');
+  return lines.join('\n')+'\n';
 }
