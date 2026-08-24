@@ -40,6 +40,11 @@
   function place(a:number,b:number,c:number,d:number){const pw=b-a,ph=d-c,tx=placement.horizontal==='left'?0:placement.horizontal==='right'?stock.width-pw:(stock.width-pw)/2,ty=placement.vertical==='front'?0:placement.vertical==='back'?stock.height-ph:(stock.height-ph)/2;return{dx:tx-a+placement.offsetX,dy:ty-c+placement.offsetY}}
   function wcsPoint():P3{return{x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2,z:wcs.z==='top'?stock.thickness:0}}
   function faceFill(shade:number,selected=false){if(selected)return'hsl(31 52% 78%)';const lightness=88-Math.round(Math.max(0,Math.min(1,shade))*12);return`hsl(150 7% ${lightness}%)`}
+  function fromWcs2(point:P2):P2{
+    const ox=wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2;
+    const oy=wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2;
+    return{x:point.x+ox,y:point.y+oy};
+  }
 
   function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number,faceSelection:number[],allowanceMm:number,toolDiameterMm:number,stepoverPercent:number){
     const a=summary.brep?.displayVertices??[],raw:P3[]=[];
@@ -67,8 +72,18 @@
     return{triangles,edges,roughRegions,toolPaths,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,toolpathCount:toolPaths.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
   }
 
-  function canonical2dPaths(){if(!canonicalToolpath)return[];const points=canonicalToolpath.runs.flatMap(run=>run.points);if(!points.length)return[];const map=fit(points);return canonicalToolpath.runs.map(run=>path(run.points.map(map))).filter(Boolean)}
-  function scene2d(){const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();if(!flat.length)return null;const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY),placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());if(noStock){const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10,plane=[{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],map=fit([...placed.flat(),...plane]),wx=wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2,wy=wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2,wp=map({x:wx,y:wy});return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),plane:path(plane.map(map),true),stock:null,wcs:wp,noStock:true}}const m=Math.max(stock.width,stock.height)*.12+10,plane=[{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],box=[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}],map=fit([...placed.flat(),...plane]),wp=map({x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2});return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),plane:path(plane.map(map),true),stock:path(box.map(map),true),wcs:wp,noStock:false}}
+  function scene2d(){
+    const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();
+    if(!flat.length)return null;
+    const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY),placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());
+    const canonicalRuns=(canonicalToolpath?.runs??[]).map(run=>run.points.map(fromWcs2));
+    if(noStock){
+      const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10,plane=[{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],map=fit([...placed.flat(),...plane,...canonicalRuns.flat()]),wx=wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2,wy=wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2,wp=map({x:wx,y:wy});
+      return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),toolPaths:canonicalRuns.map(run=>path(run.map(map))).filter(Boolean),plane:path(plane.map(map),true),stock:null,wcs:wp,noStock:true};
+    }
+    const m=Math.max(stock.width,stock.height)*.12+10,plane=[{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],box=[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}],map=fit([...placed.flat(),...plane,...canonicalRuns.flat()]),wp=map({x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2});
+    return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),toolPaths:canonicalRuns.map(run=>path(run.map(map))).filter(Boolean),plane:path(plane.map(map),true),stock:path(box.map(map),true),wcs:wp,noStock:false};
+  }
   function currentViewBox(){const w=width/zoom,h=height/zoom;return`${viewX+(width-w)/2} ${viewY+(height-h)/2} ${w} ${h}`}
   function applyViewBox(){if(viewport)viewport.setAttribute('viewBox',currentViewBox())}
   function setZoom(z:number){zoom=Math.max(.25,Math.min(6,z));queueMicrotask(applyViewBox)}
@@ -96,7 +111,7 @@
       <path d={s2.plane} class="setup-plane"/>
       {#if s2.stock}<path d={s2.stock} class="stock"/>{/if}
       {#each s2.paths as p}<path d={p} class="dxf"/>{/each}
-      {#each canonical2dPaths() as p}<path d={p} class="toolpath-preview"/>{/each}
+      {#each s2.toolPaths as p}<path d={p} class="toolpath-preview"/>{/each}
       <circle cx={s2.wcs.x} cy={s2.wcs.y} r="9" class="wcs-marker"/>
       <text x={s2.wcs.x+13} y={s2.wcs.y-10} class="wcs-label">WCS · X0 Y0</text>
     {:else if s3}
