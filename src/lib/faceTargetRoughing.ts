@@ -67,6 +67,16 @@ export function buildFaceTargetRoughing(
   const zs=vertices.map(p=>p.z),minZ=Math.min(...zs),maxZ=Math.max(...zs);
   if(maxZ-minZ>1e-4)return null;
   const targetZ=zs.reduce((sum,z)=>sum+z,0)/zs.length;
+  const partMinZ=Math.min(...part.map(p=>p.z));
+  const partMaxZ=Math.max(...part.map(p=>p.z));
+
+  // A face-target roughing operation removes material from the stock top down to
+  // a selected, top-reachable target surface. The model's lowest horizontal face
+  // is therefore never a valid target: accepting it would deliberately machine
+  // almost the complete part away (the exact failure caught by the CBG reference).
+  if(targetZ<=partMinZ+1e-4)return null;
+  if(targetZ>=stockTopZ-EPS||targetZ>partMaxZ+1e-4)return null;
+
   const roughBottomZ=targetZ+Math.max(0,finishAllowanceMm);
   const loops=boundaryLoops(part,faceIds,selected);
   if(!loops.length)return null;
