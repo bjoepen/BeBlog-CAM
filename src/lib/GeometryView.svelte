@@ -110,7 +110,6 @@
         {#each s3.toolPaths as tool}<path d={tool} class="toolpath-preview"/>{/each}
       {/if}
       {#each s3.edges as edge}<path d={edge} class="step-edge"/>{/each}
-      {#if canonicalToolpath}{#each canonicalToolpath.runs as run}<path d={path(run.points.map(point=>fit(run.points)(point)))} class="toolpath-preview"/>{/each}{/if}
       <path d={s3.axes[0]} class="axis x"/><path d={s3.axes[1]} class="axis y"/><path d={s3.axes[2]} class="axis z"/>
       <text x={s3.labels[0].x+7} y={s3.labels[0].y-5}>X</text><text x={s3.labels[1].x+7} y={s3.labels[1].y-5}>Y</text><text x={s3.labels[2].x+7} y={s3.labels[2].y-5}>Z</text>
       <circle cx={s3.wcs.x} cy={s3.wcs.y} r="10" class="wcs-marker"/><circle cx={s3.wcs.x} cy={s3.wcs.y} r="3" class="wcs-dot"/>
