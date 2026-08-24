@@ -6,6 +6,13 @@ type ViewState={
   lastY:number;
 };
 
+type ViewContext={
+  svgs:SVGSVGElement[];
+  paths:SVGPathElement[];
+  status:HTMLElement|null;
+  overlay:HTMLElement|null;
+};
+
 const state:ViewState={yawDeg:0,tiltDeg:0,dragging:false,lastX:0,lastY:0};
 const boundSvgs=new WeakSet<SVGSVGElement>();
 
@@ -76,7 +83,8 @@ function exactDepth(path:SVGPathElement,index:number,fallback:number[]):number{
   return z===null?(fallback[index]??0):Math.abs(z);
 }
 
-function applyView(svgs:SVGSVGElement[],paths:SVGPathElement[],status:HTMLElement|null,overlay:HTMLElement|null){
+function applyView(context:ViewContext){
+  const {svgs,paths,status,overlay}=context;
   if(!paths.length)return;
   const tiltRad=state.tiltDeg*Math.PI/180;
   const scaleY=Math.max(.56,Math.cos(tiltRad));
@@ -110,19 +118,34 @@ function applyView(svgs:SVGSVGElement[],paths:SVGPathElement[],status:HTMLElemen
   }
 }
 
-function setPreset(svgs:SVGSVGElement[],paths:SVGPathElement[],status:HTMLElement|null,overlay:HTMLElement|null){
+function currentContext(status:HTMLElement|null):ViewContext{
+  const view=document.querySelector<HTMLElement>('.geometry-view');
+  const baseSvg=view?.querySelector<SVGSVGElement>('svg')??null;
+  const overlay=document.querySelector<HTMLElement>('.contour-overlay');
+  const overlaySvg=overlay?.querySelector<SVGSVGElement>('svg')??null;
+  const inspectorTitle=document.querySelector<HTMLElement>('.inspector h2')?.textContent?.trim()??'';
+  const root=inspectorTitle==='Kontur'?overlaySvg:baseSvg;
+  return{
+    svgs:[baseSvg,overlaySvg].filter((svg):svg is SVGSVGElement=>!!svg),
+    paths:root?[...root.querySelectorAll<SVGPathElement>('.toolpath-preview')]:[],
+    status,
+    overlay,
+  };
+}
+
+function setPreset(status:HTMLElement|null){
   state.yawDeg=-12;
   state.tiltDeg=38;
-  applyView(svgs,paths,status,overlay);
+  applyView(currentContext(status));
 }
 
-function setTop(svgs:SVGSVGElement[],paths:SVGPathElement[],status:HTMLElement|null,overlay:HTMLElement|null){
+function setTop(status:HTMLElement|null){
   state.yawDeg=0;
   state.tiltDeg=0;
-  applyView(svgs,paths,status,overlay);
+  applyView(currentContext(status));
 }
 
-function bindDrag(svg:SVGSVGElement,getContext:()=>{svgs:SVGSVGElement[];paths:SVGPathElement[];status:HTMLElement|null;overlay:HTMLElement|null}){
+function bindDrag(svg:SVGSVGElement,status:HTMLElement|null){
   if(boundSvgs.has(svg))return;
   boundSvgs.add(svg);
   svg.addEventListener('pointerdown',event=>{
@@ -138,8 +161,7 @@ function bindDrag(svg:SVGSVGElement,getContext:()=>{svgs:SVGSVGElement[];paths:S
     state.lastX=event.clientX;state.lastY=event.clientY;
     state.yawDeg=clamp(state.yawDeg+dx*.22,-35,35);
     state.tiltDeg=clamp(state.tiltDeg+dy*.22,0,55);
-    const context=getContext();
-    applyView(context.svgs,context.paths,context.status,context.overlay);
+    applyView(currentContext(status));
   });
   const stop=()=>{state.dragging=false};
   svg.addEventListener('pointerup',stop);
@@ -156,8 +178,8 @@ export function syncToolpath25dControl(){
   const captionTitle=caption?.querySelector('strong')?.textContent??'';
   const inspectorTitle=document.querySelector<HTMLElement>('.inspector h2')?.textContent?.trim()??'';
   const isSupported2d=captionTitle.startsWith('2D-Geometrie')&&(inspectorTitle==='Planen'||inspectorTitle==='Kontur');
-  const pathRoot=inspectorTitle==='Kontur'?overlaySvg:baseSvg;
-  const paths=pathRoot?[...pathRoot.querySelectorAll<SVGPathElement>('.toolpath-preview')]:[];
+  const root=inspectorTitle==='Kontur'?overlaySvg:baseSvg;
+  const paths=root?[...root.querySelectorAll<SVGPathElement>('.toolpath-preview')]:[];
   const svgs=[baseSvg,overlaySvg].filter((svg):svg is SVGSVGElement=>!!svg);
   const existing=caption?.querySelector<HTMLElement>('.toolpath-25d-controls');
 
@@ -181,12 +203,11 @@ export function syncToolpath25dControl(){
     top.type='button';top.textContent='Draufsicht';top.title='Zur planaren Draufsicht zurückkehren';
     const status=document.createElement('span');status.className='toolpath-25d-status';
     controls.append(preset,top,status);caption.append(controls);
-    const context=()=>({svgs:[baseSvg,overlaySvg].filter((svg):svg is SVGSVGElement=>!!svg),paths:[...(inspectorTitle==='Kontur'?overlaySvg:baseSvg)?.querySelectorAll<SVGPathElement>('.toolpath-preview')??[]],status,overlay});
-    preset.addEventListener('click',()=>{const c=context();setPreset(c.svgs,c.paths,c.status,c.overlay);preset.classList.add('active');top.classList.remove('active')});
-    top.addEventListener('click',()=>{const c=context();setTop(c.svgs,c.paths,c.status,c.overlay);top.classList.add('active');preset.classList.remove('active')});
-    for(const svg of svgs)bindDrag(svg,context);
+    preset.addEventListener('click',()=>{setPreset(status);preset.classList.add('active');top.classList.remove('active')});
+    top.addEventListener('click',()=>{setTop(status);top.classList.add('active');preset.classList.remove('active')});
+    for(const svg of svgs)bindDrag(svg,status);
   }
 
   const status=controls.querySelector<HTMLElement>('.toolpath-25d-status');
-  applyView(svgs,paths,status,overlay);
+  applyView({svgs,paths,status,overlay});
 }
