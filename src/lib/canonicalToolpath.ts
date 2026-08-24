@@ -8,8 +8,8 @@ export type CanonicalToolpathRun={
 
 export type CanonicalToolpath={
   version:1;
-  operationKind:'z-level-roughing';
-  strategy:'raster';
+  operationKind:'z-level-roughing'|'facing';
+  strategy:'raster'|'zigzag';
   tool:{diameterMm:number};
   stepoverPercent:number;
   runs:CanonicalToolpathRun[];
