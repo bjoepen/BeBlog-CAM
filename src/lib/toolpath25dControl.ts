@@ -7,7 +7,7 @@ type ViewState={
 };
 
 const state:ViewState={yawDeg:0,tiltDeg:0,dragging:false,lastX:0,lastY:0};
-let boundSvg:SVGSVGElement|null=null;
+const boundSvgs=new WeakSet<SVGSVGElement>();
 
 const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
 
@@ -23,7 +23,9 @@ function inspectorNumber(labelPrefix:string):number|null{
   return parseNumber(label?.querySelector<HTMLInputElement>('input')?.value);
 }
 
-function stockWidthMm():number|null{
+function stockWidthMm(overlay:HTMLElement|null):number|null{
+  const fromOverlay=parseNumber(overlay?.dataset.stockWidth);
+  if(fromOverlay&&fromOverlay>0)return fromOverlay;
   const note=[...document.querySelectorAll<HTMLElement>('.inspector .note')]
     .map(item=>item.textContent??'')
     .find(text=>text.includes('Rohlingfläche'));
@@ -32,7 +34,7 @@ function stockWidthMm():number|null{
 }
 
 function cuttingDepths(count:number):number[]{
-  const total=inspectorNumber('Planabtrag');
+  const total=inspectorNumber('Planabtrag')??inspectorNumber('Gesamttiefe');
   const step=inspectorNumber('Zustellung');
   if(total&&step&&total>0&&step>0){
     return Array.from({length:count},(_,index)=>Math.min((index+1)*step,total));
@@ -51,71 +53,80 @@ function ensureStyles(){
     .toolpath-25d-controls button:hover{background:#fff}
     .toolpath-25d-controls button.active{background:#e5f0f2;border-color:rgba(50,123,141,.45);color:#285f6d}
     .toolpath-25d-controls .toolpath-25d-status{color:#65706b;white-space:nowrap}
-    .geometry-view.toolpath-25d-active svg{cursor:grab}
-    .geometry-view.toolpath-25d-active svg:active{cursor:grabbing}
+    .geometry-view.toolpath-25d-active svg,.contour-overlay.toolpath-25d-active svg{cursor:grab}
+    .geometry-view.toolpath-25d-active svg:active,.contour-overlay.toolpath-25d-active svg:active{cursor:grabbing}
   `;
   document.head.append(style);
 }
 
-function clearTransforms(svg:SVGSVGElement){
-  svg.style.transform='';
-  svg.style.transformOrigin='';
-  svg.style.overflow='';
-  svg.querySelectorAll<SVGPathElement>('.toolpath-preview').forEach(path=>{
-    path.style.transform='';
-    path.style.transformBox='';
-  });
+function clearTransforms(svgs:SVGSVGElement[]){
+  for(const svg of svgs){
+    svg.style.transform='';
+    svg.style.transformOrigin='';
+    svg.style.overflow='';
+    svg.querySelectorAll<SVGPathElement>('.toolpath-preview').forEach(path=>{
+      path.style.transform='';
+      path.style.transformBox='';
+    });
+  }
 }
 
-function applyView(svg:SVGSVGElement,status:HTMLElement|null){
-  const paths=[...svg.querySelectorAll<SVGPathElement>('.toolpath-preview')];
-  if(!paths.length)return;
+function exactDepth(path:SVGPathElement,index:number,fallback:number[]):number{
+  const z=parseNumber(path.dataset.toolpathZ);
+  return z===null?(fallback[index]??0):Math.abs(z);
+}
 
+function applyView(svgs:SVGSVGElement[],paths:SVGPathElement[],status:HTMLElement|null,overlay:HTMLElement|null){
+  if(!paths.length)return;
   const tiltRad=state.tiltDeg*Math.PI/180;
   const scaleY=Math.max(.56,Math.cos(tiltRad));
-  svg.style.transformOrigin='50% 50%';
-  svg.style.transform=`rotate(${state.yawDeg.toFixed(2)}deg) scaleY(${scaleY.toFixed(4)})`;
-  svg.style.overflow='visible';
+  for(const svg of svgs){
+    svg.style.transformOrigin='50% 50%';
+    svg.style.transform=`rotate(${state.yawDeg.toFixed(2)}deg) scaleY(${scaleY.toFixed(4)})`;
+    svg.style.overflow='visible';
+  }
 
-  const stock=svg.querySelector<SVGPathElement>('path.stock');
-  const stockMm=stockWidthMm();
-  const stockPx=stock?.getBoundingClientRect().width??0;
-  const pxPerMm=stockMm&&stockMm>0&&stockPx>0?stockPx/stockMm:8;
-  const depths=cuttingDepths(paths.length);
+  const baseSvg=svgs[0];
+  const stock=baseSvg?.querySelector<SVGGraphicsElement>('path.stock');
+  const stockMm=stockWidthMm(overlay);
+  const stockUnits=stock?.getBBox().width??0;
+  const pxPerMm=stockMm&&stockMm>0&&stockUnits>0?stockUnits/stockMm:8;
+  const fallback=cuttingDepths(paths.length);
   const separation=Math.sin(tiltRad);
 
   paths.forEach((path,index)=>{
-    const shift=depths[index]*pxPerMm*separation;
+    const shift=exactDepth(path,index,fallback)*pxPerMm*separation;
     path.style.transformBox='view-box';
     path.style.transform=`translateY(${shift.toFixed(2)}px)`;
   });
 
   if(status){
+    const explicit=[...new Set(paths.map(path=>parseNumber(path.dataset.toolpathZ)).filter((value):value is number=>value!==null).map(value=>value.toFixed(6)))];
+    const levels=explicit.length||paths.length;
     const text=state.tiltDeg>0
-      ?`${paths.length} Ebene${paths.length===1?'':'n'} · Neigung ${Math.round(state.tiltDeg)}°`
-      :`${paths.length} Ebene${paths.length===1?'':'n'} · Draufsicht`;
+      ?`${levels} Ebene${levels===1?'':'n'} · Neigung ${Math.round(state.tiltDeg)}°`
+      :`${levels} Ebene${levels===1?'':'n'} · Draufsicht`;
     if(status.textContent!==text)status.textContent=text;
   }
 }
 
-function setPreset(svg:SVGSVGElement,status:HTMLElement|null){
+function setPreset(svgs:SVGSVGElement[],paths:SVGPathElement[],status:HTMLElement|null,overlay:HTMLElement|null){
   state.yawDeg=-12;
   state.tiltDeg=38;
-  applyView(svg,status);
+  applyView(svgs,paths,status,overlay);
 }
 
-function setTop(svg:SVGSVGElement,status:HTMLElement|null){
+function setTop(svgs:SVGSVGElement[],paths:SVGPathElement[],status:HTMLElement|null,overlay:HTMLElement|null){
   state.yawDeg=0;
   state.tiltDeg=0;
-  applyView(svg,status);
+  applyView(svgs,paths,status,overlay);
 }
 
-function bindDrag(svg:SVGSVGElement,status:HTMLElement|null){
-  if(boundSvg===svg)return;
-  boundSvg=svg;
-
+function bindDrag(svg:SVGSVGElement,getContext:()=>{svgs:SVGSVGElement[];paths:SVGPathElement[];status:HTMLElement|null;overlay:HTMLElement|null}){
+  if(boundSvgs.has(svg))return;
+  boundSvgs.add(svg);
   svg.addEventListener('pointerdown',event=>{
-    if(event.button!==0||event.shiftKey)return;
+    if(event.button!==0||event.shiftKey||event.target!==svg)return;
     state.dragging=true;
     state.lastX=event.clientX;
     state.lastY=event.clientY;
@@ -123,13 +134,12 @@ function bindDrag(svg:SVGSVGElement,status:HTMLElement|null){
   });
   svg.addEventListener('pointermove',event=>{
     if(!state.dragging)return;
-    const dx=event.clientX-state.lastX;
-    const dy=event.clientY-state.lastY;
-    state.lastX=event.clientX;
-    state.lastY=event.clientY;
+    const dx=event.clientX-state.lastX,dy=event.clientY-state.lastY;
+    state.lastX=event.clientX;state.lastY=event.clientY;
     state.yawDeg=clamp(state.yawDeg+dx*.22,-35,35);
     state.tiltDeg=clamp(state.tiltDeg+dy*.22,0,55);
-    applyView(svg,status);
+    const context=getContext();
+    applyView(context.svgs,context.paths,context.status,context.overlay);
   });
   const stop=()=>{state.dragging=false};
   svg.addEventListener('pointerup',stop);
@@ -139,43 +149,44 @@ function bindDrag(svg:SVGSVGElement,status:HTMLElement|null){
 export function syncToolpath25dControl(){
   ensureStyles();
   const view=document.querySelector<HTMLElement>('.geometry-view');
-  const svg=view?.querySelector<SVGSVGElement>('svg');
-  const caption=view?.querySelector<HTMLElement>('.geometry-caption');
+  const baseSvg=view?.querySelector<SVGSVGElement>('svg')??null;
+  const caption=view?.querySelector<HTMLElement>('.geometry-caption')??null;
+  const overlay=document.querySelector<HTMLElement>('.contour-overlay');
+  const overlaySvg=overlay?.querySelector<SVGSVGElement>('svg')??null;
   const captionTitle=caption?.querySelector('strong')?.textContent??'';
   const inspectorTitle=document.querySelector<HTMLElement>('.inspector h2')?.textContent?.trim()??'';
-  const isFacing2d=captionTitle.startsWith('2D-Geometrie')&&inspectorTitle==='Planen';
-  const toolpaths=svg?.querySelectorAll('.toolpath-preview').length??0;
+  const isSupported2d=captionTitle.startsWith('2D-Geometrie')&&(inspectorTitle==='Planen'||inspectorTitle==='Kontur');
+  const pathRoot=inspectorTitle==='Kontur'?overlaySvg:baseSvg;
+  const paths=pathRoot?[...pathRoot.querySelectorAll<SVGPathElement>('.toolpath-preview')]:[];
+  const svgs=[baseSvg,overlaySvg].filter((svg):svg is SVGSVGElement=>!!svg);
   const existing=caption?.querySelector<HTMLElement>('.toolpath-25d-controls');
 
-  if(!view||!svg||!caption||!isFacing2d||toolpaths===0){
+  if(!view||!baseSvg||!caption||!isSupported2d||paths.length===0){
     existing?.remove();
     view?.classList.remove('toolpath-25d-active');
-    if(svg)clearTransforms(svg);
+    overlay?.classList.remove('toolpath-25d-active');
+    clearTransforms(svgs);
     return;
   }
 
   view.classList.add('toolpath-25d-active');
+  overlay?.classList.add('toolpath-25d-active');
   let controls=existing;
   if(!controls){
     controls=document.createElement('span');
     controls.className='toolpath-25d-controls';
     const preset=document.createElement('button');
-    preset.type='button';
-    preset.textContent='2.5D';
-    preset.title='Leicht geneigte Kontrollansicht der realen Z-Ebenen';
+    preset.type='button';preset.textContent='2.5D';preset.title='Leicht geneigte Kontrollansicht der realen Z-Ebenen';
     const top=document.createElement('button');
-    top.type='button';
-    top.textContent='Draufsicht';
-    top.title='Zur planaren Draufsicht zurückkehren';
-    const status=document.createElement('span');
-    status.className='toolpath-25d-status';
-    controls.append(preset,top,status);
-    caption.append(controls);
-    preset.addEventListener('click',()=>{setPreset(svg,status);preset.classList.add('active');top.classList.remove('active')});
-    top.addEventListener('click',()=>{setTop(svg,status);top.classList.add('active');preset.classList.remove('active')});
-    bindDrag(svg,status);
+    top.type='button';top.textContent='Draufsicht';top.title='Zur planaren Draufsicht zurückkehren';
+    const status=document.createElement('span');status.className='toolpath-25d-status';
+    controls.append(preset,top,status);caption.append(controls);
+    const context=()=>({svgs:[baseSvg,overlaySvg].filter((svg):svg is SVGSVGElement=>!!svg),paths:[...(inspectorTitle==='Kontur'?overlaySvg:baseSvg)?.querySelectorAll<SVGPathElement>('.toolpath-preview')??[]],status,overlay});
+    preset.addEventListener('click',()=>{const c=context();setPreset(c.svgs,c.paths,c.status,c.overlay);preset.classList.add('active');top.classList.remove('active')});
+    top.addEventListener('click',()=>{const c=context();setTop(c.svgs,c.paths,c.status,c.overlay);top.classList.add('active');preset.classList.remove('active')});
+    for(const svg of svgs)bindDrag(svg,context);
   }
 
   const status=controls.querySelector<HTMLElement>('.toolpath-25d-status');
-  applyView(svg,status);
+  applyView(svgs,paths,status,overlay);
 }
