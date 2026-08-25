@@ -3,6 +3,7 @@
   import { save } from '@tauri-apps/plugin-dialog';
   import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CarveOperation } from './types';
   import { generateCarveGcode } from './carveGcode';
+  import { buildCarveCanonicalToolpath, postCarveCanonicalToolpath } from './carveCanonicalToolpath';
   import { postProcessGcode } from './postprocessors';
   import { postProcessorStore } from './postProcessorStore';
   import PostProcessorPicker from './PostProcessorPicker.svelte';
@@ -13,7 +14,9 @@
   let copied=false;let exportState:''|'saved'|'error'='';let exportMessage='';
   $: multiJob=$operationsProjectStore.operations.length>1&&$operationsProjectStore.activeOperationId===operation.id;
   $: result=generateCarveGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
-  $: processed=result.ok?postProcessGcode(result.code,$postProcessorStore):{ok:false,code:'',errors:result.errors,warnings:result.warnings,removedLines:0,transformedLines:0};
+  $: canonical=result.ok?buildCarveCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation}):null;
+  $: canonicalCode=canonical?postCarveCanonicalToolpath(canonical,{safeZMm:operation.safeZMm,feedMmMin:operation.feedMmMin,plungeMmMin:operation.plungeMmMin,spindleRpm:operation.spindleRpm}):result.code;
+  $: processed=result.ok?postProcessGcode(canonicalCode,$postProcessorStore):{ok:false,code:'',errors:result.errors,warnings:result.warnings,removedLines:0,transformedLines:0};
   $: displayCode=processed.code;
   function defaultNcName(){const base=(summary.fileName||'beblog-cam').replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9äöüÄÖÜß._ -]+/g,'-').trim()||'beblog-cam';return `${base}-carve.nc`;}
   async function copyCode(){if(!result.ok||!processed.ok||!displayCode)return;await navigator.clipboard.writeText(displayCode);copied=true;setTimeout(()=>copied=false,1200);}
@@ -27,14 +30,15 @@
 {#if result.ok}
   <div class="release pass"><strong>PASS</strong><span>Die geprüften DXF-Centerlines können als Maschinenprogramm ausgegeben werden.</span></div>
   <div class="facts"><span>{result.segmentCount} Segmente</span><span>{result.passes} Zustellung{result.passes===1?'':'en'}</span><span>{result.totalCenterlineLengthMm.toFixed(3)} mm Centerline</span><span>{displayCode.trimEnd().split(/\r?\n/).length} G-Code-Zeilen</span></div>
-  <p class="note"><strong>Strategie:</strong> Keine Radiuskorrektur. Jedes Segment wird auf Sicherheits-Z angefahren, auf Solltiefe eingetaucht und exakt entlang der DXF-Linie abgefahren.</p>
+  <p class="note"><strong>Strategie:</strong> Jedes gewählte Segment wird auf Sicherheits-Z angefahren, auf Solltiefe eingetaucht und entsprechend der gewählten Seite links/rechts/auf Linie abgefahren.</p>
+  {#if canonical}<p class="note"><strong>Canonical:</strong> Vorschau und Maschinenoutput verwenden dieselben {canonical.runs.length} Werkzeugbahn{canonical.runs.length===1?'':'en'}.</p>{/if}
   <PostProcessorPicker/>
   {#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
   {#each processed.warnings as warning}<p class="warning"><strong>Postprozessor:</strong> {warning}</p>{/each}
   {#each processed.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}
   <div class="export-box"><div><strong>NC-Datei</strong><span>Speichert den geprüften Carve-G-Code mit dem gewählten Postprozessor als .nc.</span></div><button class="primary-export" disabled={!processed.ok} onclick={saveNc}>G-Code speichern …</button></div>
   {#if exportMessage}<p class:export-ok={exportState==='saved'} class:export-error={exportState==='error'} class="export-message">{exportMessage}</p>{/if}
-  <div class="code-head"><span>Vorschau · {$postProcessorStore==='estlcam'?'Estlcam':'Standard'}</span><button disabled={!processed.ok} onclick={copyCode}>{copied?'Kopiert':'G-Code kopieren'}</button></div><pre>{displayCode}</pre>
+  <div class="code-head"><span>Vorschau · identisch zur .nc-Datei · {$postProcessorStore==='estlcam'?'Estlcam':'Standard'}</span><button disabled={!processed.ok} onclick={copyCode}>{copied?'Kopiert':'G-Code kopieren'}</button></div><pre>{displayCode}</pre>
 {:else}
   <div class="release fail"><strong>FAIL</strong><span>Carve-G-Code wird nur aus dem freigegebenen Centerline-Pfad erzeugt.</span></div>{#each result.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}{#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
 {/if}
