@@ -41,8 +41,6 @@ export function canonicalPocketToolpathFromGcode(code:string,operation:PocketOpe
       Object.assign(state,next);continue;
     }
     if((command==='G2'||command==='G3')&&next.z<0){
-      // Helical arcs change Z while moving in XY. They are intentionally not flattened into
-      // a false 2.5D cutting plane; helix preview gets its own canonical 3D motion gate later.
       if(Math.abs(next.z-state.z)>1e-9){close();Object.assign(state,next);continue;}
       if(!current||Math.abs(current.z-next.z)>1e-9){close();current={z:next.z,points:[{x:state.x,y:state.y}],segments:[]};}
       const i=numberWord(line,'I')??0,j=numberWord(line,'J')??0,start={x:state.x,y:state.y},end={x:next.x,y:next.y},center={x:state.x+i,y:state.y+j},ccw=command==='G3';
@@ -54,7 +52,9 @@ export function canonicalPocketToolpathFromGcode(code:string,operation:PocketOpe
 }
 
 export function buildPocketCanonicalToolpath(args:PocketArgs):CanonicalToolpath|null{
-  if(args.operation.entry==='helix')return null;
+  // The v1 contract has one fixed Z per run. A linear ramp and a helix both change Z
+  // while moving in XY and must therefore wait for the spatial canonical motion gate.
+  if(args.operation.entry!=='plunge')return null;
   const result=generatePocketGcode(args);if(!result.ok)return null;
   const optimized=result.strategy==='parallel'?optimizeParallelPocketStayDown(result.code,args.operation).code:result.code;
   return canonicalPocketToolpathFromGcode(optimized,args.operation,result.strategy);
@@ -69,7 +69,6 @@ export function postPocketCanonicalToolpath(toolpath:CanonicalToolpath,options:P
     '( Sichtbare Werkzeugbahn und Maschinenbahn verwenden dieselbe kanonische Geometrie )',
     'G21','G90','G17',`S${Math.round(options.spindleRpm)} M3`,`G0 Z${f3(options.safeZMm)}`,
   ];
-
   toolpath.runs.forEach((run,index)=>{
     if(run.points.length<2)return;
     const start=run.points[0];
@@ -84,9 +83,7 @@ export function postPocketCanonicalToolpath(toolpath:CanonicalToolpath,options:P
           lines.push(`${code} X${f3(segment.end.x)} Y${f3(segment.end.y)} I${f3(i)} J${f3(j)} F${Math.round(options.feedMmMin)}`);
         }
       }
-    }else{
-      for(let i=1;i<run.points.length;i++)lines.push(`G1 X${f3(run.points[i].x)} Y${f3(run.points[i].y)} F${Math.round(options.feedMmMin)}`);
-    }
+    }else for(let i=1;i<run.points.length;i++)lines.push(`G1 X${f3(run.points[i].x)} Y${f3(run.points[i].y)} F${Math.round(options.feedMmMin)}`);
     lines.push(`G0 Z${f3(options.safeZMm)}`);
   });
   lines.push('M5','M30');
