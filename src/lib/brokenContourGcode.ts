@@ -1,6 +1,7 @@
 import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
-import { buildClosedChains, sampleCurve, type P2 } from './contourMath';
+import { buildClosedChains, buildSemanticContours, sampleCurve, type P2, type SemanticSegment } from './contourMath';
 import { buildBrokenContourPath } from './brokenContour';
+import { buildBrokenSemanticContour, reverseSemanticRun } from './brokenSemanticContour';
 import type { GcodeResult } from './closedContourGcode';
 
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
@@ -16,6 +17,10 @@ function placementTranslation(summary:ImportSummary,stock:StockDefinition,stockM
   return{dx:tx-b.minX+placement.offsetX,dy:ty-b.minY+placement.offsetY,partBounds:{minX:tx+placement.offsetX,maxX:tx+w+placement.offsetX,minY:ty+placement.offsetY,maxY:ty+h+placement.offsetY}};
 }
 function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateSystem,partBounds:{minX:number;maxX:number;minY:number;maxY:number}){const b=stockMode==='none'?partBounds:{minX:0,maxX:stock.width,minY:0,maxY:stock.height};return{x:wcs.x==='left'?b.minX:wcs.x==='right'?b.maxX:(b.minX+b.maxX)/2,y:wcs.y==='front'?b.minY:wcs.y==='back'?b.maxY:(b.minY+b.maxY)/2};}
+function moveSegmentToWcs(segment:SemanticSegment,origin:P2):SemanticSegment{
+  const move=(p:P2)=>({x:p.x-origin.x,y:p.y-origin.y});
+  return segment.kind==='line'?{kind:'line',start:move(segment.start),end:move(segment.end)}:{...segment,start:move(segment.start),end:move(segment.end),center:move(segment.center)};
+}
 
 export function generateBrokenContourGcode(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation}):GcodeResult{
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;const errors:string[]=[],warnings:string[]=[],excluded=operation.excludedSegmentIds??[];
@@ -33,7 +38,40 @@ export function generateBrokenContourGcode(args:{summary:ImportSummary;stock:Sto
   if(errors.length)return fail();
   const t=placementTranslation(summary,stock,stockMode,placement,orientation);if(!t){errors.push('Bauteilgeometrie konnte nicht transformiert werden.');return fail();}
   const move=(p:P2)=>{const q=rotate(p,orientation.rotationZDeg);return{x:q.x+t.dx,y:q.y+t.dy}};
-  const chains=buildClosedChains(summary.planarGeometry?.curves??[],move);const selected=operation.contourId===null?null:chains.find(c=>c.id===operation.contourId)??null;
+  const curves=summary.planarGeometry?.curves??[];
+  const semantic=buildSemanticContours(curves,move).find(c=>c.id===operation.contourId&&c.supported)??null;
+  const semanticBroken=semantic?buildBrokenSemanticContour(semantic,excluded,operation.tool.diameterMm/2,operation.side,.003):null;
+
+  if(semanticBroken){
+    if(!semanticBroken.activeSegmentCount){errors.push('Alle Konturstrecken sind abgewählt.');return fail();}
+    if(!semanticBroken.validation.ok){errors.push(semanticBroken.validation.selfIntersects?'Die radiuskorrigierte Teilkontur schneidet sich selbst.':`Die aufgebrochene native Werkzeugbahn hat die geometrische Prüfung nicht bestanden (max. Abweichung ${Number.isFinite(semanticBroken.validation.maxDeviationMm)?semanticBroken.validation.maxDeviationMm.toFixed(4):'—'} mm).`);return fail();}
+    const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);
+    let runs=semanticBroken.runs.map(run=>run.map(segment=>moveSegmentToWcs(segment,origin)));
+    if(operation.direction==='conventional')runs=runs.map(reverseSemanticRun).reverse();
+    const passes=Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm)),lines:string[]=[];
+    const sideLabel=operation.side==='outside'?'außen':operation.side==='inside'?'innen':'auf Linie';
+    const arcSegments=runs.flat().filter(segment=>segment.kind==='arc').length;
+    lines.push('( BeBlog CAM 001Y )','( Operation: geschlossene Sollkontur mit abgewählten Strecken )',`( Aktiv ${semanticBroken.activeSegmentCount}/${semanticBroken.segmentCount} native Kontursegmente · Werkzeugseite ${sideLabel} )`,'( Native Linien-/Bogensemantik bleibt bei aufgebrochener Kontur erhalten )','( Sicherheitsregel: Zwischen getrennten Teilkonturen und Z-Stufen wird immer auf Sicherheits-Z zurückgezogen )','G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
+    let pointCount=0;
+    for(let pass=1;pass<=passes;pass++){
+      const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);lines.push(`( Zustellung ${pass}/${passes} · Z${f3(depth)} )`);
+      for(let r=0;r<runs.length;r++){
+        const run=runs[r];if(!run.length)continue;const start=run[0].start;pointCount+=run.length+1;
+        lines.push(`( Teilkontur ${r+1}/${runs.length} )`,`G0 X${f3(start.x)} Y${f3(start.y)}`,`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);
+        for(const segment of run){
+          if(segment.kind==='line')lines.push(`G1 X${f3(segment.end.x)} Y${f3(segment.end.y)} F${Math.round(operation.feedMmMin)}`);
+          else{const code=segment.ccw?'G3':'G2',i=segment.center.x-segment.start.x,j=segment.center.y-segment.start.y;lines.push(`${code} X${f3(segment.end.x)} Y${f3(segment.end.y)} I${f3(i)} J${f3(j)} F${Math.round(operation.feedMmMin)}`)}
+        }
+        lines.push(`G0 Z${f3(operation.safeZMm)}`);
+      }
+    }
+    lines.push('M5','M30');
+    const v=semanticBroken.validation;
+    return{ok:true,errors:[],warnings,code:lines.join('\n')+'\n',lineCount:lines.length,pointCount,passes,radiusMm:operation.tool.diameterMm/2,interpolation:arcSegments?'g1-g2g3-mixed':'g1-segmented',nativeArcCount:passes*arcSegments,validation:{ok:v.ok,expectedMm:v.expectedMm,measuredMinMm:v.measuredMinMm,measuredMaxMm:v.measuredMaxMm,maxDeviationMm:v.maxDeviationMm,maxParallelError:v.maxParallelError,segmentCount:v.segmentCount,sideOk:v.sideOk}};
+  }
+
+  warnings.push('Native Kontursemantik konnte für diese aufgebrochene Kontur nicht sicher verwendet werden. G1-Fallback bleibt aktiv.');
+  const chains=buildClosedChains(curves,move);const selected=operation.contourId===null?null:chains.find(c=>c.id===operation.contourId)??null;
   if(!selected){errors.push('Gewählte geschlossene Kontur wurde in der aktuellen Geometrie nicht gefunden.');return fail();}
   const broken=buildBrokenContourPath(selected.points,excluded,operation.tool.diameterMm/2,operation.side,.003);
   if(!broken.activeSegmentCount){errors.push('Alle Konturstrecken sind abgewählt.');return fail(broken.validation);}
