@@ -4,6 +4,7 @@
   import { buildOpenChains, offsetOpenChain } from './openContour';
   import { buildBrokenContourPath } from './brokenContour';
   import { buildBrokenSemanticContour, sampleSemanticRun, sampleSemanticSegment } from './brokenSemanticContour';
+  import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
 
   export let summary: ImportSummary;
   export let stock: StockDefinition;
@@ -16,6 +17,7 @@
   export let onSelectDrillCurve: (id: number) => void = () => {};
 
   const width=1000,height=650,pad=54;
+  const previewWcs={x:'left',y:'front',z:'top'} as const;
   const rotate=(p:P2):P2=>{const a=orientation.rotationZDeg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c}};
   const bounds=(pts:P2[])=>{const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)}};
   const path=(pts:P2[],closed=false)=>pts.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')+(closed?' Z':'');
@@ -85,8 +87,9 @@
 
     if(operation.kind==='pocket'){
       const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
-      let tool:P2[]|null=null;if(selected)tool=offsetPolygon(selected.points,-operation.tool.diameterMm/2);
-      return{kind:'closed' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,tool:tool?tool.map(map):null};
+      const canonical=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs:previewWcs,operation});
+      const toolRuns=(canonical?.runs??[]).map(run=>({z:run.z,points:run.points.map(map)}));
+      return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,toolRuns,helixPending:operation.entry==='helix'};
     }
 
     const selectedClosed=operation.topology==='closed'&&operation.contourId!=null?cs.find(c=>c.id===operation.contourId)??null:null;
@@ -127,8 +130,12 @@
     (operation.kind==='carve'||operation.kind==='drill')?operation.layerName:operation.kind,
     operation.tool.diameterMm,
     operation.kind==='contour'?operation.side:operation.kind,
-    operation.kind==='contour'?operation.totalDepthMm:operation.kind,
-    operation.kind==='contour'?operation.stepDownMm:operation.kind,
+    (operation.kind==='contour'||operation.kind==='pocket')?operation.totalDepthMm:operation.kind,
+    (operation.kind==='contour'||operation.kind==='pocket')?operation.stepDownMm:operation.kind,
+    operation.kind==='pocket'?operation.stepoverPercent:operation.kind,
+    operation.kind==='pocket'?operation.strategy:operation.kind,
+    operation.kind==='pocket'?operation.entry:operation.kind,
+    operation.kind==='pocket'?operation.rampAngleDeg:operation.kind,
     stockMode,stock.width,stock.height,
     placement.horizontal,placement.vertical,placement.offsetX,placement.offsetY,
     orientation.rotationZDeg
@@ -151,13 +158,13 @@
         <line x1={hole.center.x} y1={hole.center.y-7} x2={hole.center.x} y2={hole.center.y+7} class:selected-drill={hole.selected} class="drill-center" />
         <circle cx={hole.center.x} cy={hole.center.y} r={Math.max(12,hole.r)} class="drill-pick" onclick={()=>onSelectDrillCurve(hole.id)}><title>{hole.selected?'Bohrung aus Auswahl entfernen':`Bohrung Ø ${hole.diameter.toFixed(3)} mm auswählen`}</title></circle>
       {/each}
-    {:else if scene.kind==='closed'}
+    {:else if scene.kind==='pocket'}
       {#each scene.chains as chain}
         <path d={path(chain.screen,true)} class="candidate" />
-        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id,'closed')}><title>Geschlossene Kontur {chain.id+1} auswählen</title></path>
+        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id,'closed')}><title>Geschlossene Taschenkontur {chain.id+1} auswählen</title></path>
       {/each}
       {#if scene.selected}<path d={path(scene.selected,true)} class="selected"/>{/if}
-      {#if scene.tool}<path d={path(scene.tool,true)} class="toolpath"/>{/if}
+      {#each scene.toolRuns as tool}<path d={path(tool.points,false)} class="toolpath pocket-toolpath toolpath-preview" data-toolpath-z={tool.z}/>{/each}
     {:else}
       {#each scene.closed as chain}
         <path d={path(chain.screen,true)} class="candidate" />
@@ -181,7 +188,7 @@
       {/each}
     {/if}
   </svg>
-  {#if scene.kind==='contour'}<div class="open-help">{scene.broken?(scene.nativeBreakSelection?'Kontur aufgebrochen: native Linie/Bogen bleibt als CAD-Segment erhalten und wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.'):'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
+  {#if scene.kind==='contour'}<div class="open-help">{scene.broken?(scene.nativeBreakSelection?'Kontur aufgebrochen: native Linie/Bogen bleibt als CAD-Segment erhalten und wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.'):'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='pocket'&&scene.helixPending}<div class="open-help">Helix-Einstieg wird bewusst noch nicht als flache 2.5D-Bahn dargestellt. Die räumliche Helix folgt im eigenen Canonical-Motion-Gate.</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
 </div>
 {/if}
 
@@ -196,7 +203,7 @@
   .selected{fill:none;stroke:rgba(194,117,40,.88);stroke-width:2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .segment-state{fill:none;stroke:rgba(194,117,40,.78);stroke-width:2.3;vector-effect:non-scaling-stroke;pointer-events:none}.segment-state.segment-off{stroke:rgba(105,112,108,.5);stroke-width:2.8;stroke-dasharray:3 4}
   .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
-  .contour-toolpath{stroke:#327b8d;stroke-width:2.1}
+  .contour-toolpath,.pocket-toolpath{stroke:#327b8d;stroke-width:2.1}
   .open-help{position:absolute;left:50%;top:calc(100% + 42px);transform:translateX(-50%);width:max-content;max-width:86%;padding:6px 9px;border-radius:6px;background:rgba(250,250,248,.94);color:#666b66;font-size:.72rem;pointer-events:none;white-space:normal;text-align:center}
   .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}.carve-candidate.selected-carve{stroke:rgba(38,52,46,.55);stroke-width:1.8;stroke-dasharray:4 3}.carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
   .drill-candidate{fill:none;stroke:rgba(194,117,40,.25);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}.drill-candidate.selected-drill{stroke:#b1453b;stroke-width:2.4}.drill-center{stroke:rgba(194,117,40,.55);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.drill-center.selected-drill{stroke:#b1453b;stroke-width:1.8}.drill-pick{fill:transparent;stroke:transparent;stroke-width:12;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}
