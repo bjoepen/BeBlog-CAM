@@ -124,7 +124,7 @@ function currentContext(status:HTMLElement|null):ViewContext{
   const overlay=document.querySelector<HTMLElement>('.contour-overlay');
   const overlaySvg=overlay?.querySelector<SVGSVGElement>('svg')??null;
   const inspectorTitle=document.querySelector<HTMLElement>('.inspector h2')?.textContent?.trim()??'';
-  const root=inspectorTitle==='Kontur'?overlaySvg:baseSvg;
+  const root=inspectorTitle==='Kontur'||inspectorTitle==='Tasche'?overlaySvg:baseSvg;
   return{
     svgs:[baseSvg,overlaySvg].filter((svg):svg is SVGSVGElement=>!!svg),
     paths:root?[...root.querySelectorAll<SVGPathElement>('.toolpath-preview')]:[],
@@ -177,8 +177,8 @@ export function syncToolpath25dControl(){
   const overlaySvg=overlay?.querySelector<SVGSVGElement>('svg')??null;
   const captionTitle=caption?.querySelector('strong')?.textContent??'';
   const inspectorTitle=document.querySelector<HTMLElement>('.inspector h2')?.textContent?.trim()??'';
-  const isSupported2d=captionTitle.startsWith('2D-Geometrie')&&(inspectorTitle==='Planen'||inspectorTitle==='Kontur');
-  const root=inspectorTitle==='Kontur'?overlaySvg:baseSvg;
+  const isSupported2d=captionTitle.startsWith('2D-Geometrie')&&(inspectorTitle==='Planen'||inspectorTitle==='Kontur'||inspectorTitle==='Tasche');
+  const root=inspectorTitle==='Kontur'||inspectorTitle==='Tasche'?overlaySvg:baseSvg;
   const paths=root?[...root.querySelectorAll<SVGPathElement>('.toolpath-preview')]:[];
   const svgs=[baseSvg,overlaySvg].filter((svg):svg is SVGSVGElement=>!!svg);
   const existing=caption?.querySelector<HTMLElement>('.toolpath-25d-controls');
