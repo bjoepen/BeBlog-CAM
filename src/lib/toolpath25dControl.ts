@@ -109,11 +109,14 @@ function applyView(context:ViewContext){
   });
 
   if(status){
-    const explicit=[...new Set(paths.map(path=>parseNumber(path.dataset.toolpathZ)).filter((value):value is number=>value!==null).map(value=>value.toFixed(6)))];
-    const levels=explicit.length||paths.length;
+    const planar=paths.filter(path=>path.dataset.toolpathSpatial!=='entry');
+    const explicit=[...new Set(planar.map(path=>parseNumber(path.dataset.toolpathZ)).filter((value):value is number=>value!==null).map(value=>value.toFixed(6)))];
+    const levels=explicit.length||planar.length;
+    const spatial=paths.some(path=>path.dataset.toolpathSpatial==='entry');
+    const depthText=`${levels} Ebene${levels===1?'':'n'}${spatial?' · räumlicher Einstieg':''}`;
     const text=state.tiltDeg>0
-      ?`${levels} Ebene${levels===1?'':'n'} · Neigung ${Math.round(state.tiltDeg)}°`
-      :`${levels} Ebene${levels===1?'':'n'} · Draufsicht`;
+      ?`${depthText} · Neigung ${Math.round(state.tiltDeg)}°`
+      :`${depthText} · Draufsicht`;
     if(status.textContent!==text)status.textContent=text;
   }
 }
