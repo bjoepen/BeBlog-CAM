@@ -20,8 +20,8 @@ export type CanonicalToolpathRun={
 
 export type CanonicalToolpath={
   version:1;
-  operationKind:'z-level-roughing'|'facing'|'contour'|'pocket';
-  strategy:'raster'|'zigzag'|'contour'|'concentric'|'parallel-pocket';
+  operationKind:'z-level-roughing'|'facing'|'contour'|'pocket'|'carve';
+  strategy:'raster'|'zigzag'|'contour'|'concentric'|'parallel-pocket'|'carve';
   tool:{diameterMm:number};
   stepoverPercent:number;
   runs:CanonicalToolpathRun[];
