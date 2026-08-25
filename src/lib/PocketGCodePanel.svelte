@@ -4,6 +4,7 @@
   import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, PocketOperation } from './types';
   import { generatePocketGcode } from './pocketGcode';
   import { optimizeParallelPocketStayDown } from './pocketStayDown';
+  import { buildPocketCanonicalToolpath, postPocketCanonicalToolpath } from './pocketCanonicalToolpath';
   import { normalizeGcodeComments } from './gcodeComments';
   import { postProcessGcode } from './postprocessors';
   import { postProcessorStore } from './postProcessorStore';
@@ -16,7 +17,10 @@
   $: multiJob=$operationsProjectStore.operations.length>1&&$operationsProjectStore.activeOperationId===operation.id;
   $: result=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
   $: stayDown=result.ok?optimizeParallelPocketStayDown(result.code,operation):{code:result.code,links:0,retainedRetracts:0};
-  $: normalizedCode=normalizeGcodeComments(stayDown.code);
+  $: canonical=result.ok&&operation.entry==='plunge'?buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation}):null;
+  $: canonicalCode=canonical?postPocketCanonicalToolpath(canonical,{safeZMm:operation.safeZMm,feedMmMin:operation.feedMmMin,plungeMmMin:operation.plungeMmMin,spindleRpm:operation.spindleRpm}):null;
+  $: machineSource=canonicalCode??stayDown.code;
+  $: normalizedCode=normalizeGcodeComments(machineSource);
   $: processed=result.ok?postProcessGcode(normalizedCode,$postProcessorStore):{ok:false,code:'',errors:result.errors,warnings:result.warnings,removedLines:0,transformedLines:0};
   $: displayCode=processed.code;
   $: displayLineCount=displayCode?displayCode.trimEnd().split(/\r?\n/).length:0;
@@ -33,6 +37,7 @@
   <div class="release pass"><strong>PASS</strong><span>Die geprüfte Taschenstrategie kann als Maschinenprogramm ausgegeben werden.</span></div>
   <div class="facts"><span>{result.passes} Zustellung{result.passes===1?'':'en'}</span>{#if result.strategy==='raster'}<span>{result.rasterPasses} Rasterbahnen</span>{:else if result.strategy==='concentric'}<span>{result.concentricRings} Kreisring{result.concentricRings===1?'':'e'}</span>{:else}<span>{result.parallelLoops} Innenoffset{result.parallelLoops===1?'':'s'}</span>{/if}{#if result.helixTurns>0}<span>{result.helixTurns} Helixumdrehung{result.helixTurns===1?'':'en'}</span>{/if}{#if result.strategy==='parallel'}<span>{stayDown.links} Stay-down-Link{stayDown.links===1?'':'s'}</span>{/if}<span>Stepover {result.stepoverMm.toFixed(3)} mm</span><span>Radius {result.toolRadiusMm.toFixed(3)} mm</span><span>{displayLineCount} G-Code-Zeilen</span></div>
   <p class="note"><strong>Strategie:</strong> {result.strategy==='concentric'?(operation.entry==='helix'?'Kreistasche · Helix-Einstieg auf Schnitttiefe · anschließend konzentrisch von innen nach außen · äußerster Ring als radiuskorrigierte Fertigwand.':'Konzentrische Kreistasche · Zentrum zuerst · native G2/G3-Halbkreise · äußerster Ring als radiuskorrigierte Fertigwand.'):result.strategy==='parallel'?`Konturparallel · analytische Innenoffsets · LINE bleibt G1, ARC bleibt G2/G3 · ${stayDown.links} sicher nachgewiesene Verbindungen bleiben auf Schnitttiefe.`:operation.entry==='ramp'?'Rechteck-Raster · lineare Rampe · Zickzack-Räumung · abschließender Wandumlauf.':'Rechteck-Raster · senkrecht eintauchen · Zickzack-Räumung · abschließender Wandumlauf.'}</p>
+  {#if canonical}<p class="note"><strong>Canonical:</strong> Vorschau und Maschinenoutput verwenden dieselben {canonical.runs.length} Werkzeugbahn{canonical.runs.length===1?'':'en'}.</p>{:else if operation.entry!=='plunge'}<p class="note"><strong>Canonical:</strong> {operation.entry==='helix'?'Helix':'Rampe'} verändert Z während XY-Bewegung und bleibt bis zum räumlichen Motion-Gate auf dem bewährten Maschinenpfad.</p>{/if}
   <PostProcessorPicker/>
   {#if $postProcessorStore==='estlcam'}<p class="note"><strong>Estlcam:</strong> Werkzeugbahn und Geometrie bleiben unverändert. Nicht unterstützte Modalbefehle werden entfernt; G2/G3 bleiben im relativen I/J-Format.</p>{/if}
   {#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
