@@ -5,6 +5,7 @@ import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrie
 
 type PocketArgs={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:PocketOperation};
 type MachineState={x:number;y:number;z:number};
+type PocketCanonicalRunDraft={z:number;points:ToolpathPoint2[];segments:CanonicalToolpathSegment[];entrySegments:CanonicalSpatialSegment[];retractAfter:boolean};
 export type PocketCanonicalPostOptions={safeZMm:number;feedMmMin:number;plungeMmMin:number;spindleRpm:number};
 
 const numberWord=(line:string,letter:string):number|null=>{
@@ -41,15 +42,16 @@ export function samplePocketSpatialSegment(segment:CanonicalSpatialSegment):Tool
 export function canonicalPocketToolpathFromGcode(code:string,operation:PocketOperation,strategy:'raster'|'concentric'|'parallel'):CanonicalToolpath|null{
   const state:MachineState={x:0,y:0,z:0},runs:CanonicalToolpath['runs']=[];
   let pendingEntry:CanonicalSpatialSegment[]=[];
-  let current:{z:number;points:ToolpathPoint2[];segments:CanonicalToolpathSegment[];entrySegments:CanonicalSpatialSegment[];retractAfter:boolean}|null=null;
+  let current:PocketCanonicalRunDraft|null=null;
   const close=(retractAfter=true)=>{
     if(current&&current.points.length>=2)runs.push({kind:'cut',z:current.z,points:current.points,segments:current.segments,entrySegments:current.entrySegments.length?current.entrySegments:undefined,retractAfter});
     current=null;
   };
-  const begin=(z:number,start:ToolpathPoint2)=>{
+  const begin=(z:number,start:ToolpathPoint2):PocketCanonicalRunDraft=>{
     close(false);
-    current={z,points:[start],segments:[],entrySegments:pendingEntry,retractAfter:true};
+    const draft:PocketCanonicalRunDraft={z,points:[start],segments:[],entrySegments:pendingEntry,retractAfter:true};
     pendingEntry=[];
+    return draft;
   };
 
   for(const raw of code.split(/\r?\n/)){
@@ -71,8 +73,8 @@ export function canonicalPocketToolpathFromGcode(code:string,operation:PocketOpe
         Object.assign(state,next);continue;
       }
       if(xyChanged&&next.z<0){
-        if(!current||!same(current.z,next.z))begin(next.z,{x:state.x,y:state.y});
-        const start={x:state.x,y:state.y},end={x:next.x,y:next.y};current!.segments.push({kind:'line',start,end});current!.points.push(end);
+        if(!current||!same(current.z,next.z))current=begin(next.z,{x:state.x,y:state.y});
+        const start={x:state.x,y:state.y},end={x:next.x,y:next.y};current.segments.push({kind:'line',start,end});current.points.push(end);
       }
       Object.assign(state,next);continue;
     }
@@ -83,9 +85,9 @@ export function canonicalPocketToolpathFromGcode(code:string,operation:PocketOpe
         pendingEntry.push({kind:'arc3',start:{...state},end:{...next},center,ccw,feedMmMin:feed??undefined});
         Object.assign(state,next);continue;
       }
-      if(!current||!same(current.z,next.z))begin(next.z,{x:state.x,y:state.y});
+      if(!current||!same(current.z,next.z))current=begin(next.z,{x:state.x,y:state.y});
       const start={x:state.x,y:state.y},end={x:next.x,y:next.y};
-      current!.segments.push({kind:'arc',start,end,center,ccw});current!.points.push(...sampleArc(start,end,center,ccw));Object.assign(state,next);
+      current.segments.push({kind:'arc',start,end,center,ccw});current.points.push(...sampleArc(start,end,center,ccw));Object.assign(state,next);
     }
   }
   close(true);if(!runs.length)return null;
