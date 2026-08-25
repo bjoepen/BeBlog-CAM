@@ -4,7 +4,7 @@
   import { buildOpenChains, offsetOpenChain } from './openContour';
   import { buildBrokenContourPath } from './brokenContour';
   import { buildBrokenSemanticContour, sampleSemanticRun, sampleSemanticSegment } from './brokenSemanticContour';
-  import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
+  import { buildPocketCanonicalToolpath, samplePocketSpatialSegment } from './pocketCanonicalToolpath';
 
   export let summary: ImportSummary;
   export let stock: StockDefinition;
@@ -89,7 +89,11 @@
       const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
       const canonical=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs:previewWcs,operation});
       const toolRuns=(canonical?.runs??[]).map(run=>({z:run.z,points:run.points.map(map)}));
-      return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,toolRuns,helixPending:operation.entry==='helix'};
+      const entryRuns=(canonical?.runs??[]).flatMap(run=>(run.entrySegments??[]).flatMap(segment=>{
+        const sampled=samplePocketSpatialSegment(segment);
+        return sampled.slice(1).map((point,index)=>({z:point.z,points:[map({x:sampled[index].x,y:sampled[index].y}),map({x:point.x,y:point.y})]}));
+      }));
+      return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,toolRuns,entryRuns,spatialEntry:entryRuns.length>0};
     }
 
     const selectedClosed=operation.topology==='closed'&&operation.contourId!=null?cs.find(c=>c.id===operation.contourId)??null:null;
@@ -165,6 +169,7 @@
         <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id,'closed')}><title>Geschlossene Taschenkontur {chain.id+1} auswählen</title></path>
       {/each}
       {#if scene.selected}<path d={path(scene.selected,true)} class="selected"/>{/if}
+      {#each scene.entryRuns as entry}<path d={path(entry.points,false)} class="toolpath pocket-entry-toolpath toolpath-preview" data-toolpath-z={entry.z} data-toolpath-spatial="entry"/>{/each}
       {#each scene.toolRuns as tool}<path d={path(tool.points,false)} class="toolpath pocket-toolpath toolpath-preview" data-toolpath-z={tool.z}/>{/each}
     {:else}
       {#each scene.closed as chain}
@@ -189,7 +194,7 @@
       {/each}
     {/if}
   </svg>
-  {#if scene.kind==='contour'}<div class="open-help">{scene.broken?(scene.nativeBreakSelection?'Kontur aufgebrochen: native Linie/Bogen bleibt als CAD-Segment erhalten und wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.'):'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='pocket'&&scene.helixPending}<div class="open-help">Helix-Einstieg wird bewusst noch nicht als flache 2.5D-Bahn dargestellt. Die räumliche Helix folgt im eigenen Canonical-Motion-Gate.</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
+  {#if scene.kind==='contour'}<div class="open-help">{scene.broken?(scene.nativeBreakSelection?'Kontur aufgebrochen: native Linie/Bogen bleibt als CAD-Segment erhalten und wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.'):'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='pocket'&&scene.spatialEntry}<div class="open-help">Räumlicher {operation.entry==='helix'?'Helix-':'Rampen-'}Einstieg ist Bestandteil der kanonischen Werkzeugbahn und in 2.5D kontrollierbar.</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
 </div>
 {/if}
 
@@ -204,7 +209,8 @@
   .selected{fill:none;stroke:rgba(194,117,40,.88);stroke-width:2;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .segment-state{fill:none;stroke:rgba(194,117,40,.78);stroke-width:2.3;vector-effect:non-scaling-stroke;pointer-events:none}.segment-state.segment-off{stroke:rgba(105,112,108,.5);stroke-width:2.8;stroke-dasharray:3 4}
   .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
-  .contour-toolpath,.pocket-toolpath{stroke:#327b8d;stroke-width:2.1}
+  .contour-toolpath,.pocket-toolpath,.pocket-entry-toolpath{stroke:#327b8d;stroke-width:2.1}
+  .pocket-entry-toolpath{stroke-dasharray:3 2;stroke-width:1.9}
   .open-help{position:absolute;left:50%;top:calc(100% + 42px);transform:translateX(-50%);width:max-content;max-width:86%;padding:6px 9px;border-radius:6px;background:rgba(250,250,248,.94);color:#666b66;font-size:.72rem;pointer-events:none;white-space:normal;text-align:center}
   .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}.carve-candidate.selected-carve{stroke:rgba(38,52,46,.55);stroke-width:1.8;stroke-dasharray:4 3}.carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
   .drill-candidate{fill:none;stroke:rgba(194,117,40,.25);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}.drill-candidate.selected-drill{stroke:#b1453b;stroke-width:2.4}.drill-center{stroke:rgba(194,117,40,.55);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.drill-center.selected-drill{stroke:#b1453b;stroke-width:1.8}.drill-pick{fill:transparent;stroke:transparent;stroke-width:12;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}
