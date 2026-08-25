@@ -101,8 +101,8 @@
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;selectedFaceIds=[]}
-  $: s3=scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm,previewToolDiameterMm,previewStepoverPercent);
-  $: s2=scene2d(canonicalToolpath);
+  $: s3=(summary.fileName,scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm,previewToolDiameterMm,previewStepoverPercent));
+  $: s2=(summary.fileName,scene2d(canonicalToolpath));
 </script>
 
 <div class="geometry-view" bind:this={root}>
