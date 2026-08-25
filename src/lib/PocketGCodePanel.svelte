@@ -17,13 +17,14 @@
   $: multiJob=$operationsProjectStore.operations.length>1&&$operationsProjectStore.activeOperationId===operation.id;
   $: result=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
   $: stayDown=result.ok?optimizeParallelPocketStayDown(result.code,operation):{code:result.code,links:0,retainedRetracts:0};
-  $: canonical=result.ok&&operation.entry==='plunge'?buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation}):null;
+  $: canonical=result.ok?buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation}):null;
   $: canonicalCode=canonical?postPocketCanonicalToolpath(canonical,{safeZMm:operation.safeZMm,feedMmMin:operation.feedMmMin,plungeMmMin:operation.plungeMmMin,spindleRpm:operation.spindleRpm}):null;
   $: machineSource=canonicalCode??stayDown.code;
   $: normalizedCode=normalizeGcodeComments(machineSource);
   $: processed=result.ok?postProcessGcode(normalizedCode,$postProcessorStore):{ok:false,code:'',errors:result.errors,warnings:result.warnings,removedLines:0,transformedLines:0};
   $: displayCode=processed.code;
   $: displayLineCount=displayCode?displayCode.trimEnd().split(/\r?\n/).length:0;
+  $: spatialEntryCount=canonical?.runs.reduce((n,run)=>n+(run.entrySegments?.length??0),0)??0;
   function defaultNcName(){const base=(summary.fileName||'beblog-cam').replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9äöüÄÖÜß._ -]+/g,'-').trim()||'beblog-cam';return `${base}-tasche.nc`;}
   async function copyCode(){if(!result.ok||!processed.ok||!displayCode)return;await navigator.clipboard.writeText(displayCode);copied=true;setTimeout(()=>copied=false,1200);}
   async function saveNc(){if(!result.ok||!processed.ok||!displayCode)return;exportState='';exportMessage='';try{let path=await save({defaultPath:defaultNcName(),filters:[{name:'NC-Programm',extensions:['nc']}]});if(!path)return;if(!path.toLowerCase().endsWith('.nc'))path=`${path}.nc`;await invoke('save_nc_file',{path,code:displayCode});exportState='saved';exportMessage=`Gespeichert: ${path}`;}catch(error){exportState='error';exportMessage=String(error)}}
@@ -37,7 +38,7 @@
   <div class="release pass"><strong>PASS</strong><span>Die geprüfte Taschenstrategie kann als Maschinenprogramm ausgegeben werden.</span></div>
   <div class="facts"><span>{result.passes} Zustellung{result.passes===1?'':'en'}</span>{#if result.strategy==='raster'}<span>{result.rasterPasses} Rasterbahnen</span>{:else if result.strategy==='concentric'}<span>{result.concentricRings} Kreisring{result.concentricRings===1?'':'e'}</span>{:else}<span>{result.parallelLoops} Innenoffset{result.parallelLoops===1?'':'s'}</span>{/if}{#if result.helixTurns>0}<span>{result.helixTurns} Helixumdrehung{result.helixTurns===1?'':'en'}</span>{/if}{#if result.strategy==='parallel'}<span>{stayDown.links} Stay-down-Link{stayDown.links===1?'':'s'}</span>{/if}<span>Stepover {result.stepoverMm.toFixed(3)} mm</span><span>Radius {result.toolRadiusMm.toFixed(3)} mm</span><span>{displayLineCount} G-Code-Zeilen</span></div>
   <p class="note"><strong>Strategie:</strong> {result.strategy==='concentric'?(operation.entry==='helix'?'Kreistasche · Helix-Einstieg auf Schnitttiefe · anschließend konzentrisch von innen nach außen · äußerster Ring als radiuskorrigierte Fertigwand.':'Konzentrische Kreistasche · Zentrum zuerst · native G2/G3-Halbkreise · äußerster Ring als radiuskorrigierte Fertigwand.'):result.strategy==='parallel'?`Konturparallel · analytische Innenoffsets · LINE bleibt G1, ARC bleibt G2/G3 · ${stayDown.links} sicher nachgewiesene Verbindungen bleiben auf Schnitttiefe.`:operation.entry==='ramp'?'Rechteck-Raster · lineare Rampe · Zickzack-Räumung · abschließender Wandumlauf.':'Rechteck-Raster · senkrecht eintauchen · Zickzack-Räumung · abschließender Wandumlauf.'}</p>
-  {#if canonical}<p class="note"><strong>Canonical:</strong> Vorschau und Maschinenoutput verwenden dieselben {canonical.runs.length} Werkzeugbahn{canonical.runs.length===1?'':'en'}.</p>{:else if operation.entry!=='plunge'}<p class="note"><strong>Canonical:</strong> {operation.entry==='helix'?'Helix':'Rampe'} verändert Z während XY-Bewegung und bleibt bis zum räumlichen Motion-Gate auf dem bewährten Maschinenpfad.</p>{/if}
+  {#if canonical}<p class="note"><strong>Canonical:</strong> Vorschau und Maschinenoutput verwenden dieselben {canonical.runs.length} Werkzeugbahn{canonical.runs.length===1?'':'en'}{spatialEntryCount?` einschließlich ${spatialEntryCount} räumlicher Einstiegsbewegung${spatialEntryCount===1?'':'en'}`:''}.</p>{/if}
   <PostProcessorPicker/>
   {#if $postProcessorStore==='estlcam'}<p class="note"><strong>Estlcam:</strong> Werkzeugbahn und Geometrie bleiben unverändert. Nicht unterstützte Modalbefehle werden entfernt; G2/G3 bleiben im relativen I/J-Format.</p>{/if}
   {#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
@@ -49,7 +50,7 @@
 {:else}
   <div class="release fail"><strong>FAIL</strong><span>Taschen-G-Code wird nur erzeugt, wenn Geometrie und gewählte Räumstrategie freigabefähig sind.</span></div>{#each result.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}{#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
 {/if}
-<p class="note"><strong>001W:</strong> Helixbohrung und Helix-Einstieg der Kreistasche verwenden dieselbe G3-Helixprimitive; die Operationen bleiben fachlich getrennt.</p>
+<p class="note"><strong>001Z-A:</strong> Senkrechter Einstieg, lineare Rampe und Helix werden als kanonische Taschenbewegung geführt; räumliche Einstiege bleiben in G-Code und 2.5D-Kontrolle sichtbar.</p>
 {/if}
 
 <style>
