@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation, Curve2, OpenContourSide } from './types';
-  import { buildClosedChains, offsetPolygon, sampleCurve, type P2 } from './contourMath';
+  import { buildClosedChains, buildSemanticContours, offsetPolygon, sampleCurve, type P2 } from './contourMath';
   import { buildOpenChains, offsetOpenChain } from './openContour';
   import { buildBrokenContourPath } from './brokenContour';
+  import { buildBrokenSemanticContour, sampleSemanticRun, sampleSemanticSegment } from './brokenSemanticContour';
 
   export let summary: ImportSummary;
   export let stock: StockDefinition;
@@ -52,8 +53,10 @@
     const dx=stockMode==='none'?-partB.minX:placement.horizontal==='left'?-partB.minX+placement.offsetX:placement.horizontal==='right'?stock.width-(partB.maxX-partB.minX)-partB.minX+placement.offsetX:(stock.width-(partB.maxX-partB.minX))/2-partB.minX+placement.offsetX;
     const dy=stockMode==='none'?-partB.minY:placement.vertical==='front'?-partB.minY+placement.offsetY:placement.vertical==='back'?stock.height-(partB.maxY-partB.minY)-partB.minY+placement.offsetY:(stock.height-(partB.maxY-partB.minY))/2-partB.minY+placement.offsetY;
     const move=(p:P2)=>({x:p.x+dx,y:p.y+dy});
+    const transform=(p:P2)=>move(rotate(p));
     const movedCurves=rotatedCurves.map(c=>({...c,points:c.points.map(move)}));
     const cs=buildClosedChains(curves,rotate).map(c=>({...c,points:c.points.map(move)}));
+    const semanticCs=buildSemanticContours(curves,transform);
     const os=buildOpenChains(curves,rotate).map(c=>({...c,points:c.points.map(move)}));
     let plane:P2[];
     if(stockMode==='none'){
@@ -87,19 +90,30 @@
     }
 
     const selectedClosed=operation.topology==='closed'&&operation.contourId!=null?cs.find(c=>c.id===operation.contourId)??null:null;
+    const selectedSemantic=operation.topology==='closed'&&operation.contourId!=null?semanticCs.find(c=>c.id===operation.contourId&&c.supported)??null:null;
     const selectedOpen=operation.topology==='open'&&operation.contourId!=null?os.find(c=>c.id===operation.contourId)??null:null;
     const excluded=new Set(operation.excludedSegmentIds??[]),radius=operation.tool.diameterMm/2;
     let toolRuns:{points:P2[];closed:boolean}[]=[];
-    let selectedSegments:{id:number;screen:P2[];excluded:boolean}[]=[];
+    let selectedSegments:{id:number;screen:P2[];excluded:boolean;native:boolean;kind:'line'|'arc'}[]=[];
     if(selectedClosed){
-      const base=selectedClosed.points.slice(0,-1);
-      selectedSegments=base.map((p,i)=>({id:i,screen:[p,base[(i+1)%base.length]].map(map),excluded:excluded.has(i)}));
-      if(excluded.size){const broken=buildBrokenContourPath(selectedClosed.points,[...excluded],radius,operation.side,.003);toolRuns=broken.runs.map(points=>({points:points.map(map),closed:false}));}
-      else{const d=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;toolRuns=[{points:offsetPolygon(selectedClosed.points,d).map(map),closed:true}];}
+      if(selectedSemantic?.segments.length){
+        selectedSegments=selectedSemantic.segments.map((segment,id)=>({id,screen:sampleSemanticSegment(segment,32).map(map),excluded:excluded.has(id),native:true,kind:segment.kind}));
+        if(excluded.size){
+          const broken=buildBrokenSemanticContour(selectedSemantic,[...excluded],radius,operation.side,.003);
+          if(broken)toolRuns=broken.runs.map(run=>({points:sampleSemanticRun(run,32).map(map),closed:false}));
+        }else{
+          const d=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;toolRuns=[{points:offsetPolygon(selectedClosed.points,d).map(map),closed:true}];
+        }
+      }else{
+        const base=selectedClosed.points.slice(0,-1);
+        selectedSegments=base.map((p,i)=>({id:i,screen:[p,base[(i+1)%base.length]].map(map),excluded:excluded.has(i),native:false,kind:'line'}));
+        if(excluded.size){const broken=buildBrokenContourPath(selectedClosed.points,[...excluded],radius,operation.side,.003);toolRuns=broken.runs.map(points=>({points:points.map(map),closed:false}));}
+        else{const d=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;toolRuns=[{points:offsetPolygon(selectedClosed.points,d).map(map),closed:true}];}
+      }
     }
     if(selectedOpen){toolRuns=[{points:offsetOpenChain(selectedOpen.points,radius,operation.openSide,.003).points.map(map),closed:false}];}
     const open=os.map(c=>({...c,screen:c.points.map(map),left:offsetOpenChain(c.points,radius,'left',.003).points.map(map),right:offsetOpenChain(c.points,radius,'right',.003).points.map(map)}));
-    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0};
+    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0,nativeBreakSelection:!!selectedSemantic?.segments.length};
   }
 
   $: scene=buildScene(
@@ -160,14 +174,14 @@
       {#if scene.selected}<path d={path(scene.selected.screen,scene.selected.closed)} class="selected"/>{/if}
       {#each scene.selectedSegments as segment}
         <path d={path(segment.screen,false)} class:segment-off={segment.excluded} class="segment-state" />
-        <path d={path(segment.screen,false)} class="segment-pick" onclick={()=>toggleClosedSegment(segment.id)}><title>{segment.excluded?'Konturstrecke wieder einschalten':'Kontur hier aufbrechen / Strecke abwählen'}</title></path>
+        <path d={path(segment.screen,false)} class="segment-pick" onclick={()=>toggleClosedSegment(segment.id)}><title>{segment.excluded?'Konturstrecke wieder einschalten':`${segment.native?(segment.kind==='arc'?'Nativen Bogen':'Native Linie'):'Konturstrecke'} hier abwählen`}</title></path>
       {/each}
       {#each contourDepths() as z}
         {#each scene.toolRuns as tool}<path d={path(tool.points,tool.closed)} class="toolpath contour-toolpath toolpath-preview" data-toolpath-z={z}/>{/each}
       {/each}
     {/if}
   </svg>
-  {#if scene.kind==='contour'}<div class="open-help">{scene.broken?'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
+  {#if scene.kind==='contour'}<div class="open-help">{scene.broken?(scene.nativeBreakSelection?'Kontur aufgebrochen: native Linie/Bogen bleibt als CAD-Segment erhalten und wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.'):'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
 </div>
 {/if}
 
