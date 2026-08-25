@@ -120,6 +120,7 @@
   }
 
   $: scene=buildScene(
+    summary.fileName,
     operation.kind,
     operation.kind==='facing'?'facing':(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):operation.contourId,
     operation.kind==='contour'?operation.topology:operation.kind,
