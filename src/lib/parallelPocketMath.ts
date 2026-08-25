@@ -36,11 +36,22 @@ function selfIntersects(segs:SemanticSegment[]):boolean{
   return false;
 }
 
+function axisAlignedRectangle(contour:SemanticContour):{width:number;height:number}|null{
+  if(!contour.supported||contour.segments.length!==4||contour.segments.some(s=>s.kind!=='line'))return null;
+  const points=contour.segments.flatMap(s=>[s.start,s.end]);
+  const xs=points.map(p=>p.x),ys=points.map(p=>p.y),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  const width=maxX-minX,height=maxY-minY;if(width<=EPS||height<=EPS)return null;
+  for(const s of contour.segments){if(s.kind!=='line')return null;const horizontal=Math.abs(s.start.y-s.end.y)<=1e-5,vertical=Math.abs(s.start.x-s.end.x)<=1e-5;if(!horizontal&&!vertical)return null;}
+  const corners=[{x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY}];
+  if(!corners.every(c=>points.some(p=>dist(c,p)<=1e-4)))return null;
+  return{width,height};
+}
+
 /**
- * Gate 8B: conservative native LINE/ARC pocketing. We deliberately restrict
- * the first general contour-parallel gate to supported mixed contours with at
- * least one arc. Degenerate source lines are already removed by
- * buildSemanticContours(). Each loop is an analytically verified inward offset.
+ * Conservative native LINE/ARC pocketing. Mixed LINE/ARC contours retain the
+ * proven analytical offset gate. Axis-aligned four-line rectangles are also
+ * admitted: their final inward offset is chosen so the cutter sweep closes the
+ * remaining core while every radial step stays at or below the requested stepover.
  */
 export function buildParallelPocketPath(contour:SemanticContour,toolDiameterMm:number,stepoverPercent:number):ParallelPocketPath{
   const toolRadiusMm=toolDiameterMm/2,requestedStepoverMm=toolDiameterMm*stepoverPercent/100;
@@ -48,7 +59,26 @@ export function buildParallelPocketPath(contour:SemanticContour,toolDiameterMm:n
   if(!(toolDiameterMm>0))return{...empty,error:'Werkzeugdurchmesser muss größer als 0 sein.'};
   if(!(stepoverPercent>0&&stepoverPercent<=100))return{...empty,error:'Seitliche Zustellung muss zwischen 0 und 100 % liegen.'};
   if(!contour.supported||contour.segments.length<2)return{...empty,error:'Konturparallel benötigt eine geschlossene native DXF-Kontur aus unterstützten Segmenten.'};
-  if(!contour.segments.some(s=>s.kind==='arc'))return{...empty,error:'Gate 8B gibt konturparallel zunächst gemischte LINE/ARC-Konturen frei.'};
+
+  const rectangle=axisAlignedRectangle(contour);
+  if(rectangle){
+    const minDimension=Math.min(rectangle.width,rectangle.height);
+    if(minDimension<toolDiameterMm-EPS)return{...empty,error:'Das Werkzeug passt nicht vollständig in die gewählte Rechtecktasche.'};
+    const targetCorrection=Math.max(toolRadiusMm,minDimension/2-toolRadiusMm);
+    const span=Math.max(0,targetCorrection-toolRadiusMm);
+    const intervals=span<=EPS?0:Math.ceil(span/requestedStepoverMm);
+    const actualStep=intervals?span/intervals:0;
+    const corrections=intervals?Array.from({length:intervals+1},(_,i)=>toolRadiusMm+actualStep*i):[toolRadiusMm];
+    const loops:ParallelPocketLoop[]=[];
+    for(const correction of corrections){
+      const offset=offsetSemanticContour(contour,-correction,.002);
+      if(!offset||!offset.validation.ok||selfIntersects(offset.segments))return{...empty,error:'Die Rechtecktasche konnte nicht als sichere konturparallele Offsetfolge aufgebaut werden.'};
+      loops.push({correctionMm:correction,segments:offset.segments});
+    }
+    return{ok:true,toolRadiusMm,requestedStepoverMm,actualMaxStepoverMm:actualStep||span||0,loops,finalArcRadiusMm:0};
+  }
+
+  if(!contour.segments.some(s=>s.kind==='arc'))return{...empty,error:'Konturparallel unterstützt derzeit gemischte LINE/ARC-Konturen sowie achsparallele Rechtecke.'};
 
   const loops:ParallelPocketLoop[]=[];let correction=toolRadiusMm;let previous=0;
   for(let guard=0;guard<500;guard++){
