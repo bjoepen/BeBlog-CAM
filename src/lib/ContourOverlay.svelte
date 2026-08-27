@@ -148,7 +148,7 @@
 </script>
 
 {#if scene}
-<div class="contour-overlay" aria-label="Geometrieauswahl und Werkzeugweg" data-stock-width={stockMode==='none'?undefined:stock.width}>
+<div class="contour-overlay" class:drill-overlay={scene.kind==='drill'} aria-label="Geometrieauswahl und Werkzeugweg" data-stock-width={stockMode==='none'?undefined:stock.width}>
   <svg viewBox="0 0 1000 650">
     {#if scene.kind==='carve'}
       {#each scene.carve as curve}
@@ -201,6 +201,7 @@
 <style>
   .contour-overlay{position:absolute;left:50%;top:50%;z-index:3;width:min(92%,1100px);transform:translate(-50%,-50%);pointer-events:auto}
   svg{width:100%;display:block;overflow:visible;pointer-events:auto}
+  .contour-overlay.drill-overlay{pointer-events:none}.contour-overlay.drill-overlay svg{pointer-events:none}.contour-overlay.drill-overlay .drill-pick{pointer-events:all}
   .candidate{fill:none;stroke:rgba(194,117,40,.10);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}
   .open-candidate{fill:none;stroke:rgba(76,111,139,.28);stroke-width:1.7;stroke-dasharray:4 3;vector-effect:non-scaling-stroke;pointer-events:none}
   .open-side-preview{fill:none;stroke:rgba(177,69,59,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}

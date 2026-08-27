@@ -5,7 +5,7 @@
   import { decodeStepEdges } from './stepEdgeView';
   import { buildFaceTargetRoughing } from './faceTargetRoughing';
   import { buildFaceTargetRasterToolpath } from './faceTargetToolpath';
-  import type { CanonicalToolpath } from './canonicalToolpath';
+  import type { CanonicalMachineMotion, CanonicalToolpath, ToolpathPoint3 } from './canonicalToolpath';
 
   export let summary:ImportSummary;
   export let stock:StockDefinition;
@@ -19,6 +19,8 @@
   let viewport:SVGSVGElement;
   let root:HTMLDivElement;
   let yaw=-.72,pitch=.48,zoom=1,viewX=0,viewY=0,dragging=false,lastX=0,lastY=0,dragMoved=false,dragMode:'orbit'|'pan'='orbit';
+  let drillViewMode:'top'|'25d'='top';
+  let drillYawDeg=-12,drillTiltDeg=38;
   let showZLevels=false;
   let zLevelStepMm=2;
   let finishAllowanceMm=.5;
@@ -44,6 +46,21 @@
     const ox=wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2;
     const oy=wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2;
     return{x:point.x+ox,y:point.y+oy};
+  }
+
+  function sampleMachineMotion(motion:CanonicalMachineMotion):ToolpathPoint3[]{
+    if(motion.kind!=='arc3')return[motion.start,motion.end];
+    const radius=Math.hypot(motion.start.x-motion.center.x,motion.start.y-motion.center.y);
+    if(!(radius>0))return[motion.start,motion.end];
+    let a0=Math.atan2(motion.start.y-motion.center.y,motion.start.x-motion.center.x);
+    let a1=Math.atan2(motion.end.y-motion.center.y,motion.end.x-motion.center.x);
+    let delta=a1-a0;
+    if(motion.ccw){while(delta<=0)delta+=Math.PI*2}else{while(delta>=0)delta-=Math.PI*2}
+    const steps=Math.max(12,Math.ceil(Math.abs(delta)/(Math.PI/18)));
+    return Array.from({length:steps+1},(_,index)=>{
+      const t=index/steps,a=a0+delta*t;
+      return{x:motion.center.x+Math.cos(a)*radius,y:motion.center.y+Math.sin(a)*radius,z:motion.start.z+(motion.end.z-motion.start.z)*t};
+    });
   }
 
   function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number,faceSelection:number[],allowanceMm:number,toolDiameterMm:number,stepoverPercent:number){
@@ -75,23 +92,65 @@
   function scene2d(activeToolpath:CanonicalToolpath|null){
     const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();
     if(!flat.length)return null;
-    const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY),placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());
-    const canonicalRuns=(activeToolpath?.runs??[]).map(run=>run.points.map(fromWcs2));
+    const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY);
+    const placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());
+    const drill25d=activeToolpath?.operationKind==='drill'&&drillViewMode==='25d';
+    const pivot={
+      x:noStock?(partBounds.minX+partBounds.maxX)/2:(wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2),
+      y:noStock?(partBounds.minY+partBounds.maxY)/2:(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2)
+    };
+    const project=(point:{x:number;y:number;z?:number}):P2=>{
+      if(!drill25d)return{x:point.x,y:point.y};
+      const yaw=drillYawDeg*Math.PI/180,tilt=drillTiltDeg*Math.PI/180;
+      const dx=point.x-pivot.x,dy=point.y-pivot.y,z=point.z??0;
+      const xr=dx*Math.cos(yaw)-dy*Math.sin(yaw);
+      const yr=dx*Math.sin(yaw)+dy*Math.cos(yaw);
+      return{x:pivot.x+xr,y:pivot.y+yr*Math.cos(tilt)+z*Math.sin(tilt)};
+    };
+    const projectedPlaced=placed.map(points=>points.map(point=>project({...point,z:0})));
+    const canonicalRuns=(activeToolpath?.runs??[]).map(run=>run.points.map(point=>project({...fromWcs2(point),z:run.z})));
+    const machinePaths=(activeToolpath?.motions??[]).map((motion,motionIndex)=>{
+      const points=sampleMachineMotion(motion).map(point=>{const xy=fromWcs2(point);return project({x:xy.x,y:xy.y,z:point.z})});
+      return{points,rapid:motion.kind==='rapid3',motionIndex};
+    }).filter(entry=>entry.points.length>=2);
+    const machineProjected=machinePaths.flatMap(entry=>entry.points);
+
+    const makeResult=(planeWorld:P2[],stockWorld:P2[]|null)=>{
+      const plane=planeWorld.map(point=>project({...point,z:0}));
+      const stockProjected=stockWorld?.map(point=>project({...point,z:0}))??null;
+      const map=fit([...projectedPlaced.flat(),...plane,...(stockProjected??[]),...canonicalRuns.flat(),...machineProjected]);
+      const wx=noStock?(wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2):(wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2);
+      const wy=noStock?(wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2):(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2);
+      return{
+        paths:projectedPlaced.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),
+        toolPaths:canonicalRuns.map(run=>path(run.map(map))).filter(Boolean),
+        machinePaths:machinePaths.map(entry=>({d:path(entry.points.map(map)),rapid:entry.rapid,motionIndex:entry.motionIndex})),
+        plane:path(plane.map(map),true),stock:stockProjected?path(stockProjected.map(map),true):null,wcs:map(project({x:wx,y:wy,z:0})),noStock,drill25d
+      };
+    };
+
     if(noStock){
-      const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10,plane=[{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],map=fit([...placed.flat(),...plane,...canonicalRuns.flat()]),wx=wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2,wy=wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2,wp=map({x:wx,y:wy});
-      return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),toolPaths:canonicalRuns.map(run=>path(run.map(map))).filter(Boolean),plane:path(plane.map(map),true),stock:null,wcs:wp,noStock:true};
+      const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10;
+      return makeResult([{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],null);
     }
-    const m=Math.max(stock.width,stock.height)*.12+10,plane=[{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],box=[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}],map=fit([...placed.flat(),...plane,...canonicalRuns.flat()]),wp=map({x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2});
-    return{paths:placed.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),toolPaths:canonicalRuns.map(run=>path(run.map(map))).filter(Boolean),plane:path(plane.map(map),true),stock:path(box.map(map),true),wcs:wp,noStock:false};
+    const m=Math.max(stock.width,stock.height)*.12+10;
+    return makeResult([{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}]);
   }
   function currentViewBox(){const w=width/zoom,h=height/zoom;return`${viewX+(width-w)/2} ${viewY+(height-h)/2} ${w} ${h}`}
   function applyViewBox(){if(viewport)viewport.setAttribute('viewBox',currentViewBox())}
   function setZoom(z:number){zoom=Math.max(.25,Math.min(6,z));queueMicrotask(applyViewBox)}
-  function down(e:PointerEvent){if(summary.kind!=='step')return;dragging=true;dragMoved=false;dragMode=e.shiftKey||e.button===1||e.button===2?'pan':'orbit';lastX=e.clientX;lastY=e.clientY}
-  function move(e:PointerEvent){if(!dragging||summary.kind!=='step')return;const dx=e.clientX-lastX,dy=e.clientY-lastY;if(Math.abs(dx)+Math.abs(dy)>2)dragMoved=true;lastX=e.clientX;lastY=e.clientY;if(dragMode==='orbit'){yaw+=dx*.008;pitch=Math.max(-1.5,Math.min(1.5,pitch-dy*.008))}else{viewX-=dx/zoom;viewY-=dy/zoom;queueMicrotask(applyViewBox)}}
+  function down(e:PointerEvent){
+    if(summary.kind==='step'){dragging=true;dragMoved=false;dragMode=e.shiftKey||e.button===1||e.button===2?'pan':'orbit';lastX=e.clientX;lastY=e.clientY;return;}
+    if(summary.kind==='dxf'&&canonicalToolpath?.operationKind==='drill'&&drillViewMode==='25d'&&e.button===0){dragging=true;dragMoved=false;dragMode='orbit';lastX=e.clientX;lastY=e.clientY;}
+  }
+  function move(e:PointerEvent){
+    if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;if(Math.abs(dx)+Math.abs(dy)>2)dragMoved=true;lastX=e.clientX;lastY=e.clientY;
+    if(summary.kind==='step'){if(dragMode==='orbit'){yaw+=dx*.008;pitch=Math.max(-1.5,Math.min(1.5,pitch-dy*.008))}else{viewX-=dx/zoom;viewY-=dy/zoom;queueMicrotask(applyViewBox)};return;}
+    if(summary.kind==='dxf'&&canonicalToolpath?.operationKind==='drill'&&drillViewMode==='25d'){drillYawDeg=Math.max(-35,Math.min(35,drillYawDeg+dx*.22));drillTiltDeg=Math.max(12,Math.min(60,drillTiltDeg+dy*.22));}
+  }
   function up(){dragging=false}
-  function wheel(e:WheelEvent){if(summary.kind!=='step')return;e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}
-  function reset(){yaw=-.72;pitch=.48;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
+  function wheel(e:WheelEvent){if(summary.kind==='step'||(summary.kind==='dxf'&&canonicalToolpath?.operationKind==='drill')){e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}}
+  function reset(){yaw=-.72;pitch=.48;drillYawDeg=-12;drillTiltDeg=38;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
   function updateSliceStep(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=.1)zLevelStepMm=value}
   function updateAllowance(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=0)finishAllowanceMm=value}
   function updateToolDiameter(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>.1)previewToolDiameterMm=value}
@@ -102,7 +161,7 @@
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;selectedFaceIds=[]}
   $: s3=(summary.fileName,scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm,previewToolDiameterMm,previewStepoverPercent));
-  $: s2=(summary.fileName,scene2d(canonicalToolpath));
+  $: s2=(summary.fileName,drillViewMode,drillYawDeg,drillTiltDeg,scene2d(canonicalToolpath));
 </script>
 
 <div class="geometry-view" bind:this={root}>
@@ -112,6 +171,7 @@
       {#if s2.stock}<path d={s2.stock} class="stock"/>{/if}
       {#each s2.paths as p}<path d={p} class="dxf"/>{/each}
       {#each s2.toolPaths as p}<path d={p} class="toolpath-preview"/>{/each}
+      {#each s2.machinePaths as motion}<path d={motion.d} class="toolpath-preview machine-motion" class:rapid-motion={motion.rapid}/>{/each}
       <circle cx={s2.wcs.x} cy={s2.wcs.y} r="9" class="wcs-marker"/>
       <text x={s2.wcs.x+13} y={s2.wcs.y-10} class="wcs-label">WCS · X0 Y0</text>
     {:else if s3}
@@ -148,6 +208,14 @@
         {/if}
         <span>Drag: drehen · Shift/Mitte: verschieben</span>
       </span>
+    {:else if canonicalToolpath?.operationKind==='drill'}
+      <span class="help">
+        <button class:active-toggle={drillViewMode==='25d'} onclick={()=>drillViewMode='25d'}>2.5D</button>
+        <button class:active-toggle={drillViewMode==='top'} onclick={()=>drillViewMode='top'}>Draufsicht</button>
+        <button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button>
+        <span>{canonicalToolpath.strategy==='helical-bore'?'Helixfräsen':'Bohren'} · {canonicalToolpath.motions?.length??0} Maschinenbewegungen{drillViewMode==='25d'?` · ${Math.round(drillTiltDeg)}°`:''}</span>
+        {#if drillViewMode==='25d'}<span>Drag: Ansicht drehen · Mausrad: zoomen</span>{/if}
+      </span>
     {/if}
   </div>
 </div>
@@ -162,6 +230,7 @@
   .step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
   .roughing-region{fill:rgba(194,117,40,.12);stroke:rgba(194,117,40,.42);stroke-width:1.05;vector-effect:non-scaling-stroke;pointer-events:none}
   .toolpath-preview{fill:none;stroke:#327b8d;stroke-width:1.8;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+  .machine-motion{stroke:#327b8d;stroke-width:1.9}.machine-motion.rapid-motion{stroke:rgba(72,94,101,.48);stroke-width:1.35;stroke-dasharray:4 3}
   .axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}.axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}
   text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}.wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}.wcs-dot{fill:#c27528;pointer-events:none}.wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}
   .geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}.geometry-caption strong{color:#34423c;font-weight:600}.help{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
