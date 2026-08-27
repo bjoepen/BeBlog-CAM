@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { save } from '@tauri-apps/plugin-dialog';
   import type { DrillOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
-  import { generateDrillGcode } from './drillGcode';
+  import { generateCanonicalDrillGcode } from './drillCanonicalToolpath';
   import { postProcessGcode } from './postprocessors';
   import { postProcessorStore } from './postProcessorStore';
   import PostProcessorPicker from './PostProcessorPicker.svelte';
@@ -11,7 +11,7 @@
   export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let placement:PartPlacement;export let orientation:PartOrientation;export let wcs:WorkCoordinateSystem;export let operation:DrillOperation;
   let copied=false;let exportState:''|'saved'|'error'='';let exportMessage='';
   $: multiJob=$operationsProjectStore.operations.length>1&&$operationsProjectStore.activeOperationId===operation.id;
-  $: result=generateDrillGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
+  $: result=generateCanonicalDrillGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
   $: processed=result.ok?postProcessGcode(result.code,$postProcessorStore):{ok:false,code:'',errors:result.errors,warnings:result.warnings,removedLines:0,transformedLines:0};
   $: displayCode=processed.code;
   $: methodLabel=operation.method==='helical-mill'?'Helixfräsen':'Bohren';
@@ -24,16 +24,16 @@
 {:else}
 <p class="eyebrow">06 · Fräsen</p><h2>{methodLabel}</h2>
 {#if result.ok}
-<div class="release pass"><strong>PASS</strong><span>{operation.method==='helical-mill'?'Die Bohrungsgeometrie ist geprüft und wird als helikale Kreisinterpolation ausgegeben.':'Die Bohrpositionen sind geprüft und werden als explizite G0/G1-Bewegungen ausgegeben.'}</span></div>
+<div class="release pass"><strong>PASS</strong><span>{operation.method==='helical-mill'?'Die Bohrungsgeometrie ist geprüft und wird über dieselbe kanonische Helixbahn angezeigt und ausgegeben.':'Die Bohrpositionen sind geprüft und werden über dieselbe kanonische Bewegungsgeometrie angezeigt und ausgegeben.'}</span></div>
 <div class="facts"><span>{result.holeCount} Bohrposition{result.holeCount===1?'':'en'}</span><span>{operation.method==='helical-mill'?`${operation.stepDownMm.toFixed(3)} mm/U Helix`:`${result.passesPerHole} Zustellung${result.passesPerHole===1?'':'en'} je Bohrung`}</span><span>{displayCode.trimEnd().split(/\r?\n/).length} G-Code-Zeilen</span></div>
-<p class="note"><strong>Strategie:</strong> {operation.method==='helical-mill'?'Safe-Z → Tangentialpunkt auf Z0 → G3-Halbkreise mit simultaner Z-Zustellung → Fertigumlauf → Safe-Z.':'Safe-Z → XY zur Bohrposition → G1-Zustellung → Zwischenrückzug bei mehreren Zustellungen → Safe-Z.'}</p>
+<p class="note"><strong>Strategie:</strong> {operation.method==='helical-mill'?'Safe-Z → Tangentialpunkt auf Z0 → kanonische G3-Helix mit simultaner Z-Zustellung → Fertigumlauf → Safe-Z.':'Safe-Z → XY zur Bohrposition → kanonische G1-Zustellung → Zwischenrückzug bei mehreren Zustellungen → Safe-Z.'}</p>
 <PostProcessorPicker/>
 {#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
 {#each processed.warnings as warning}<p class="warning"><strong>Postprozessor:</strong> {warning}</p>{/each}
 {#each processed.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}
 <div class="export-box"><div><strong>NC-Datei</strong><span>Speichert den geprüften {methodLabel}-G-Code mit dem gewählten Postprozessor als .nc.</span></div><button class="primary-export" disabled={!processed.ok} onclick={saveNc}>G-Code speichern …</button></div>
 {#if exportMessage}<p class:export-ok={exportState==='saved'} class:export-error={exportState==='error'} class="export-message">{exportMessage}</p>{/if}
-<div class="code-head"><span>Vorschau · {$postProcessorStore==='estlcam'?'Estlcam':'Standard'}</span><button disabled={!processed.ok} onclick={copyCode}>{copied?'Kopiert':'G-Code kopieren'}</button></div><pre>{displayCode}</pre>
+<div class="code-head"><span>Vorschau · kanonische Maschinenbahn · {$postProcessorStore==='estlcam'?'Estlcam':'Standard'}</span><button disabled={!processed.ok} onclick={copyCode}>{copied?'Kopiert':'G-Code kopieren'}</button></div><pre>{displayCode}</pre>
 {:else}
 <div class="release fail"><strong>FAIL</strong><span>{methodLabel}-G-Code wird nur erzeugt, wenn Auswahl, WCS, Werkzeug und Schnittdaten freigabefähig sind.</span></div>{#each result.errors as error}<p class="error-line"><strong>FAIL</strong> {error}</p>{/each}{#each result.warnings as warning}<p class="warning"><strong>Hinweis:</strong> {warning}</p>{/each}
 {/if}
