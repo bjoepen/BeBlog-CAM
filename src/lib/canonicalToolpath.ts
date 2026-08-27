@@ -6,9 +6,12 @@ export type CanonicalToolpathSegment=
   |{kind:'arc';start:ToolpathPoint2;end:ToolpathPoint2;center:ToolpathPoint2;ccw:boolean};
 
 export type CanonicalSpatialSegment=
-  |{kind:'rapid3';start:ToolpathPoint3;end:ToolpathPoint3}
   |{kind:'line3';start:ToolpathPoint3;end:ToolpathPoint3;feedMmMin?:number}
   |{kind:'arc3';start:ToolpathPoint3;end:ToolpathPoint3;center:ToolpathPoint2;ccw:boolean;feedMmMin?:number};
+
+export type CanonicalMachineMotion=
+  |{kind:'rapid3';start:ToolpathPoint3;end:ToolpathPoint3}
+  |CanonicalSpatialSegment;
 
 export type CanonicalToolpathRun={
   kind:'cut';
@@ -26,7 +29,7 @@ export type CanonicalToolpath={
   tool:{diameterMm:number};
   stepoverPercent:number;
   runs:CanonicalToolpathRun[];
-  motions?:CanonicalSpatialSegment[];
+  motions?:CanonicalMachineMotion[];
 };
 
 export function canonicalToolpathRunCount(toolpath:CanonicalToolpath|null|undefined):number{
