@@ -1,4 +1,4 @@
-import type { CanonicalSpatialSegment, CanonicalToolpath, ToolpathPoint3 } from './canonicalToolpath';
+import type { CanonicalMachineMotion, CanonicalToolpath, ToolpathPoint3 } from './canonicalToolpath';
 import { generateDrillGcode, type DrillGcodeResult } from './drillGcode';
 import type { DrillOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
@@ -16,7 +16,7 @@ const numberWord=(line:string,letter:string):number|null=>{
 
 export function canonicalDrillToolpathFromGcode(code:string,operation:DrillOperation):CanonicalToolpath|null{
   const state:State={x:0,y:0,z:0};
-  const motions:CanonicalSpatialSegment[]=[];
+  const motions:CanonicalMachineMotion[]=[];
 
   for(const raw of code.split(/\r?\n/)){
     const line=raw.replace(/\([^)]*\)/g,'').trim();
