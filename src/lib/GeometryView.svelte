@@ -14,6 +14,7 @@
   export let orientation:PartOrientation;
   export let wcs:WorkCoordinateSystem;
   export let canonicalToolpath:CanonicalToolpath|null=null;
+  export let onFaceTargetChange:(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null)=>void=()=>{};
 
   const width=1000,height=650,pad=54;
   let viewport:SVGSVGElement;
@@ -71,22 +72,23 @@
     const place3=(q:P3)=>({x:q.x+p.dx,y:q.y+p.dy,z:q.z-b.minZ+placement.offsetZ});
     const part=raw.map(place3),faceIds=summary.brep?.displayFaceIds??[];
     const edgeWorld=decodeStepEdges(summary.brep?.displayEdges).map(edge=>{const points:P3[]=[];for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));return points}).filter(edge=>edge.length>=2);
-    const target=includeZLevels?buildFaceTargetRoughing(part,faceIds,faceSelection,stock.thickness,Math.max(.1,sliceStepMm),Math.max(0,allowanceMm)):null;
-    const toolpath=target?buildFaceTargetRasterToolpath(target,Math.max(.1,toolDiameterMm),Math.max(1,Math.min(100,stepoverPercent))):null;
+    const wp=wcsPoint();
+    const target=includeZLevels&&wcs.z==='top'?buildFaceTargetRoughing(part,faceIds,faceSelection,stock.thickness,Math.max(.1,sliceStepMm),Math.max(0,allowanceMm)):null;
+    const toolpath=target?buildFaceTargetRasterToolpath(target,Math.max(.1,toolDiameterMm),Math.max(1,Math.min(100,stepoverPercent)),wp):null;
     const regionWorld=target?target.levels.map(z=>target.loops.map(loop=>loop.points.map(point=>({x:point.x,y:point.y,z})))):[];
-    const toolWorld=toolpath?.runs.map(run=>run.points.map(point=>({x:point.x,y:point.y,z:run.z})))??[];
+    const toolWorld=toolpath?.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z})))??[];
     const m=Math.max(stock.width,stock.height)*.12+10;
     const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
     const box:P3[]=[{x:0,y:0,z:0},{x:stock.width,y:0,z:0},{x:stock.width,y:stock.height,z:0},{x:0,y:stock.height,z:0},{x:0,y:0,z:stock.thickness},{x:stock.width,y:0,z:stock.thickness},{x:stock.width,y:stock.height,z:stock.thickness},{x:0,y:stock.height,z:stock.thickness}];
-    const wp=wcsPoint(),al=Math.max(35,Math.min(stock.width,stock.height)*.55),axes=[wp,{x:wp.x+al,y:wp.y,z:wp.z},wp,{x:wp.x,y:wp.y+al,z:wp.z},wp,{x:wp.x,y:wp.y,z:wp.z+al}];
+    const al=Math.max(35,Math.min(stock.width,stock.height)*.55),axes=[wp,{x:wp.x+al,y:wp.y,z:wp.z},wp,{x:wp.x,y:wp.y+al,z:wp.z},wp,{x:wp.x,y:wp.y,z:wp.z+al}];
     const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>edge.map(q=>projectPoint(q,v))),rr=regionWorld.map(region=>region.map(loop=>loop.map(q=>projectPoint(q,v)))),tp=toolWorld.map(run=>run.map(q=>projectPoint(q,v))),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
     const map=fit([...pp,...ep.flat(),...rr.flat(2),...tp.flat(),...pl,...pb,...pa]),fpl=pl.map(map),fb=pb.map(map),fa=pa.map(map),fw=map(pw);
     const triangles=projectTriangles(part,v,map,faceIds),edges=ep.map(edge=>path(edge.map(map))).filter(Boolean);
     const roughRegions=rr.map(region=>region.map(loop=>path(loop.map(map),true)).join(' ')).filter(Boolean);
     const toolPaths=tp.map(run=>path(run.map(map))).filter(Boolean);
     const e=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-    const targetStatus=!includeZLevels?'':!faceSelection.length?'Zielfläche wählen':!target?'Nur horizontale, planare Zielflächen':target.levels.length?`Ziel ${target.targetZ.toFixed(2)} mm · Schruppen bis ${target.roughBottomZ.toFixed(2)} mm`:'Kein Material oberhalb der Zielfläche';
-    return{triangles,edges,roughRegions,toolPaths,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,toolpathCount:toolPaths.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
+    const targetStatus=!includeZLevels?'':wcs.z!=='top'?'Face-Target-Roughing benötigt WCS Z oben':!faceSelection.length?'Zielfläche wählen':!target?'Nur horizontale, planare Zielflächen':target.levels.length?`Ziel ${target.targetZ.toFixed(2)} mm · Schruppen bis ${target.roughBottomZ.toFixed(2)} mm`:'Kein Material oberhalb der Zielfläche';
+    return{triangles,edges,roughRegions,toolPaths,canonicalFaceTargetToolpath:toolpath,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,toolpathCount:toolPaths.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
   }
 
   function scene2d(activeToolpath:CanonicalToolpath|null){
@@ -180,6 +182,9 @@
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;selectedFaceIds=[]}
   $: s3=(summary.fileName,scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm,previewToolDiameterMm,previewStepoverPercent));
+  $: onFaceTargetChange(s3?.canonicalFaceTargetToolpath&&s3.targetZ!==null&&s3.roughBottomZ!==null
+    ?{toolpath:s3.canonicalFaceTargetToolpath,targetZ:s3.targetZ,roughBottomZ:s3.roughBottomZ}
+    :null);
   $: s2=(summary.fileName,drillViewMode,drillYawDeg,drillTiltDeg,scene2d(canonicalToolpath));
 </script>
 
