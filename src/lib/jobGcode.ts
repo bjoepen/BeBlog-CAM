@@ -1,4 +1,4 @@
-import type { CamOperation, FacingOperation, ContourOperation, PocketOperation, CarveOperation, DrillOperation, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
+import type { CamOperation, FacingOperation, ContourOperation, PocketOperation, CarveOperation, DrillOperation, ZLevelRoughingOperation, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
 import { generateFacingGcode } from './facingGcode';
 import { generateContourGcode } from './gcode';
 import { generatePocketGcode } from './pocketGcode';
@@ -6,12 +6,14 @@ import { optimizeParallelPocketStayDown } from './pocketStayDown';
 import { generateCarveGcode } from './carveGcode';
 import { generateCanonicalDrillGcode } from './drillCanonicalToolpath';
 import { normalizeGcodeComments } from './gcodeComments';
+import { buildFaceTargetOperationState } from './faceTargetOperation';
+import { postFaceTargetCanonicalToolpath } from './faceTargetToolpath';
 
 export type JobGcodeResult={ok:boolean;errors:string[];warnings:string[];code:string;lineCount:number;operationCount:number;toolChangeCount:number;};
 type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[]};
 type OperationCode={ok:boolean;errors:string[];warnings:string[];code:string};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
-const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':'Bohren';
+const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':op.kind==='drill'?'Bohren':'Z-Level Schruppen';
 const toolKey=(op:CamOperation)=>`${op.tool.name}|${op.tool.diameterMm.toFixed(6)}`;
 const operationDisplayName=(op:CamOperation,index:number)=>{
   const expected=label(op),name=op.name.trim();
@@ -28,6 +30,17 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
   }
   if(operation.kind==='drill'){const r=generateCanonicalDrillGcode({...common,operation:operation as DrillOperation});return{...r,code:normalizeGcodeComments(r.code)};}
   if(operation.kind==='carve'){const r=generateCarveGcode({...common,operation:operation as CarveOperation});return{...r,code:normalizeGcodeComments(r.code)};}
+  if(operation.kind==='z-level-roughing'){
+    const roughing=operation as ZLevelRoughingOperation;
+    const state=buildFaceTargetOperationState({summary:args.summary,stock:args.stock,placement:args.placement,orientation:args.orientation,wcs:args.wcs,operation:roughing});
+    if(!state)return{ok:false,errors:['Die operation-owned STEP/BRep-Zielfläche konnte nicht als Z-Level-Schruppbahn rekonstruiert werden.'],warnings:[],code:''};
+    try{
+      const code=postFaceTargetCanonicalToolpath(state.toolpath,{safeZMm:roughing.safeZMm,feedMmMin:roughing.feedMmMin,plungeMmMin:roughing.plungeMmMin,spindleRpm:roughing.spindleRpm});
+      return{ok:true,errors:[],warnings:[],code:normalizeGcodeComments(code)};
+    }catch(error){
+      return{ok:false,errors:[String(error)],warnings:[],code:''};
+    }
+  }
   return generateContourGcode({...common,operation:operation as ContourOperation});
 }
 

@@ -45,5 +45,6 @@ export function buildActiveCanonicalToolpath(args:{
     return buildCarveCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
   }
 
+  if(operation.kind==='z-level-roughing')return null;
   return buildDrillCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
 }

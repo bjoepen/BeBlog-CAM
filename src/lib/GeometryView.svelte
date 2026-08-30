@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
+  import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ZLevelRoughingOperation } from './types';
   import { projectPoint, projectTriangles, type P2, type P3, type View } from './stepView';
   import { decodeStepEdges } from './stepEdgeView';
   import { buildFaceTargetRoughing } from './faceTargetRoughing';
@@ -14,6 +14,12 @@
   export let orientation:PartOrientation;
   export let wcs:WorkCoordinateSystem;
   export let canonicalToolpath:CanonicalToolpath|null=null;
+  export let preflightFaceTargetToolpaths:CanonicalToolpath[]=[];
+  export let selectedDrillCurveIds:number[]=[];
+  export let roughingOperation:ZLevelRoughingOperation|null=null;
+  export let selectedFaceIds:number[]=[];
+  export let onSelectedFaceIdsChange:(faceIds:number[])=>void=()=>{};
+  export let onDrillViewModeChange:(mode:'top'|'25d')=>void=()=>{};
   export let onFaceTargetChange:(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null)=>void=()=>{};
 
   const width=1000,height=650,pad=54;
@@ -23,11 +29,6 @@
   let drillViewMode:'top'|'25d'='top';
   let drillYawDeg=-12,drillTiltDeg=38;
   let showZLevels=false;
-  let zLevelStepMm=2;
-  let finishAllowanceMm=.5;
-  let previewToolDiameterMm=6;
-  let previewStepoverPercent=40;
-  let selectedFaceIds:number[]=[];
   let selectionSource=summary.fileName;
   let s3: ReturnType<typeof scene3d>;
   let s2: ReturnType<typeof scene2d>;
@@ -64,7 +65,7 @@
     });
   }
 
-  function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number,faceSelection:number[],allowanceMm:number,toolDiameterMm:number,stepoverPercent:number){
+  function scene3d(v:View,includeZLevels:boolean,sliceStepMm:number,faceSelection:number[],allowanceMm:number,toolDiameterMm:number,stepoverPercent:number,jobToolpaths:CanonicalToolpath[]=[]){
     const a=summary.brep?.displayVertices??[],raw:P3[]=[];
     for(let i=0;i+2<a.length;i+=3)raw.push(rotate3({x:a[i],y:a[i+1],z:a[i+2]}));
     if(!raw.length)return null;
@@ -76,7 +77,9 @@
     const target=includeZLevels&&wcs.z==='top'?buildFaceTargetRoughing(part,faceIds,faceSelection,stock.thickness,Math.max(.1,sliceStepMm),Math.max(0,allowanceMm)):null;
     const toolpath=target?buildFaceTargetRasterToolpath(target,Math.max(.1,toolDiameterMm),Math.max(1,Math.min(100,stepoverPercent)),wp):null;
     const regionWorld=target?target.levels.map(z=>target.loops.map(loop=>loop.points.map(point=>({x:point.x,y:point.y,z})))):[];
-    const toolWorld=toolpath?.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z})))??[];
+    const activeToolWorld=toolpath?.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z})))??[];
+    const jobToolWorld=jobToolpaths.flatMap(path=>path.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z}))));
+    const toolWorld=[...activeToolWorld,...jobToolWorld];
     const m=Math.max(stock.width,stock.height)*.12+10;
     const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
     const box:P3[]=[{x:0,y:0,z:0},{x:stock.width,y:0,z:0},{x:stock.width,y:stock.height,z:0},{x:0,y:stock.height,z:0},{x:0,y:0,z:stock.thickness},{x:stock.width,y:0,z:stock.thickness},{x:stock.width,y:stock.height,z:stock.thickness},{x:0,y:stock.height,z:stock.thickness}];
@@ -143,6 +146,11 @@
       const wy=noStock?(wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2):(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2);
       return{
         paths:projectedPlaced.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),
+        selectedDrillPaths:drill25d?selectedDrillCurveIds.flatMap(id=>{
+          const points=projectedPlaced[id],curve=curves[id];
+          if(!points||curve?.kind!=='circle')return[];
+          return[path(points.map(map),true)];
+        }):[],
         toolPaths:canonicalRuns.map(run=>({d:path(run.points.map(map)),z:run.z})).filter(run=>Boolean(run.d)),
         entryPaths:canonicalEntries.map(entry=>({d:path(entry.points.map(map)),z:entry.z})).filter(entry=>Boolean(entry.d)),
         machinePaths:machinePaths.map(entry=>({d:path(entry.points.map(map)),rapid:entry.rapid,traverse:entry.traverse,motionIndex:entry.motionIndex})),
@@ -172,20 +180,19 @@
   function up(){dragging=false}
   function wheel(e:WheelEvent){if(summary.kind==='step'||(summary.kind==='dxf'&&canonicalToolpath?.operationKind==='drill')){e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}}
   function reset(){yaw=-.72;pitch=.48;drillYawDeg=-12;drillTiltDeg=38;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
-  function updateSliceStep(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=.1)zLevelStepMm=value}
-  function updateAllowance(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=0)finishAllowanceMm=value}
-  function updateToolDiameter(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>.1)previewToolDiameterMm=value}
-  function updateStepover(e:Event){const value=Number((e.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=1&&value<=100)previewStepoverPercent=value}
-  function toggleFace(faceId:number){if(!showZLevels||dragMoved||!s3?.facePickingAvailable)return;selectedFaceIds=selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId].sort((a,b)=>a-b)}
+  function toggleFace(faceId:number){if(!showZLevels||dragMoved||!s3?.facePickingAvailable)return;const next=(selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId]).sort((a,b)=>a-b);onSelectedFaceIdsChange(next)}
   function faceKey(e:KeyboardEvent,faceId:number){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleFace(faceId)}}
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
-  $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;selectedFaceIds=[]}
-  $: s3=(summary.fileName,scene3d({yaw,pitch},showZLevels,zLevelStepMm,selectedFaceIds,finishAllowanceMm,previewToolDiameterMm,previewStepoverPercent));
+  $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;onSelectedFaceIdsChange([])}
+  $: s3=(summary.fileName,preflightFaceTargetToolpaths,scene3d({yaw,pitch},showZLevels&&!!roughingOperation,roughingOperation?.stepDownMm??1,selectedFaceIds,roughingOperation?.finishAllowanceMm??0,roughingOperation?.tool.diameterMm??1,roughingOperation?.stepoverPercent??40,preflightFaceTargetToolpaths));
   $: onFaceTargetChange(s3?.canonicalFaceTargetToolpath&&s3.targetZ!==null&&s3.roughBottomZ!==null
     ?{toolpath:s3.canonicalFaceTargetToolpath,targetZ:s3.targetZ,roughBottomZ:s3.roughBottomZ}
     :null);
-  $: s2=(summary.fileName,drillViewMode,drillYawDeg,drillTiltDeg,scene2d(canonicalToolpath));
+  $: onDrillViewModeChange(drillViewMode);
+  $: if(!roughingOperation&&showZLevels)showZLevels=false;
+  $: if(roughingOperation&&!showZLevels)showZLevels=true;
+  $: s2=(summary.fileName,drillViewMode,drillYawDeg,drillTiltDeg,selectedDrillCurveIds.join(','),scene2d(canonicalToolpath));
 </script>
 
 <div class="geometry-view" bind:this={root}>
@@ -194,6 +201,7 @@
       <path d={s2.plane} class="setup-plane"/>
       {#if s2.stock}<path d={s2.stock} class="stock"/>{/if}
       {#each s2.paths as p}<path d={p} class="dxf"/>{/each}
+      {#each s2.selectedDrillPaths as p}<path d={p} class="projected-drill-selection"/>{/each}
       {#each s2.entryPaths as p}<path d={p.d} class="toolpath-preview canonical-entry" data-toolpath-z={p.z} data-toolpath-spatial="entry"/>{/each}
       {#each s2.toolPaths as p}<path d={p.d} class="toolpath-preview" data-toolpath-z={p.z}/>{/each}
       {#each s2.machinePaths as motion}<path d={motion.d} class="toolpath-preview machine-motion" class:rapid-motion={motion.rapid} class:inter-hole-traverse={motion.traverse}/>{/each}
@@ -205,8 +213,8 @@
       {#each s3.triangles as triangle}
         <path d={path(triangle.points,true)} class="step-face" class:selectable-face={showZLevels&&s3.facePickingAvailable} class:selected-face={selectedFaceIds.includes(triangle.faceId)} style={`fill:${faceFill(triangle.shade,selectedFaceIds.includes(triangle.faceId))}`} role={showZLevels&&s3.facePickingAvailable?'button':undefined} tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}><title>Fläche {triangle.faceId+1}{selectedFaceIds.includes(triangle.faceId)?' · ausgewählt':''}</title></path>
       {/each}
-      {#if showZLevels}
-        {#each s3.roughRegions as region}<path d={region} class="roughing-region" fill-rule="evenodd"/>{/each}
+      {#if showZLevels||preflightFaceTargetToolpaths.length}
+        {#if showZLevels}{#each s3.roughRegions as region}<path d={region} class="roughing-region" fill-rule="evenodd"/>{/each}{/if}
         {#each s3.toolPaths as tool}<path d={tool} class="toolpath-preview"/>{/each}
       {/if}
       {#each s3.edges as edge}<path d={edge} class="step-edge"/>{/each}
@@ -221,15 +229,18 @@
     {#if summary.kind==='step'}
       <span class="help">
         <button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button>
-        <button class:active-toggle={showZLevels} onclick={()=>showZLevels=!showZLevels}>Z-Level</button>
-        {#if showZLevels}
-          <label class="slice-step">Zustellung <input type="number" min="0.1" step="0.1" value={zLevelStepMm} oninput={updateSliceStep}/> mm</label>
-          <label class="slice-step">Schlichtaufmaß <input type="number" min="0" step="0.1" value={finishAllowanceMm} oninput={updateAllowance}/> mm</label>
-          <label class="slice-step">Werkzeug Ø <input type="number" min="0.1" step="0.1" value={previewToolDiameterMm} oninput={updateToolDiameter}/> mm</label>
-          <label class="slice-step">Stepover <input type="number" min="1" max="100" step="1" value={previewStepoverPercent} oninput={updateStepover}/> %</label>
+        {#if roughingOperation}
+          <button class="active-toggle" disabled>Z-Level Schruppen</button>
+          <span>Ø {roughingOperation.tool.diameterMm.toFixed(2)} mm · Zustellung {roughingOperation.stepDownMm.toFixed(2)} mm · Stepover {roughingOperation.stepoverPercent}% · Aufmaß {roughingOperation.finishAllowanceMm.toFixed(2)} mm</span>
           <span>{s3?.sliceCount??0} Ebenen · {s3?.toolpathCount??0} Werkzeugbahnen</span>
           {#if s3?.targetStatus}<span>{s3.targetStatus}</span>{/if}
-          {#if s3?.facePickingAvailable}<span>{selectedFaceIds.length?`${selectedFaceIds.length} Fläche${selectedFaceIds.length===1?'':'n'} gewählt`:'Zielfläche anklicken'}</span>{#if selectedFaceIds.length}<button onclick={()=>selectedFaceIds=[]}>Auswahl löschen</button>{/if}{/if}
+          {#if s3?.facePickingAvailable}<span>{selectedFaceIds.length?`${selectedFaceIds.length} Fläche${selectedFaceIds.length===1?'':'n'} gewählt`:'Zielfläche anklicken'}</span>{#if selectedFaceIds.length}<button onclick={()=>onSelectedFaceIdsChange([])}>Auswahl löschen</button>{/if}{/if}
+        {:else}
+          {#if preflightFaceTargetToolpaths.length}
+            <span>Gesamtjob · {preflightFaceTargetToolpaths.length} Z-Level-Bearbeitung{preflightFaceTargetToolpaths.length===1?'':'en'} · {s3?.toolpathCount??0} Werkzeugbahnen</span>
+          {:else}
+            <span>Für Face-Target-Bearbeitung „Z-Level Schruppen“ als aktive Operation wählen.</span>
+          {/if}
         {/if}
         <span>Drag: drehen · Shift/Mitte: verschieben</span>
       </span>
@@ -251,6 +262,7 @@
   .setup-plane{fill:rgba(255,255,255,.2);stroke:rgba(70,80,75,.18);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}
   .stock{fill:none;stroke:rgba(93,105,99,.46);stroke-width:1.35;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
   .dxf{fill:none;stroke:#26342e;stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+  .projected-drill-selection{fill:none;stroke:#c45143;stroke-width:2.1;vector-effect:non-scaling-stroke;pointer-events:none}
   .step-face{stroke:none;outline:none;pointer-events:none}.step-face.selectable-face{pointer-events:visiblePainted;cursor:pointer}.step-face.selected-face{stroke:none}.step-face:focus,.step-face:focus-visible{outline:none}
   .step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
   .roughing-region{fill:rgba(194,117,40,.12);stroke:rgba(194,117,40,.42);stroke-width:1.05;vector-effect:non-scaling-stroke;pointer-events:none}
@@ -262,6 +274,5 @@
   text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}.wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}.wcs-dot{fill:#c27528;pointer-events:none}.wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}
   .geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}.geometry-caption strong{color:#34423c;font-weight:600}.help{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
   .help button{position:relative;z-index:4;min-width:28px;border:1px solid rgba(52,66,60,.22);border-radius:7px;background:rgba(255,255,255,.72);padding:3px 7px;color:#34423c;cursor:pointer}.help button:hover{background:#fff}.help button.active-toggle{background:#f4eadf;border-color:rgba(194,117,40,.45);color:#8c551d}
-  .slice-step{display:flex;align-items:center;gap:5px}.slice-step input{width:58px;padding:3px 5px;border:1px solid rgba(52,66,60,.22);border-radius:6px;background:rgba(255,255,255,.78);color:#34423c}
   @media(max-width:800px){.geometry-caption{align-items:flex-start;flex-direction:column;gap:8px}.help{flex-wrap:wrap}}
 </style>

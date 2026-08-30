@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { save } from '@tauri-apps/plugin-dialog';
-  import type { CamOperation, ImportSummary } from './types';
+  import type { ImportSummary, ZLevelRoughingOperation } from './types';
   import type { CanonicalToolpath } from './canonicalToolpath';
   import { postFaceTargetCanonicalToolpath } from './faceTargetToolpath';
   import { postProcessGcode } from './postprocessors';
@@ -10,7 +10,7 @@
 
   export let summary:ImportSummary;
   export let toolpath:CanonicalToolpath;
-  export let operation:CamOperation;
+  export let operation:ZLevelRoughingOperation;
   export let targetZ:number|null=null;
   export let roughBottomZ:number|null=null;
 

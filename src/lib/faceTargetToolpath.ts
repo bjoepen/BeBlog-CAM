@@ -43,6 +43,23 @@ function safeAt(loops:{points:ToolpathPoint2[]}[],p:ToolpathPoint2,radius:number
   return pointInEvenOdd(loops,p)&&clearanceToBoundary(loops,p)>=radius-EPS;
 }
 
+function safeConnector(
+  loops:{points:ToolpathPoint2[]}[],
+  a:ToolpathPoint2,
+  b:ToolpathPoint2,
+  radius:number,
+  sampleStep:number,
+){
+  const distance=Math.hypot(b.x-a.x,b.y-a.y);
+  if(distance<=EPS)return safeAt(loops,a,radius);
+  const steps=Math.max(1,Math.ceil(distance/Math.max(.1,sampleStep)));
+  for(let i=0;i<=steps;i++){
+    const t=i/steps;
+    if(!safeAt(loops,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},radius))return false;
+  }
+  return true;
+}
+
 function bounds(loops:{points:ToolpathPoint2[]}[]){
   const pts=loops.flatMap(loop=>loop.points);
   if(!pts.length)return null;
@@ -72,7 +89,7 @@ export function buildFaceTargetRasterToolpath(
   const radius=toolDiameterMm/2,stepover=Math.max(.05,toolDiameterMm*stepoverPercent/100);
   const sampleStep=Math.max(.15,Math.min(.75,toolDiameterMm/8));
 
-  const rasterRows:{points:ToolpathPoint2[]}[]=[];
+  const rasterSegments:{points:ToolpathPoint2[]}[]=[];
   let row=0;
   for(let y=b.minY+radius;y<=b.maxY-radius+EPS;y+=stepover,row++){
     const lineRuns:{a:number;b:number}[]=[];
@@ -82,23 +99,53 @@ export function buildFaceTargetRasterToolpath(
       else if(start!==null&&last!==null){if(last-start>EPS)lineRuns.push({a:start,b:last});start=last=null}
     }
     if(start!==null&&last!==null&&last-start>EPS)lineRuns.push({a:start,b:last});
-    for(const segment of lineRuns){
-      const worldPoints=row%2===0?[{x:segment.a,y},{x:segment.b,y}]:[{x:segment.b,y},{x:segment.a,y}];
-      rasterRows.push({points:worldPoints});
+
+    // Serpentine order is applied to the complete row, not just to the direction
+    // of each individual segment. This keeps the next candidate spatially close
+    // while still respecting holes / islands.
+    const ordered=row%2===0?lineRuns:[...lineRuns].reverse();
+    for(const segment of ordered){
+      const points=row%2===0
+        ?[{x:segment.a,y},{x:segment.b,y}]
+        :[{x:segment.b,y},{x:segment.a,y}];
+      rasterSegments.push({points});
     }
   }
-  if(!rasterRows.length)return null;
+  if(!rasterSegments.length)return null;
+
+  // Link adjacent raster segments only when the complete connector remains inside
+  // the cutter-center-safe region. A hole, island, outer boundary or disconnected
+  // region therefore forces a retract automatically.
+  const linkedWorldRuns:{points:ToolpathPoint2[]}[]=[];
+  let current:ToolpathPoint2[]=[];
+  for(const segment of rasterSegments){
+    if(!current.length){
+      current=[...segment.points];
+      continue;
+    }
+    const from=current[current.length-1],to=segment.points[0];
+    if(safeConnector(target.loops,from,to,radius,sampleStep)){
+      if(Math.hypot(to.x-from.x,to.y-from.y)>EPS)current.push(to);
+      current.push(...segment.points.slice(1));
+    }else{
+      linkedWorldRuns.push({points:current});
+      current=[...segment.points];
+    }
+  }
+  if(current.length)linkedWorldRuns.push({points:current});
+  if(!linkedWorldRuns.length)return null;
 
   const runs:CanonicalToolpathRun[]=[];
   // True Z-level roughing: clear the complete allowed XY region at one depth
-  // before descending to the next level.
+  // before descending to the next level. Retract only between disconnected safe
+  // chains; the next depth always starts from safety again.
   for(const worldZ of target.levels){
     const machineZ=worldZ-origin.z;
-    for(const rowRun of rasterRows){
+    for(const linkedRun of linkedWorldRuns){
       runs.push({
         kind:'cut',
         z:machineZ,
-        points:rowRun.points.map(point=>({x:point.x-origin.x,y:point.y-origin.y})),
+        points:linkedRun.points.map(point=>({x:point.x-origin.x,y:point.y-origin.y})),
         retractAfter:true,
       });
     }
@@ -140,7 +187,7 @@ export function postFaceTargetCanonicalToolpath(
       lines.push(`( Z-Level ${f3(run.z)} )`);
       lastZ=run.z;
     }
-    lines.push(`( Werkzeugbahn ${index+1}/${toolpath.runs.length} )`);
+    lines.push(`( Schnittkette ${index+1}/${toolpath.runs.length} )`);
     lines.push(`G0 X${f3(start.x)} Y${f3(start.y)}`);
     lines.push(`G1 Z${f3(run.z)} F${Math.round(options.plungeMmMin)}`);
     for(let i=1;i<run.points.length;i++){

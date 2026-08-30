@@ -17,9 +17,13 @@ export function validateCommonOperation(operation: CamOperation, stock: StockDef
     ? { level: 'pass', category: 'tool', title: 'Werkzeugdurchmesser', detail: `Ø ${operation.tool.diameterMm.toFixed(3)} mm.` }
     : { level: 'fail', category: 'tool', title: 'Werkzeugdurchmesser', detail: 'Werkzeugdurchmesser muss größer als 0 sein.' });
 
-  checks.push(operation.totalDepthMm > 0
-    ? { level: 'pass', category: 'depth', title: operation.kind === 'facing' ? 'Planabtrag' : 'Tiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm.` }
-    : { level: 'fail', category: 'depth', title: operation.kind === 'facing' ? 'Planabtrag' : 'Tiefe', detail: 'Der Wert muss größer als 0 sein.' });
+  if(operation.kind==='z-level-roughing'){
+    checks.push({level:'pass',category:'depth',title:'Zielhöhe',detail:'Wird aus der ausgewählten STEP/BRep-Zielfläche abgeleitet.'});
+  }else{
+    checks.push(operation.totalDepthMm > 0
+      ? { level: 'pass', category: 'depth', title: operation.kind === 'facing' ? 'Planabtrag' : 'Tiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm.` }
+      : { level: 'fail', category: 'depth', title: operation.kind === 'facing' ? 'Planabtrag' : 'Tiefe', detail: 'Der Wert muss größer als 0 sein.' });
+  }
 
   checks.push(operation.stepDownMm > 0
     ? { level: 'pass', category: 'depth', title: operation.kind === 'drill' && operation.method === 'helical-mill' ? 'Helix-Zustellung' : 'Zustellung', detail: `${operation.stepDownMm.toFixed(3)} mm${operation.kind === 'drill' && operation.method === 'helical-mill' ? '/U' : ''}.` }
@@ -33,11 +37,18 @@ export function validateCommonOperation(operation: CamOperation, stock: StockDef
     ? { level: 'pass', category: 'setup', title: 'Sicherheits-Z', detail: `${operation.safeZMm.toFixed(3)} mm über Werkstücknull.` }
     : { level: 'fail', category: 'setup', title: 'Sicherheits-Z', detail: 'Sicherheits-Z muss größer als 0 sein.' });
 
-  if (stockMode === 'none') checks.push({ level: operation.kind === 'facing' ? 'fail' : 'warn', category: 'stock', title: 'Rohling', detail: operation.kind === 'facing' ? 'Planen benötigt einen definierten Rohling.' : 'Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.' });
-  else if (operation.totalDepthMm > stock.thickness) checks.push({ level: operation.kind === 'facing' ? 'fail' : 'warn', category: 'stock', title: 'Rohlingtiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm überschreiten die Rohlingdicke ${stock.thickness.toFixed(3)} mm.` });
-  else checks.push({ level: 'pass', category: 'stock', title: 'Rohlingtiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm liegen innerhalb der Rohlingdicke ${stock.thickness.toFixed(3)} mm.` });
+  if(stockMode==='none'){
+    const requiresStock=operation.kind==='facing'||operation.kind==='z-level-roughing';
+    checks.push({level:requiresStock?'fail':'warn',category:'stock',title:'Rohling',detail:requiresStock?(operation.kind==='facing'?'Planen benötigt einen definierten Rohling.':'Z-Level Schruppen benötigt einen definierten Rohling.'):'Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.'});
+  }else if(operation.kind==='z-level-roughing'){
+    checks.push({level:'pass',category:'stock',title:'Rohlingtiefe',detail:`Zielfläche und Schrupp-Endhöhe werden geometrisch gegen den Rohling mit ${stock.thickness.toFixed(3)} mm Dicke bestimmt.`});
+  }else if(operation.totalDepthMm > stock.thickness){
+    checks.push({ level: operation.kind === 'facing' ? 'fail' : 'warn', category: 'stock', title: 'Rohlingtiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm überschreiten die Rohlingdicke ${stock.thickness.toFixed(3)} mm.` });
+  }else{
+    checks.push({ level: 'pass', category: 'stock', title: 'Rohlingtiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm liegen innerhalb der Rohlingdicke ${stock.thickness.toFixed(3)} mm.` });
+  }
 
-  if (wcs.z !== 'top') checks.push({ level: 'fail', category: 'setup', title: 'WCS Z', detail: 'Die aktuellen 2D/2,5D-Bearbeitungen sind nur mit Z-Null auf der Rohlingoberseite freigegeben.' });
+  if (wcs.z !== 'top') checks.push({ level: 'fail', category: 'setup', title: 'WCS Z', detail: 'Die aktuellen 2D/2,5D- und Face-Target-Bearbeitungen sind nur mit Z-Null auf der Rohlingoberseite freigegeben.' });
   else checks.push({ level: 'pass', category: 'setup', title: 'WCS Z', detail: 'Z-Null liegt auf der Rohlingoberseite.' });
   return checks;
 }
@@ -50,6 +61,14 @@ export function validateToolCompatibility(operation: CamOperation): ValidationCh
     if (kind === 'face-mill') return { level: 'pass', category: 'tool', title: 'Werkzeug · Operation', detail: 'Planfräser ist die bevorzugte Werkzeugart für Planen.' };
     if (kind === 'end-mill' || !kind) return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: `${label} ist für Planen zulässig; für größere Planflächen ist ein Planfräser bevorzugt.` };
     return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: `${label} ist für Planen nicht freigegeben.` };
+  }
+
+  if(operation.kind==='z-level-roughing'){
+    if(kind==='end-mill')return{level:'pass',category:'tool',title:'Werkzeug · Operation',detail:'Schaftfräser ist für das aktuelle Z-Level Schruppen freigegeben.'};
+    if(kind==='ball-nose')return{level:'fail',category:'tool',title:'Werkzeug · Operation',detail:'Vollradiusfräser ist für das aktuelle Z-Level Schruppen noch nicht freigegeben; er ist für die spätere 3D-Schlichtstrategie vorgesehen.'};
+    if(kind==='face-mill')return{level:'fail',category:'tool',title:'Werkzeug · Operation',detail:'Planfräser ist für die aktuelle begrenzte Z-Level-Schruppstrategie nicht freigegeben.'};
+    if(kind==='v-bit')return{level:'fail',category:'tool',title:'Werkzeug · Operation',detail:'V-Fräser ist für Z-Level Schruppen nicht freigegeben.'};
+    return{level:'warn',category:'tool',title:'Werkzeug · Operation',detail:'Werkzeugtyp ist unbekannt; Z-Level Schruppen sollte derzeit mit einem Schaftfräser erfolgen.'};
   }
 
   if (operation.kind === 'drill' && operation.method === 'helical-mill') {
