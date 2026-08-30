@@ -18,8 +18,7 @@
   import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CamOperation, FacingOperation, ContourOperation, PocketOperation, CarveOperation, DrillOperation, OperationKind, CarveSelectionMode, DrillSelectionMode, OperationsProject } from './lib/types';
   import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultFacingOperation, defaultContourOperation, defaultPocketOperation, defaultCarveOperation, defaultDrillOperation, defaultOperationsProject } from './lib/types';
   import { activeOperation, addOperation, cloneOperation, operationSummary, removeOperation, replaceOperation, selectOperation } from './lib/operationsProject';
-  import { buildFacingToolpath } from './lib/facingToolpath';
-  import { buildDrillCanonicalToolpath } from './lib/drillCanonicalToolpath';
+  import { buildActiveCanonicalToolpath } from './lib/activeCanonicalToolpath';
 
   const steps = ['Bauteil', 'Rohling', 'Werkzeuge', 'Bearbeiten', 'Prüfen', 'Fräsen'];
   let activeStep = 'Bauteil';
@@ -32,13 +31,9 @@
   let operationsProject:OperationsProject={operations:defaultOperationsProject.operations.map(cloneOperation),activeOperationId:defaultOperationsProject.activeOperationId};
   let operation: CamOperation = cloneOperation(activeOperation(operationsProject)??defaultContourOperation);
   let error = '';
-  $: activeCanonicalToolpath = !importSummary
-    ? null
-    : operation.kind==='facing'&&stockMode!=='none'
-      ? buildFacingToolpath({stock,wcs,operation}).toolpath
-      : operation.kind==='drill'&&importSummary.kind==='dxf'
-        ? buildDrillCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation})
-        : null;
+  $: activeCanonicalToolpath = importSummary
+    ? buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation})
+    : null;
 
   const operationLabel=(kind:OperationKind)=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':'Bohren';
   function setOperation(next:CamOperation){operation=cloneOperation(next);operationsProject=replaceOperation(operationsProject,operation);}

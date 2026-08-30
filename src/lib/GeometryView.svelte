@@ -108,23 +108,42 @@
       return{x:pivot.x+xr,y:pivot.y+yr*Math.cos(tilt)+z*Math.sin(tilt)};
     };
     const projectedPlaced=placed.map(points=>points.map(point=>project({...point,z:0})));
-    const canonicalRuns=(activeToolpath?.runs??[]).map(run=>run.points.map(point=>project({...fromWcs2(point),z:run.z})));
+    const canonicalRuns=(activeToolpath?.runs??[]).map(run=>({
+      z:run.z,
+      points:run.points.map(point=>project({...fromWcs2(point),z:run.z}))
+    }));
+    const canonicalEntries=(activeToolpath?.runs??[]).flatMap(run=>(run.entrySegments??[]).flatMap(segment=>{
+      const sampled=sampleMachineMotion(segment);
+      return sampled.slice(1).map((end,index)=>{
+        const start=sampled[index],a=fromWcs2(start),b=fromWcs2(end);
+        return{
+          z:end.z,
+          points:[
+            project({x:a.x,y:a.y,z:start.z}),
+            project({x:b.x,y:b.y,z:end.z})
+          ]
+        };
+      });
+    }));
     const machinePaths=(activeToolpath?.motions??[]).map((motion,motionIndex)=>{
+      const xyChanged=Math.abs(motion.end.x-motion.start.x)>1e-9||Math.abs(motion.end.y-motion.start.y)>1e-9;
+      const zChanged=Math.abs(motion.end.z-motion.start.z)>1e-9;
       const points=sampleMachineMotion(motion).map(point=>{const xy=fromWcs2(point);return project({x:xy.x,y:xy.y,z:point.z})});
-      return{points,rapid:motion.kind==='rapid3',motionIndex};
+      return{points,rapid:motion.kind==='rapid3',traverse:motion.kind==='rapid3'&&xyChanged&&!zChanged,motionIndex};
     }).filter(entry=>entry.points.length>=2);
     const machineProjected=machinePaths.flatMap(entry=>entry.points);
 
     const makeResult=(planeWorld:P2[],stockWorld:P2[]|null)=>{
       const plane=planeWorld.map(point=>project({...point,z:0}));
       const stockProjected=stockWorld?.map(point=>project({...point,z:0}))??null;
-      const map=fit([...projectedPlaced.flat(),...plane,...(stockProjected??[]),...canonicalRuns.flat(),...machineProjected]);
+      const map=fit([...projectedPlaced.flat(),...plane,...(stockProjected??[]),...canonicalRuns.flatMap(run=>run.points),...canonicalEntries.flatMap(entry=>entry.points),...machineProjected]);
       const wx=noStock?(wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2):(wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2);
       const wy=noStock?(wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2):(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2);
       return{
         paths:projectedPlaced.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),
-        toolPaths:canonicalRuns.map(run=>path(run.map(map))).filter(Boolean),
-        machinePaths:machinePaths.map(entry=>({d:path(entry.points.map(map)),rapid:entry.rapid,motionIndex:entry.motionIndex})),
+        toolPaths:canonicalRuns.map(run=>({d:path(run.points.map(map)),z:run.z})).filter(run=>Boolean(run.d)),
+        entryPaths:canonicalEntries.map(entry=>({d:path(entry.points.map(map)),z:entry.z})).filter(entry=>Boolean(entry.d)),
+        machinePaths:machinePaths.map(entry=>({d:path(entry.points.map(map)),rapid:entry.rapid,traverse:entry.traverse,motionIndex:entry.motionIndex})),
         plane:path(plane.map(map),true),stock:stockProjected?path(stockProjected.map(map),true):null,wcs:map(project({x:wx,y:wy,z:0})),noStock,drill25d
       };
     };
@@ -170,8 +189,9 @@
       <path d={s2.plane} class="setup-plane"/>
       {#if s2.stock}<path d={s2.stock} class="stock"/>{/if}
       {#each s2.paths as p}<path d={p} class="dxf"/>{/each}
-      {#each s2.toolPaths as p}<path d={p} class="toolpath-preview"/>{/each}
-      {#each s2.machinePaths as motion}<path d={motion.d} class="toolpath-preview machine-motion" class:rapid-motion={motion.rapid}/>{/each}
+      {#each s2.entryPaths as p}<path d={p.d} class="toolpath-preview canonical-entry" data-toolpath-z={p.z} data-toolpath-spatial="entry"/>{/each}
+      {#each s2.toolPaths as p}<path d={p.d} class="toolpath-preview" data-toolpath-z={p.z}/>{/each}
+      {#each s2.machinePaths as motion}<path d={motion.d} class="toolpath-preview machine-motion" class:rapid-motion={motion.rapid} class:inter-hole-traverse={motion.traverse}/>{/each}
       <circle cx={s2.wcs.x} cy={s2.wcs.y} r="9" class="wcs-marker"/>
       <text x={s2.wcs.x+13} y={s2.wcs.y-10} class="wcs-label">WCS · X0 Y0</text>
     {:else if s3}
@@ -231,6 +251,8 @@
   .roughing-region{fill:rgba(194,117,40,.12);stroke:rgba(194,117,40,.42);stroke-width:1.05;vector-effect:non-scaling-stroke;pointer-events:none}
   .toolpath-preview{fill:none;stroke:#327b8d;stroke-width:1.8;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
   .machine-motion{stroke:#327b8d;stroke-width:1.9}.machine-motion.rapid-motion{stroke:rgba(72,94,101,.48);stroke-width:1.35;stroke-dasharray:4 3}
+  .machine-motion.inter-hole-traverse{stroke:rgba(72,94,101,.18);stroke-width:1;stroke-dasharray:2 5}
+  .canonical-entry{stroke-dasharray:3 2;stroke-width:1.65}
   .axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}.axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}
   text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}.wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}.wcs-dot{fill:#c27528;pointer-events:none}.wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}
   .geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}.geometry-caption strong{color:#34423c;font-weight:600}.help{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
