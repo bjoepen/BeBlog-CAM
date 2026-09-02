@@ -76,6 +76,7 @@
   function setToolTargetOperation(id:string){if(operationsProject.operations.some(op=>op.id===id))toolTargetOperationId=id;}
   function goToStep(step:string){if(step==='Werkzeuge')toolTargetOperationId=operationsProject.activeOperationId;activeStep=step;}
   $: if(!toolTargetOperationId||!operationsProject.operations.some(op=>op.id===toolTargetOperationId))toolTargetOperationId=operationsProject.activeOperationId;
+  $: toolTargetOperation=toolTargetOperationId?operationsProject.operations.find(op=>op.id===toolTargetOperationId)??null:null;
 
   function updateStock(field: 'width' | 'height' | 'thickness', event: Event) { if (stockMode !== 'manual' && !(importSummary?.kind === 'dxf' && stockMode === 'part-bounds' && field === 'thickness')) return; const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>0)stock={...stock,[field]:value}; }
   function updatePlacementOffset(field:'offsetX'|'offsetY'|'offsetZ',event:Event){const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value))placement={...placement,[field]:value};}
@@ -131,6 +132,7 @@
   activeOperationName={operation.name}
   operationChoices={operationsProject.operations.map((op,index)=>({id:op.id,label:`${String(index+1).padStart(2,'0')} · ${operationLabel(op.kind)}`,name:op.name,summary:operationSummary(op)}))}
   targetOperationId={toolTargetOperationId}
+  targetOperation={toolTargetOperation}
   onTargetOperationChange={setToolTargetOperation}
   onApplyToOperation={applyToolOperationTransfer}
 />
