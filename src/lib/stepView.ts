@@ -2,7 +2,7 @@ export type P2={x:number;y:number};
 export type P3={x:number;y:number;z:number};
 export type View={yaw:number;pitch:number};
 
-export type ProjectedTriangle={points:P2[];depth:number;shade:number};
+export type ProjectedTriangle={points:P2[];depth:number;shade:number;faceId:number};
 
 function cameraPoint(p:P3,v:View){
   const cy=Math.cos(v.yaw),sy=Math.sin(v.yaw),cp=Math.cos(v.pitch),sp=Math.sin(v.pitch);
@@ -23,7 +23,7 @@ function normal(a:P3,b:P3,c:P3){
 
 export function projectPoint(p:P3,v:View):P2{return cameraPoint(p,v)}
 
-export function projectTriangles(points:P3[],v:View,map:(p:P2)=>P2):ProjectedTriangle[]{
+export function projectTriangles(points:P3[],v:View,map:(p:P2)=>P2,faceIds:number[]=[]):ProjectedTriangle[]{
   const out:ProjectedTriangle[]=[];
   const light={x:-.35,y:-.45,z:.82};
   for(let i=0;i+2<points.length;i+=3){
@@ -31,7 +31,8 @@ export function projectTriangles(points:P3[],v:View,map:(p:P2)=>P2):ProjectedTri
     const pa=cameraPoint(a,v),pb=cameraPoint(b,v),pc=cameraPoint(c,v);
     const n=normal(a,b,c);
     const diffuse=Math.min(1,Math.abs(n.x*light.x+n.y*light.y+n.z*light.z));
-    out.push({points:[map(pa),map(pb),map(pc)],depth:(pa.depth+pb.depth+pc.depth)/3,shade:diffuse});
+    const triangleIndex=Math.floor(i/3);
+    out.push({points:[map(pa),map(pb),map(pc)],depth:(pa.depth+pb.depth+pc.depth)/3,shade:diffuse,faceId:faceIds[triangleIndex]??triangleIndex});
   }
   return out.sort((a,b)=>b.depth-a.depth);
 }

@@ -1,5 +1,6 @@
 import type { FacingOperation, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 import { validateToolCompatibility } from './validationGrammar';
+import { buildFacingToolpath } from './facingToolpath';
 
 export type FacingPathResult={
   ok:boolean;
@@ -13,20 +14,6 @@ export type FacingPathResult={
 };
 
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
-
-function axisBounds(length:number,origin:'min'|'center'|'max'){
-  if(origin==='min')return{min:0,max:length};
-  if(origin==='max')return{min:-length,max:0};
-  return{min:-length/2,max:length/2};
-}
-
-function buildLanes(min:number,max:number,requested:number){
-  const span=max-min;
-  if(span<=0)return[min];
-  const count=Math.max(1,Math.ceil(span/requested));
-  const step=span/count;
-  return Array.from({length:count+1},(_,i)=>min+step*i);
-}
 
 export function validateFacing(args:{stock:StockDefinition;stockMode:StockMode;wcs:WorkCoordinateSystem;operation:FacingOperation}){
   const {stock,stockMode,wcs,operation}=args;
@@ -52,37 +39,22 @@ export function generateFacingGcode(args:{stock:StockDefinition;stockMode:StockM
   const validation=validateFacing(args),errors=[...validation.errors],warnings=[...validation.warnings];
   if(errors.length)return{ok:false,errors,warnings,code:'',lineCount:0,lanes:0,levels:0,stepoverMm:0};
 
-  const requestedStepover=operation.tool.diameterMm*operation.stepoverPercent/100;
-  const x=axisBounds(stock.width,wcs.x==='left'?'min':wcs.x==='right'?'max':'center');
-  const y=axisBounds(stock.height,wcs.y==='front'?'min':wcs.y==='back'?'max':'center');
-  const traverse=operation.direction==='x'?x:y;
-  const cross=operation.direction==='x'?y:x;
-  const lanes=buildLanes(cross.min,cross.max,requestedStepover);
-  const actualStepover=lanes.length>1?(cross.max-cross.min)/(lanes.length-1):0;
-  const radius=operation.tool.diameterMm/2;
-  const startTraverse=traverse.min-radius;
-  const endTraverse=traverse.max+radius;
-  const levels=Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm));
+  const planned=buildFacingToolpath({stock,wcs,operation});
   const lines:string[]=[];
   lines.push('( BeBlog CAM 001X )','( Planen · rechteckiger Rohling · Zickzack )','G21','G90','G17',`S${Math.round(operation.spindleRpm)}`,'M3');
 
-  for(let level=1;level<=levels;level++){
-    const z=-Math.min(level*operation.stepDownMm,operation.totalDepthMm);
-    const first=operation.direction==='x'?{x:startTraverse,y:lanes[0]}:{x:lanes[0],y:startTraverse};
-    lines.push(`( Planstufe ${level}/${levels} · Z${f3(z)} )`,`G0 Z${f3(operation.safeZMm)}`,`G0 X${f3(first.x)} Y${f3(first.y)}`,`G1 Z${f3(z)} F${Math.round(operation.plungeMmMin)}`);
-    lanes.forEach((crossValue,index)=>{
-      const forward=index%2===0;
-      const traverseValue=forward?endTraverse:startTraverse;
-      const end=operation.direction==='x'?{x:traverseValue,y:crossValue}:{x:crossValue,y:traverseValue};
-      lines.push(`G1 X${f3(end.x)} Y${f3(end.y)} F${Math.round(operation.feedMmMin)}`);
-      const next=lanes[index+1];
-      if(next!==undefined){
-        const crossMove=operation.direction==='x'?{x:traverseValue,y:next}:{x:next,y:traverseValue};
-        lines.push(`G1 X${f3(crossMove.x)} Y${f3(crossMove.y)} F${Math.round(operation.feedMmMin)}`);
-      }
-    });
-  }
+  planned.toolpath.runs.forEach((run,index)=>{
+    const first=run.points[0];
+    lines.push(
+      `( Planstufe ${index+1}/${planned.levels} · Z${f3(run.z)} )`,
+      `G0 Z${f3(operation.safeZMm)}`,
+      `G0 X${f3(first.x)} Y${f3(first.y)}`,
+      `G1 Z${f3(run.z)} F${Math.round(operation.plungeMmMin)}`,
+    );
+    for(const point of run.points.slice(1))lines.push(`G1 X${f3(point.x)} Y${f3(point.y)} F${Math.round(operation.feedMmMin)}`);
+  });
+
   lines.push(`G0 Z${f3(operation.safeZMm)}`,'M5','M30');
   const code=lines.join('\n')+'\n';
-  return{ok:true,errors:[],warnings,code,lineCount:lines.length,lanes:lanes.length,levels,stepoverMm:actualStepover};
+  return{ok:true,errors:[],warnings,code,lineCount:lines.length,lanes:planned.lanes,levels:planned.levels,stepoverMm:planned.stepoverMm};
 }

@@ -2,6 +2,7 @@ import { mount, unmount } from 'svelte';
 import App from './App.svelte';
 import CamMascot from './lib/CamMascot.svelte';
 import StockMaterialSelector from './lib/StockMaterialSelector.svelte';
+import { syncToolpath25dControl } from './lib/toolpath25dControl';
 import './app.css';
 import './floh.css';
 import './overlay-fix.css';
@@ -33,6 +34,11 @@ function syncMaterialSelector() {
   }
 }
 
+function syncUiExtensions() {
+  syncMaterialSelector();
+  syncToolpath25dControl();
+}
+
 requestAnimationFrame(() => {
   const build = document.querySelector<HTMLElement>('.build');
   if (build && build.textContent !== '001Y') build.textContent = '001Y';
@@ -42,10 +48,10 @@ requestAnimationFrame(() => {
     mount(CamMascot, { target: rail });
   }
 
-  syncMaterialSelector();
+  syncUiExtensions();
 
   const root = document.getElementById('app');
   if (!root) return;
-  const observer = new MutationObserver(syncMaterialSelector);
+  const observer = new MutationObserver(syncUiExtensions);
   observer.observe(root, { childList: true, subtree: true });
 });

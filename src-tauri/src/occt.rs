@@ -18,6 +18,8 @@ pub struct BrepSummary {
     #[serde(default)]
     pub display_vertices: Vec<f64>,
     #[serde(default)]
+    pub display_face_ids: Vec<usize>,
+    #[serde(default)]
     pub display_edges: Vec<Vec<f64>>,
     pub note: String,
 }
@@ -89,6 +91,8 @@ mod tests {
         assert!(summary.edges > 0);
         assert!(summary.display_triangles > 0);
         assert_eq!(summary.display_vertices.len(), summary.display_triangles * 9);
+        assert_eq!(summary.display_face_ids.len(), summary.display_triangles);
+        assert!(summary.display_face_ids.iter().all(|face_id| *face_id < summary.faces));
         assert!(!summary.display_edges.is_empty());
         assert!(summary.display_edges.iter().all(|edge| edge.len() >= 6 && edge.len() % 3 == 0));
     }

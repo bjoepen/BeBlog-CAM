@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
   import { materialKinds, materialProfiles, setStockMaterial, stockMaterial, type MaterialKind } from './materialContext';
+  import type { CamOperation } from './types';
+  import { validateToolCompatibility } from './validationGrammar';
   import {
     createMillingTool,
     migrateMillingTool,
@@ -14,9 +16,14 @@
   } from './toolTypes';
 
   type ToolTab='data'|'calculator'|'library';
-  type ToolOperationTransfer={toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number};
+  type ToolOperationChoice={id:string;label:string;name:string;summary:string};
+  type ToolOperationTransfer={operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number};
 
   export let activeOperationName='Aktive Bearbeitung';
+  export let operationChoices:ToolOperationChoice[]=[];
+  export let targetOperationId:string|null=null;
+  export let targetOperation:CamOperation|null=null;
+  export let onTargetOperationChange:((id:string)=>void)|undefined=undefined;
   export let onApplyToOperation:((transfer:ToolOperationTransfer)=>void)|undefined=undefined;
 
   let activeTab:ToolTab='data';
@@ -42,6 +49,10 @@
   $: rpmLimited=!!calculated&&calculated.spindleRpm>maxSpindleRpm;
   $: feedLimited=feedAtRecommendedRpm!=null&&feedAtRecommendedRpm>maxFeedMmMin;
   $: insideProfile=!rpmLimited&&!feedLimited;
+  $: targetOperationChoice=operationChoices.find(choice=>choice.id===targetOperationId)??null;
+  $: candidateOperation=targetOperation?({...targetOperation,tool:{...targetOperation.tool,id:selectedToolId??'tool-calculator',name:tool.name.trim()||millingToolLabels[tool.kind],diameterMm:calculationDiameter,kind:tool.kind}} as CamOperation):null;
+  $: toolCompatibility=candidateOperation?validateToolCompatibility(candidateOperation):null;
+  $: toolTransferBlocked=toolCompatibility?.level==='fail';
   const n=(v:number|null|undefined,d=0)=>v==null?'—':v.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d});
 
   onMount(()=>{
@@ -85,10 +96,15 @@
   function editTool(saved:MillingTool){loadTool(saved);libraryMessage='Werkzeug zum Bearbeiten geladen.'}
   function deleteTool(id:string){persist(library.filter(item=>item.id!==id));if(selectedToolId===id){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft')}libraryMessage='Werkzeug entfernt.';transferMessage=''}
   function newTool(){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft');activeTab='data';libraryMessage='';transferMessage=''}
+  function chooseTargetOperation(event:Event){
+    const id=(event.currentTarget as HTMLSelectElement).value;
+    if(id)onTargetOperationChange?.(id);
+    transferMessage='';
+  }
   function applyToOperation(){
-    if(!onApplyToOperation||recommendedRpm==null||recommendedFeed==null||!(calculationDiameter>0))return;
-    onApplyToOperation({toolId:selectedToolId??'tool-calculator',toolName:tool.name.trim()||millingToolLabels[tool.kind],toolKind:tool.kind,diameterMm:calculationDiameter,feedMmMin:Math.round(recommendedFeed),spindleRpm:Math.round(recommendedRpm)});
-    transferMessage=`Übernommen in ${activeOperationName}: ${millingToolLabels[tool.kind]} · ${materialProfile.label} · Ø ${n(calculationDiameter,2)} mm · ${n(Math.round(recommendedRpm))} 1/min · ${n(Math.round(recommendedFeed))} mm/min.`;
+    if(!onApplyToOperation||!targetOperationId||toolTransferBlocked||recommendedRpm==null||recommendedFeed==null||!(calculationDiameter>0))return;
+    onApplyToOperation({operationId:targetOperationId,toolId:selectedToolId??'tool-calculator',toolName:tool.name.trim()||millingToolLabels[tool.kind],toolKind:tool.kind,diameterMm:calculationDiameter,feedMmMin:Math.round(recommendedFeed),spindleRpm:Math.round(recommendedRpm)});
+    transferMessage=`Übernommen in ${targetOperationChoice?.label??activeOperationName}: ${millingToolLabels[tool.kind]} · ${materialProfile.label} · Ø ${n(calculationDiameter,2)} mm · ${n(Math.round(recommendedRpm))} 1/min · ${n(Math.round(recommendedFeed))} mm/min.`;
   }
 </script>
 
@@ -98,6 +114,18 @@
     <button class:active={activeTab==='calculator'} onclick={()=>activeTab='calculator'}>Drehzahl &amp; Vorschub</button>
     <button class:active={activeTab==='library'} onclick={()=>activeTab='library'}>Werkzeugbibliothek <span class="count">{library.length}</span></button>
   </nav>
+
+  <section class="operation-target">
+    <div>
+      <b>Schnittdaten für Bearbeitung</b>
+      <span>{targetOperationChoice?.summary??'Zielbearbeitung wählen'}</span>
+      {#if targetOperation}<span><strong>Aktuell zugewiesen:</strong> {targetOperation.tool.name} · Ø {n(targetOperation.tool.diameterMm,2)} mm · {targetOperation.feedMmMin} mm/min · {targetOperation.spindleRpm} 1/min</span>{/if}
+      {#if toolCompatibility}<span class="compatibility" class:compat-pass={toolCompatibility.level==='pass'} class:compat-warn={toolCompatibility.level==='warn'} class:compat-fail={toolCompatibility.level==='fail'}><strong>{toolCompatibility.level.toUpperCase()} · {toolCompatibility.title}:</strong> {toolCompatibility.detail}</span>{/if}
+    </div>
+    <select value={targetOperationId??''} onchange={chooseTargetOperation} aria-label="Zielbearbeitung für Werkzeug und Schnittdaten">
+      {#each operationChoices as choice}<option value={choice.id}>{choice.label} · {choice.name}</option>{/each}
+    </select>
+  </section>
 
   {#if activeTab==='data'}
   <div class="content-grid">
@@ -169,7 +197,7 @@
     <aside class="side-column">
       <section class="results"><div class="result-head"><b>EMPFOHLENE EINSTELLUNGEN</b><span class:warning={!insideProfile}>{insideProfile?'✓ Im Maschinenprofil':'↘ Maschinenlimit aktiv'}</span></div><div class="result-values"><div><p>Drehzahl</p><strong>{n(recommendedRpm)} <small>1/min</small></strong></div><div><p>Vorschub</p><strong>{n(recommendedFeed)} <small>mm/min</small></strong></div></div></section>
       <section class="card"><h3>Aktives Werkzeug</h3><div class="kv"><span>Typ</span><b>{millingToolLabels[tool.kind]}</b></div><div class="kv"><span>Name</span><b>{tool.name}</b></div><div class="kv"><span>Rechen-Ø</span><b>{n(calculationDiameter,2)} mm</b></div><div class="kv"><span>Schneiden</span><b>{tool.flutes}</b></div><div class="kv"><span>fz Werkzeug</span><b>{n(tool.chipLoadMm,3)} mm</b></div><div class="kv"><span>fz wirksam</span><b>{n(effectiveChipLoad,3)} mm</b></div></section>
-      <section class="apply-card"><div><h3>In aktive Bearbeitung übernehmen</h3><p>Ziel: <b>{activeOperationName}</b></p><p>Übernommen werden Werkzeugname, Fräsertyp, Rechen-Ø sowie die aus <b>{materialProfile.label}</b> berechnete Drehzahl und der Vorschub. Die bestehende Operation ändert sich erst mit diesem Button.</p></div><button class="primary-action apply-button" disabled={!onApplyToOperation||recommendedRpm==null||recommendedFeed==null} onclick={applyToOperation}>Werkzeug &amp; Schnittdaten übernehmen</button>{#if transferMessage}<p class="transfer-message">✓ {transferMessage}</p>{/if}</section>
+      <section class="apply-card"><div><h3>{targetOperationChoice?`In ${targetOperationChoice.label} übernehmen`:'Bearbeitung wählen'}</h3><p>Ziel: <b>{targetOperationChoice?.name??activeOperationName}</b></p><p>Übernommen werden Werkzeugname, Fräsertyp, Rechen-Ø sowie die aus <b>{materialProfile.label}</b> berechnete Drehzahl und der Vorschub. Eintauchvorschub, Zustellung und weitere CAM-Parameter bleiben bewusst Eigentum der Bearbeitung.</p>{#if toolCompatibility}<p class="compatibility" class:compat-pass={toolCompatibility.level==='pass'} class:compat-warn={toolCompatibility.level==='warn'} class:compat-fail={toolCompatibility.level==='fail'}><strong>{toolCompatibility.level.toUpperCase()}:</strong> {toolCompatibility.detail}</p>{/if}</div><button class="primary-action apply-button" disabled={!onApplyToOperation||!targetOperationId||toolTransferBlocked||recommendedRpm==null||recommendedFeed==null} onclick={applyToOperation}>Werkzeug &amp; Schnittdaten übernehmen</button>{#if transferMessage}<p class="transfer-message">✓ {transferMessage}</p>{/if}</section>
       <section class="card"><h3>Werkstoff des Rohlings</h3><div class="material-grid">{#each materialKinds as material}<button class:active={$stockMaterial===material} aria-pressed={$stockMaterial===material} onclick={()=>chooseMaterial(material)}>{materialProfiles[material].shortLabel}</button>{/each}</div><div class="material-summary"><b>{materialProfile.label}</b><span>vc {n(materialProfile.cuttingSpeedMMin)} m/min · fz-Faktor {n(materialProfile.chipLoadFactor,2)}</span></div></section>
     </aside>
   </div>
@@ -196,7 +224,9 @@
   {/if}
 </div>
 
-<style>
+<style>.compatibility{display:block;margin-top:5px;font-size:.7rem;line-height:1.35}.compat-pass{color:#2f6b4d}.compat-warn{color:#8a641f}.compat-fail{color:#9a3e35}.operation-target .compatibility strong{font-size:inherit}
+.operation-target{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:12px 0 18px;padding:11px 13px;border:1px solid #deded8;border-radius:8px;background:#f7f7f4}.operation-target div{display:grid;gap:3px}.operation-target b{font-size:.76rem;color:#424a46}.operation-target span{font-size:.7rem;color:#747a76}.operation-target select{min-width:240px;max-width:48%;border:1px solid #d3d5d0;border-radius:7px;background:#fff;padding:7px 9px;color:#424a46}
+
 :global(.workspace:has(.tools-page)){grid-template-columns:minmax(0,1fr)!important;min-width:0!important}
 :global(.workspace:has(.tools-page)>.viewport){display:none!important}
 :global(.workspace:has(.tools-page)>.inspector){display:block!important;width:auto!important;min-width:0!important;padding:0!important;border-left:0!important;overflow:auto!important;background:#fbfbf9!important}

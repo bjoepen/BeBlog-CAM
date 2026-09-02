@@ -1,80 +1,138 @@
 # BeBlog CAM
 
-**Focused 3-axis CAM for makers. macOS first.**
+**CAM without the maze.**
 
-BeBlog CAM is an experimental open-source CAM application focused on small CNC routers and practical maker workflows. The initial target is intentionally narrow: import a STEP part, define stock and tools, create 2.5D/3D toolpaths, simulate the result, and export G-code for LinuxCNC and Estlcam-oriented workflows.
+BeBlog CAM is an open-source, maker-friendly CAM application for macOS. It turns DXF and STEP geometry into visible, verifiable toolpaths without forcing hobby makers through the usual CAM maze of object trees, permanent toolbars and deeply nested dialogs.
 
-## Product principle
+The guiding idea is simple:
 
-> Part lives in stock. Stock lives on the machine.
+> **Klarheit ist nicht weniger Information. Klarheit ist Information zur richtigen Zeit.**
 
-The data model keeps three coordinate concerns separate from day one:
+BeBlog CAM keeps the workpiece at the center and follows one stable workflow:
 
-- **Part** — design geometry and CAM features.
-- **Stock** — the real raw material, which may be larger than the part.
-- **WCS** — the measured work coordinate system on the CNC machine.
+**Bauteil → Rohling → Werkzeuge → Bearbeiten → Prüfen → Fräsen**
 
-This allows future stock probing to measure a slightly rotated workpiece without forcing the user to align it perfectly by hand.
+The interface stays calm while the CAM underneath is allowed to become technically capable.
 
-## 0.1 scope
+## What already works
 
-The first useful milestone is a complete 3-axis workflow for the CBG headstock reference part:
+BeBlog CAM is no longer just an architecture experiment. The current alpha already contains a practical 2D/2.5D and emerging 3D workflow, including:
 
-1. STEP/BRep import
-2. model orientation
-3. rectangular stock definition
-4. tool library
-5. facing
-6. contouring
-7. pockets
-8. drilling / helical bore milling
-9. Z-level roughing
-10. parallel 3D finishing with ballnose tools
-11. stock simulation
-12. basic collision checks
-13. LinuxCNC postprocessor
-14. configurable probing model for stock XY alignment and Z-zero
+- DXF import for 2D geometry
+- native STEP/BRep import through Open CASCADE Technology (OCCT)
+- model orientation and work-coordinate handling
+- stock definition from dimensions or part geometry
+- material profiles and tool-library integration
+- facing
+- contour machining with **outside / inside / on-line** tool placement
+- deliberately **opened contours**: individual segments of an otherwise closed contour can be excluded from machining
+- pockets
+- carve operations
+- drilling
+- helical bore milling
+- STEP face selection
+- Z-level roughing groundwork for 3D parts
+- roughing allowance for a later finishing pass
+- visual toolpath previews
+- bounded **2.5D inspection** for checking real cutting depths without turning the 2D canvas into a full 3D viewer
+- unified checks in **Prüfen**
+- G-code generation for practical CNC workflows
 
-Explicitly out of scope for 0.1: 4/5-axis machining, turning, ATC management, production planning and cloud services.
+Development is driven against real maker parts, including the CBG headstock reference workpiece, rather than synthetic demo geometry alone.
 
-## Technical direction
+## Product DNA
 
-- **Desktop shell:** Tauri v2
-- **Frontend:** Svelte + TypeScript
-- **Application/core:** Rust
+BeBlog CAM is designed from the perspective of a hobby maker, not an industrial CAM department.
+
+A few rules are deliberately binding:
+
+- **The left side stays simple. Complexity grows contextually on the right.**
+- The workpiece remains the visual center.
+- Functions appear where they are needed in the machining workflow.
+- Technical depth must not automatically become visual complexity.
+- Expert parameters stay reachable without becoming default noise.
+- Kernel terminology such as BRep or tessellation stays internal unless it genuinely helps diagnose a problem.
+- `Prüfen` is a real workflow step before machine output, not an afterthought.
+- Every build should already feel like BeBlog CAM; usability is not postponed to a later polish phase.
+
+Or, more compactly:
+
+> **BeBlog CAM zeigt einen Arbeitsablauf, keine Werkzeugkiste.**
+
+The full product contract lives in [docs/PRODUCT-DNA.md](docs/PRODUCT-DNA.md).
+
+## No blind toolpaths
+
+A CAM application should not ask the user to trust a calculation they cannot see.
+
+BeBlog CAM is therefore moving toward a canonical toolpath pipeline in which the geometry shown in the viewport is the same machining geometry consumed by later checks and G-code generation.
+
+Current previews use a visually distinct toolpath language and can expose multiple cutting depths through the 2.5D inspection view. This makes questions such as “Are there really three stepdowns?” or “Did that excluded contour segment come back?” answerable **before** G-code leaves the application.
+
+The goal is straightforward:
+
+**Operation → canonical toolpath → visual verification → Prüfen → G-code**
+
+No surprise egg at the machine.
+
+## Coordinate model
+
+> **Part lives in stock. Stock lives on the machine.**
+
+BeBlog CAM keeps the coordinate concerns separate:
+
+- **Part** — design geometry and CAM features
+- **Stock** — the real raw material, which may be larger than the part
+- **WCS** — the measured work coordinate system on the CNC machine
+
+The resulting mental and technical model is:
+
+**Part → Stock → WCS → Machine**
+
+This separation also leaves room for later probing workflows in which a slightly rotated real workpiece can be measured instead of requiring perfect manual alignment.
+
+## Technical foundation
+
+- **Desktop:** Tauri v2
+- **Frontend:** Svelte 5 + TypeScript
+- **Native application/core:** Rust
 - **Exact CAD geometry:** Open CASCADE Technology (OCCT)
-- **3D toolpath research baseline:** OpenCAMLib
 - **Primary platform:** macOS
-- **Initial controller target:** LinuxCNC
+- **Package manager:** pnpm
 
-The repository is intentionally starting architecture-first. Geometry and CAM engines must remain independent from UI and postprocessors so that strategies can evolve without rewriting the application shell.
+Exact STEP/BRep geometry remains the source of truth. Tessellation exists for display and interaction; it does not replace the CAD model.
 
-## Reference workflow
+Geometry, CAM strategies, visualisation, validation and postprocessing are kept separate enough that one layer can evolve without silently redefining another.
 
-```text
-STEP
-  ↓
-Part / BRep
-  ↓
-Orientation
-  ↓
-Stock
-  ↓
-Operations
-  ├─ 2.5D
-  └─ 3D
-  ↓
-Toolpaths
-  ↓
-Stock simulation / checks
-  ↓
-Postprocessor
-  ↓
-LinuxCNC G-code
+## Development
+
+For the frontend gates:
+
+```bash
+pnpm check
+pnpm build
 ```
+
+For the native macOS development application:
+
+```bash
+pnpm native:dev
+```
+
+The native path is required when testing functionality that depends on the OCCT bridge, particularly STEP/BRep workflows.
+
+## Scope
+
+BeBlog CAM is focused on **3-axis maker CNC machining**.
+
+The project deliberately does not try to become an industrial manufacturing suite. 4/5-axis machining, turning, production planning, cloud services and enterprise workflow management are outside the present product direction.
+
+The aim is narrower and harder to fake: make common CNC work understandable, inspectable and pleasant without sacrificing the geometry and machining correctness underneath.
 
 ## Status
 
-**Build 001 — bootstrap in progress.**
+**Early alpha — under active development.**
 
-The CAM flea is not considered a safety system. 🦟
+The repository evolves in small, auditable increments against real machining workflows. Features are expected to pass both technical gates and visual/real-world checks before they are treated as established behaviour.
+
+And yes, there is a CAM flea. Its job is to find problems before the router does. 🐜
