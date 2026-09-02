@@ -36,13 +36,55 @@ export function canonicalDrillToolpathFromGcode(code:string,operation:DrillOpera
     Object.assign(state,next);
   }
   if(!motions.length)return null;
+
+  // Canonical planar cut representation:
+  // - machine motions retain full XYZ semantics for postprocessing / 2.5D
+  // - runs represent the XY footprint of actual cutting motion for top previews
+  // Rapid moves and pure-Z plunges/retracts do not become planar cut runs.
+  const runs=motions.flatMap(motion=>{
+    if(motion.kind==='rapid3')return[];
+    const xyChanged=Math.abs(motion.end.x-motion.start.x)>1e-9||Math.abs(motion.end.y-motion.start.y)>1e-9;
+    if(!xyChanged)return[];
+
+    if(motion.kind==='line3'){
+      return[{
+        kind:'cut' as const,
+        z:motion.end.z,
+        points:[
+          {x:motion.start.x,y:motion.start.y},
+          {x:motion.end.x,y:motion.end.y},
+        ],
+        retractAfter:false,
+      }];
+    }
+
+    // Preserve native XY arc semantics. Top-view projection ignores the
+    // simultaneous Z descent but keeps the true cutter-center circle.
+    return[{
+      kind:'cut' as const,
+      z:motion.end.z,
+      points:[
+        {x:motion.start.x,y:motion.start.y},
+        {x:motion.end.x,y:motion.end.y},
+      ],
+      segments:[{
+        kind:'arc' as const,
+        start:{x:motion.start.x,y:motion.start.y},
+        end:{x:motion.end.x,y:motion.end.y},
+        center:{...motion.center},
+        ccw:motion.ccw,
+      }],
+      retractAfter:false,
+    }];
+  });
+
   return{
     version:1,
     operationKind:'drill',
     strategy:operation.method==='helical-mill'?'helical-bore':'drill',
     tool:{diameterMm:operation.tool.diameterMm},
     stepoverPercent:0,
-    runs:[],
+    runs,
     motions,
   };
 }

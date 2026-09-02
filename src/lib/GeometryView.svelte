@@ -6,6 +6,7 @@
   import { buildFaceTargetRoughing } from './faceTargetRoughing';
   import { buildFaceTargetRasterToolpath } from './faceTargetToolpath';
   import type { CanonicalMachineMotion, CanonicalToolpath, ToolpathPoint3 } from './canonicalToolpath';
+  import { projectDxfPreviewPoint, type DxfPreviewMode } from './dxfPreviewProjection';
 
   export let summary:ImportSummary;
   export let stock:StockDefinition;
@@ -14,6 +15,7 @@
   export let orientation:PartOrientation;
   export let wcs:WorkCoordinateSystem;
   export let canonicalToolpath:CanonicalToolpath|null=null;
+  export let preflightCanonicalToolpaths:CanonicalToolpath[]=[];
   export let preflightFaceTargetToolpaths:CanonicalToolpath[]=[];
   export let selectedDrillCurveIds:number[]=[];
   export let roughingOperation:ZLevelRoughingOperation|null=null;
@@ -94,30 +96,58 @@
     return{triangles,edges,roughRegions,toolPaths,canonicalFaceTargetToolpath:toolpath,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,toolpathCount:toolPaths.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
   }
 
-  function scene2d(activeToolpath:CanonicalToolpath|null){
+  function scene2d(activeToolpath:CanonicalToolpath|null,jobToolpaths:CanonicalToolpath[]=[]){
+    const renderToolpaths=activeToolpath?[activeToolpath]:jobToolpaths;
+    const previewMode:DxfPreviewMode=jobToolpaths.length
+      ?'job-top'
+      :activeToolpath?.operationKind==='drill'&&drillViewMode==='25d'
+        ?'drill-25d'
+        :'edit-top';
     const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();
     if(!flat.length)return null;
     const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY);
     const placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());
-    const drill25d=activeToolpath?.operationKind==='drill'&&drillViewMode==='25d';
     const pivot={
       x:noStock?(partBounds.minX+partBounds.maxX)/2:(wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2),
       y:noStock?(partBounds.minY+partBounds.maxY)/2:(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2)
     };
-    const project=(point:{x:number;y:number;z?:number}):P2=>{
-      if(!drill25d)return{x:point.x,y:point.y};
-      const yaw=drillYawDeg*Math.PI/180,tilt=drillTiltDeg*Math.PI/180;
-      const dx=point.x-pivot.x,dy=point.y-pivot.y,z=point.z??0;
-      const xr=dx*Math.cos(yaw)-dy*Math.sin(yaw);
-      const yr=dx*Math.sin(yaw)+dy*Math.cos(yaw);
-      return{x:pivot.x+xr,y:pivot.y+yr*Math.cos(tilt)+z*Math.sin(tilt)};
-    };
+    const project=(point:{x:number;y:number;z?:number}):P2=>
+      projectDxfPreviewPoint(
+        point,
+        previewMode,
+        pivot,
+        {yawDeg:drillYawDeg,tiltDeg:drillTiltDeg},
+      );
     const projectedPlaced=placed.map(points=>points.map(point=>project({...point,z:0})));
-    const canonicalRuns=(activeToolpath?.runs??[]).map(run=>({
+    const sampleRunPoints=(run:CanonicalToolpath['runs'][number])=>{
+      if(!run.segments?.length)return run.points;
+      const out:{x:number;y:number}[]=[];
+      for(const segment of run.segments){
+        if(segment.kind==='line'){
+          if(!out.length)out.push(segment.start);
+          out.push(segment.end);
+          continue;
+        }
+        const radius=Math.hypot(segment.start.x-segment.center.x,segment.start.y-segment.center.y);
+        if(!(radius>0)){if(!out.length)out.push(segment.start);out.push(segment.end);continue}
+        let a0=Math.atan2(segment.start.y-segment.center.y,segment.start.x-segment.center.x);
+        let a1=Math.atan2(segment.end.y-segment.center.y,segment.end.x-segment.center.x);
+        let delta=a1-a0;
+        if(segment.ccw){while(delta<=0)delta+=Math.PI*2}else{while(delta>=0)delta-=Math.PI*2}
+        const steps=Math.max(12,Math.ceil(Math.abs(delta)/(Math.PI/18)));
+        if(!out.length)out.push(segment.start);
+        for(let i=1;i<=steps;i++){
+          const t=i/steps,a=a0+delta*t;
+          out.push({x:segment.center.x+Math.cos(a)*radius,y:segment.center.y+Math.sin(a)*radius});
+        }
+      }
+      return out;
+    };
+    const canonicalRuns=renderToolpaths.flatMap(toolpath=>toolpath.runs.map(run=>({
       z:run.z,
-      points:run.points.map(point=>project({...fromWcs2(point),z:run.z}))
-    }));
-    const canonicalEntries=(activeToolpath?.runs??[]).flatMap(run=>(run.entrySegments??[]).flatMap(segment=>{
+      points:sampleRunPoints(run).map(point=>project({...fromWcs2(point),z:run.z}))
+    })));
+    const canonicalEntries=previewMode==='job-top'?[]:renderToolpaths.flatMap(toolpath=>toolpath.runs.flatMap(run=>(run.entrySegments??[]).flatMap(segment=>{
       const sampled=sampleMachineMotion(segment);
       return sampled.slice(1).map((end,index)=>{
         const start=sampled[index],a=fromWcs2(start),b=fromWcs2(end);
@@ -129,13 +159,13 @@
           ]
         };
       });
-    }));
-    const machinePaths=(activeToolpath?.motions??[]).map((motion,motionIndex)=>{
+    })));
+    const machinePaths=previewMode==='job-top'?[]:renderToolpaths.flatMap((toolpath,toolpathIndex)=>(toolpath.motions??[]).map((motion,motionIndex)=>{
       const xyChanged=Math.abs(motion.end.x-motion.start.x)>1e-9||Math.abs(motion.end.y-motion.start.y)>1e-9;
       const zChanged=Math.abs(motion.end.z-motion.start.z)>1e-9;
       const points=sampleMachineMotion(motion).map(point=>{const xy=fromWcs2(point);return project({x:xy.x,y:xy.y,z:point.z})});
-      return{points,rapid:motion.kind==='rapid3',traverse:motion.kind==='rapid3'&&xyChanged&&!zChanged,motionIndex};
-    }).filter(entry=>entry.points.length>=2);
+      return{points,rapid:motion.kind==='rapid3',traverse:motion.kind==='rapid3'&&xyChanged&&!zChanged,motionIndex:toolpathIndex*100000+motionIndex};
+    })).filter(entry=>entry.points.length>=2);
     const machineProjected=machinePaths.flatMap(entry=>entry.points);
 
     const makeResult=(planeWorld:P2[],stockWorld:P2[]|null)=>{
@@ -146,7 +176,7 @@
       const wy=noStock?(wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2):(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2);
       return{
         paths:projectedPlaced.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),
-        selectedDrillPaths:drill25d?selectedDrillCurveIds.flatMap(id=>{
+        selectedDrillPaths:previewMode==='drill-25d'?selectedDrillCurveIds.flatMap(id=>{
           const points=projectedPlaced[id],curve=curves[id];
           if(!points||curve?.kind!=='circle')return[];
           return[path(points.map(map),true)];
@@ -154,7 +184,7 @@
         toolPaths:canonicalRuns.map(run=>({d:path(run.points.map(map)),z:run.z})).filter(run=>Boolean(run.d)),
         entryPaths:canonicalEntries.map(entry=>({d:path(entry.points.map(map)),z:entry.z})).filter(entry=>Boolean(entry.d)),
         machinePaths:machinePaths.map(entry=>({d:path(entry.points.map(map)),rapid:entry.rapid,traverse:entry.traverse,motionIndex:entry.motionIndex})),
-        plane:path(plane.map(map),true),stock:stockProjected?path(stockProjected.map(map),true):null,wcs:map(project({x:wx,y:wy,z:0})),noStock,drill25d
+        plane:path(plane.map(map),true),stock:stockProjected?path(stockProjected.map(map),true):null,wcs:map(project({x:wx,y:wy,z:0})),noStock,previewMode
       };
     };
 
@@ -175,10 +205,10 @@
   function move(e:PointerEvent){
     if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;if(Math.abs(dx)+Math.abs(dy)>2)dragMoved=true;lastX=e.clientX;lastY=e.clientY;
     if(summary.kind==='step'){if(dragMode==='orbit'){yaw+=dx*.008;pitch=Math.max(-1.5,Math.min(1.5,pitch-dy*.008))}else{viewX-=dx/zoom;viewY-=dy/zoom;queueMicrotask(applyViewBox)};return;}
-    if(summary.kind==='dxf'&&canonicalToolpath?.operationKind==='drill'&&drillViewMode==='25d'){drillYawDeg=Math.max(-35,Math.min(35,drillYawDeg+dx*.22));drillTiltDeg=Math.max(12,Math.min(60,drillTiltDeg+dy*.22));}
+    if(summary.kind==='dxf'&&s2?.previewMode==='drill-25d'){drillYawDeg=Math.max(-35,Math.min(35,drillYawDeg+dx*.22));drillTiltDeg=Math.max(12,Math.min(60,drillTiltDeg+dy*.22));}
   }
   function up(){dragging=false}
-  function wheel(e:WheelEvent){if(summary.kind==='step'||(summary.kind==='dxf'&&canonicalToolpath?.operationKind==='drill')){e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}}
+  function wheel(e:WheelEvent){if(summary.kind==='step'||(summary.kind==='dxf'&&s2?.previewMode==='drill-25d')){e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}}
   function reset(){yaw=-.72;pitch=.48;drillYawDeg=-12;drillTiltDeg=38;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
   function toggleFace(faceId:number){if(!showZLevels||dragMoved||!s3?.facePickingAvailable)return;const next=(selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId]).sort((a,b)=>a-b);onSelectedFaceIdsChange(next)}
   function faceKey(e:KeyboardEvent,faceId:number){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleFace(faceId)}}
@@ -192,7 +222,7 @@
   $: onDrillViewModeChange(drillViewMode);
   $: if(!roughingOperation&&showZLevels)showZLevels=false;
   $: if(roughingOperation&&!showZLevels)showZLevels=true;
-  $: s2=(summary.fileName,drillViewMode,drillYawDeg,drillTiltDeg,selectedDrillCurveIds.join(','),scene2d(canonicalToolpath));
+  $: s2=(summary.fileName,drillViewMode,drillYawDeg,drillTiltDeg,selectedDrillCurveIds.join(','),preflightCanonicalToolpaths,scene2d(canonicalToolpath,preflightCanonicalToolpaths));
 </script>
 
 <div class="geometry-view" bind:this={root}>
@@ -244,7 +274,7 @@
         {/if}
         <span>Drag: drehen · Shift/Mitte: verschieben</span>
       </span>
-    {:else if canonicalToolpath?.operationKind==='drill'}
+    {:else if canonicalToolpath?.operationKind==='drill'&&s2?.previewMode!=='job-top'}
       <span class="help">
         <button class:active-toggle={drillViewMode==='25d'} onclick={()=>drillViewMode='25d'}>2.5D</button>
         <button class:active-toggle={drillViewMode==='top'} onclick={()=>drillViewMode='top'}>Draufsicht</button>
@@ -252,6 +282,8 @@
         <span>{canonicalToolpath.strategy==='helical-bore'?'Helixfräsen':'Bohren'} · {canonicalToolpath.motions?.length??0} Maschinenbewegungen{drillViewMode==='25d'?` · ${Math.round(drillTiltDeg)}°`:''}</span>
         {#if drillViewMode==='25d'}<span>Drag: Ansicht drehen · Mausrad: zoomen</span>{/if}
       </span>
+    {:else if summary.kind==='dxf'&&preflightCanonicalToolpaths.length}
+      <span class="help"><span>Gesamtjob · {preflightCanonicalToolpaths.length} Bearbeitung{preflightCanonicalToolpaths.length===1?'':'en'} · Werkzeugwege im Prüfen</span></span>
     {/if}
   </div>
 </div>
