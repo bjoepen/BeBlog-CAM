@@ -1,0 +1,30 @@
+name: Patch 004N fix
+on:
+  push:
+    branches: [agent/beblog-cam-004n-rest-machining]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004n-rest-machining
+      - shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/lib/jobGcode.ts'); s=p.read_text()
+          anchor="import { generateStepPocketGcode } from './stepPocketGcode';"
+          insert="import { generateStepPocketGcode } from './stepPocketGcode';\nimport { buildStepPocketOperationState } from './stepPocketOperation';\nimport { buildPocketCanonicalToolpath, postPocketCanonicalToolpath } from './pocketCanonicalToolpath';\nimport { applyPocketRestMachining } from './pocketRestMachining';"
+          if "applyPocketRestMachining" not in s.split('export type JobGcodeResult')[0]: s=s.replace(anchor,insert)
+          s=s.replace("if(source.tool.diameterMm<=pocket.tool.diameterMm)return{ok:false,errors:['Restmaterial benötigt ein kleineres Folgewerkzeug als die vorherige Taschenbearbeitung.'],warnings:[],code:''};", "if(source.tool.diameterMm<=pocket.tool.diameterMm)return{ok:false,errors:['Restmaterial benötigt ein kleineres Folgewerkzeug als die vorherige Taschenbearbeitung.'],warnings:[],code:''};\n      if(args.summary.kind==='step'&&source.stepFaceId!==pocket.stepFaceId)return{ok:false,errors:['Restmaterialquelle und Folgeoperation müssen dieselbe STEP-Taschenfläche verwenden.'],warnings:[],code:''};\n      if(args.summary.kind==='dxf'&&source.contourId!==pocket.contourId)return{ok:false,errors:['Restmaterialquelle und Folgeoperation müssen dieselbe DXF-Taschenkontur verwenden.'],warnings:[],code:''};")
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/lib/jobGcode.ts
+          git diff --cached --quiet || git commit -m "fix(004n): harden pocket rest machining integration"
+          git push
