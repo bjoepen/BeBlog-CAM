@@ -13,6 +13,7 @@
   export let operation:ZLevelRoughingOperation;
   export let targetZ:number|null=null;
   export let roughBottomZ:number|null=null;
+  export let mode:'face-target'|'model'='face-target';
 
   let copied=false;
   let exportMessage='';
@@ -23,6 +24,7 @@
     feedMmMin:operation.feedMmMin,
     plungeMmMin:operation.plungeMmMin,
     spindleRpm:operation.spindleRpm,
+    source:mode,
   });
   $: processed=postProcessGcode(rawCode,$postProcessorStore);
   $: displayCode=processed.code;
@@ -31,7 +33,7 @@
 
   function defaultNcName(){
     const base=(summary.fileName||'beblog-cam').replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9äöüÄÖÜß._ -]+/g,'-').trim()||'beblog-cam';
-    return `${base}-face-target-roughing.nc`;
+    return `${base}-${mode==='model'?'model':'face-target'}-roughing.nc`;
   }
   async function copyCode(){
     if(!valid||!displayCode)return;
@@ -55,7 +57,7 @@
 </script>
 
 <p class="eyebrow">06 · Fräsen</p>
-<h2>Face-Target Z-Level Roughing</h2>
+<h2>{mode==='model'?'Modellbasiertes Z-Level Schruppen':'Face-Target Z-Level Roughing'}</h2>
 
 {#if valid}
   <div class="release pass">
