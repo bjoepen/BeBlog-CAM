@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ZLevelRoughingOperation, SurfaceFinishingOperation } from './types';
+  import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ZLevelRoughingOperation, SurfaceFinishingOperation, ContourOperation, PocketOperation, DrillOperation } from './types';
   import { projectPoint, projectTriangles, type P2, type P3, type View } from './stepView';
   import { decodeStepEdges } from './stepEdgeView';
   import { buildFaceTargetRoughing } from './faceTargetRoughing';
@@ -14,6 +14,10 @@
   import { buildCurvedFaceRoughing } from './curvedFaceRoughing';
   import { ballnoseContactAt } from './ballnoseSurfaceContact';
   import { buildModelRoughingCanonicalToolpath } from './modelRoughingToolpath';
+  import { buildStepManufacturingFeatureSource } from './stepManufacturingFeatures';
+  import { recognizeStepHoles } from './stepHoleRecognition';
+  import { buildStepContourOperationState } from './stepContourOperation';
+  import { buildStepPocketOperationState } from './stepPocketOperation';
 
   export let summary:ImportSummary;
   export let stock:StockDefinition;
@@ -32,6 +36,10 @@
   export let onSelectedFaceIdsChange:(faceIds:number[])=>void=()=>{};
   export let onDrillViewModeChange:(mode:'top'|'25d')=>void=()=>{};
   export let onFaceTargetChange:(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null)=>void=()=>{};
+  export let stepSelectionOperation:ContourOperation|PocketOperation|DrillOperation|null=null;
+  export let onStepWireIdChange:(wireId:number|null)=>void=()=>{};
+  export let onStepFaceIdChange:(faceId:number|null)=>void=()=>{};
+  export let onStepHoleFeatureIdsChange:(featureIds:string[])=>void=()=>{};
 
   const width=1000,height=650,pad=54;
   let viewport:SVGSVGElement;
@@ -49,6 +57,10 @@
   $: faceTargetEditing=!!roughingOperation&&(roughingOperation.roughingMode??'face-target')==='face-target';
   $: surfaceFinishingEditing=!!surfaceFinishingOperation;
   $: selectableSurfaceEditing=faceTargetEditing||surfaceFinishingEditing;
+  $: stepFeatureSourceResult=summary.kind==='step'?buildStepManufacturingFeatureSource(summary):null;
+  $: stepHoleCandidates=stepFeatureSourceResult?.ok?recognizeStepHoles(stepFeatureSourceResult.source).holes:[];
+  $: stepContourSelection=stepSelectionOperation?.kind==='contour'?buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation:stepSelectionOperation}):null;
+  $: stepPocketSelection=stepSelectionOperation?.kind==='pocket'?buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation:stepSelectionOperation}):null;
   const modelRegionSliceStepMm=2;
   let selectionSource=summary.fileName;
   let s3: ReturnType<typeof scene3d>;
@@ -186,7 +198,7 @@
     const curvedRoughingWorld=curvedRoughing?.levels.flatMap(level=>
       level.chains.map(chain=>chain.points.map(point=>({x:point.x,y:point.y,z:level.z+0.06})))
     )??[];
-    const edgeWorld=decodeStepEdges(summary.brep?.displayEdges).map(edge=>{const points:P3[]=[];for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));return points}).filter(edge=>edge.length>=2);
+    const edgeWorld=decodeStepEdges(summary.brep?.displayEdges).map(edge=>{const points:P3[]=[];for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));return{edgeId:edge.edgeId,points}}).filter(edge=>edge.points.length>=2);
     const wp=wcsPoint();
     const modelRoughingProof=includeModelToolpath&&roughingOperation&&wcs.z==='top'
       ?buildModelRoughingCanonicalToolpath(
@@ -212,9 +224,9 @@
     const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
     const box:P3[]=[{x:0,y:0,z:0},{x:stock.width,y:0,z:0},{x:stock.width,y:stock.height,z:0},{x:0,y:stock.height,z:0},{x:0,y:0,z:stock.thickness},{x:stock.width,y:0,z:stock.thickness},{x:stock.width,y:stock.height,z:stock.thickness},{x:0,y:stock.height,z:stock.thickness}];
     const al=Math.max(35,Math.min(stock.width,stock.height)*.55),axes=[wp,{x:wp.x+al,y:wp.y,z:wp.z},wp,{x:wp.x,y:wp.y+al,z:wp.z},wp,{x:wp.x,y:wp.y,z:wp.z+al}];
-    const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>edge.map(q=>projectPoint(q,v))),rr=regionWorld.map(region=>region.map(loop=>loop.map(q=>projectPoint(q,v)))),tp=toolWorld.map(run=>run.map(q=>projectPoint(q,v))),mr=modelRegionWorld.map(loop=>loop.map(q=>projectPoint(q,v))),mi=invalidModelWorld.map(loop=>loop.map(q=>projectPoint(q,v))),rg=roughingRegionWorld.map(loop=>loop.map(q=>projectPoint(q,v))),ri=invalidRoughingWorld.map(loop=>loop.map(q=>projectPoint(q,v))),mt=modelRoughingWorld.map(run=>run.map(q=>projectPoint(q,v))),cf=curvedFaceSampleWorld.map(line=>line.map(q=>projectPoint(q,v))),cr=curvedRoughingWorld.map(line=>line.map(q=>projectPoint(q,v))),bn=ballnoseContactWorld.map(item=>({surface:projectPoint(item.surface,v),center:projectPoint(item.center,v),normalEnd:projectPoint(item.normalEnd,v)})),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
-    const map=fit([...pp,...ep.flat(),...rr.flat(2),...tp.flat(),...mr.flat(),...mi.flat(),...rg.flat(),...ri.flat(),...mt.flat(),...cf.flat(),...cr.flat(),...bn.flatMap(item=>[item.surface,item.center,item.normalEnd]),...pl,...pb,...pa]),fpl=pl.map(map),fb=pb.map(map),fa=pa.map(map),fw=map(pw);
-    const triangles=projectTriangles(part,v,map,faceIds),edges=ep.map(edge=>path(edge.map(map))).filter(Boolean);
+    const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>({edgeId:edge.edgeId,points:edge.points.map(q=>projectPoint(q,v))})),rr=regionWorld.map(region=>region.map(loop=>loop.map(q=>projectPoint(q,v)))),tp=toolWorld.map(run=>run.map(q=>projectPoint(q,v))),mr=modelRegionWorld.map(loop=>loop.map(q=>projectPoint(q,v))),mi=invalidModelWorld.map(loop=>loop.map(q=>projectPoint(q,v))),rg=roughingRegionWorld.map(loop=>loop.map(q=>projectPoint(q,v))),ri=invalidRoughingWorld.map(loop=>loop.map(q=>projectPoint(q,v))),mt=modelRoughingWorld.map(run=>run.map(q=>projectPoint(q,v))),cf=curvedFaceSampleWorld.map(line=>line.map(q=>projectPoint(q,v))),cr=curvedRoughingWorld.map(line=>line.map(q=>projectPoint(q,v))),bn=ballnoseContactWorld.map(item=>({surface:projectPoint(item.surface,v),center:projectPoint(item.center,v),normalEnd:projectPoint(item.normalEnd,v)})),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
+    const map=fit([...pp,...ep.flatMap(edge=>edge.points),...rr.flat(2),...tp.flat(),...mr.flat(),...mi.flat(),...rg.flat(),...ri.flat(),...mt.flat(),...cf.flat(),...cr.flat(),...bn.flatMap(item=>[item.surface,item.center,item.normalEnd]),...pl,...pb,...pa]),fpl=pl.map(map),fb=pb.map(map),fa=pa.map(map),fw=map(pw);
+    const triangles=projectTriangles(part,v,map,faceIds),edges=ep.map(edge=>({edgeId:edge.edgeId,d:path(edge.points.map(map))})).filter(edge=>Boolean(edge.d));
     const roughRegions=rr.map(region=>region.map(loop=>path(loop.map(map),true)).join(' ')).filter(Boolean);
     const toolPaths=tp.map(run=>path(run.map(map))).filter(Boolean);
     const modelRegionPaths=mr.map(loop=>path(loop.map(map),true)).filter(Boolean);
@@ -395,7 +407,11 @@
   function up(){dragging=false}
   function wheel(e:WheelEvent){if(summary.kind==='step'||(summary.kind==='dxf'&&s2?.previewMode==='drill-25d')){e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}}
   function reset(){yaw=-.72;pitch=.48;drillYawDeg=-12;drillTiltDeg=38;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
-  function toggleFace(faceId:number){if(!selectableSurfaceEditing||(!surfaceFinishingEditing&&!showZLevels)||dragMoved||!s3?.facePickingAvailable)return;const next=(selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId]).sort((a,b)=>a-b);onSelectedFaceIdsChange(next)}
+  function stepFaceSelectable(faceId:number){if(!stepSelectionOperation)return false;if(stepSelectionOperation.kind==='pocket')return !!stepPocketSelection?.candidates.some(c=>c.faceId===faceId);if(stepSelectionOperation.kind==='drill')return stepHoleCandidates.some(h=>h.faceIds.includes(faceId));return false;}
+  function stepFaceSelected(faceId:number){if(!stepSelectionOperation)return false;if(stepSelectionOperation.kind==='pocket')return stepSelectionOperation.stepFaceId===faceId;if(stepSelectionOperation.kind==='drill')return stepHoleCandidates.some(h=>h.faceIds.includes(faceId)&&(stepSelectionOperation.stepHoleFeatureIds??[]).includes(h.featureId));return false;}
+  function toggleFace(faceId:number){if(dragMoved||!s3?.facePickingAvailable)return;if(stepSelectionOperation&&stepFaceSelectable(faceId)){if(stepSelectionOperation.kind==='pocket'){onStepFaceIdChange(stepSelectionOperation.stepFaceId===faceId?null:faceId);return;}if(stepSelectionOperation.kind==='drill'){const hole=stepHoleCandidates.find(h=>h.faceIds.includes(faceId));if(!hole)return;const set=new Set(stepSelectionOperation.stepHoleFeatureIds??[]);set.has(hole.featureId)?set.delete(hole.featureId):set.add(hole.featureId);onStepHoleFeatureIdsChange([...set].sort());return;}}if(!selectableSurfaceEditing||(!surfaceFinishingEditing&&!showZLevels))return;const next=(selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId]).sort((a,b)=>a-b);onSelectedFaceIdsChange(next)}
+  function stepEdgeSelectable(edgeId:number){if(stepSelectionOperation?.kind!=='contour'||!stepContourSelection)return false;const source=stepFeatureSourceResult?.ok?stepFeatureSourceResult.source:null;if(!source)return false;const candidateIds=new Set(stepContourSelection.candidates.map(c=>c.wireId));let matches=0;for(const wires of source.wiresByFace.values())for(const wire of wires)if(candidateIds.has(wire.wireId)&&wire.edgeIds.includes(edgeId))matches++;return matches===1;}
+  function toggleStepEdge(edgeId:number){if(dragMoved||stepSelectionOperation?.kind!=='contour'||!stepContourSelection)return;const source=stepFeatureSourceResult?.ok?stepFeatureSourceResult.source:null;if(!source)return;const candidateIds=new Set(stepContourSelection.candidates.map(c=>c.wireId));const ids:number[]=[];for(const wires of source.wiresByFace.values())for(const wire of wires)if(candidateIds.has(wire.wireId)&&wire.edgeIds.includes(edgeId)&&!ids.includes(wire.wireId))ids.push(wire.wireId);if(ids.length===1)onStepWireIdChange(stepSelectionOperation.stepWireId===ids[0]?null:ids[0]);}
   function faceKey(e:KeyboardEvent,faceId:number){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggleFace(faceId)}}
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
@@ -426,7 +442,7 @@
       <path d={s3.plane} class="setup-plane"/>
       {#each s3.stock as p}<path d={p} class="stock"/>{/each}
       {#each s3.triangles as triangle}
-        <path d={path(triangle.points,true)} class="step-face" class:selectable-face={selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels)&&s3.facePickingAvailable} class:selected-face={selectedFaceIds.includes(triangle.faceId)} style={`fill:${faceFill(triangle.shade,selectedFaceIds.includes(triangle.faceId))}`} role={selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels)&&s3.facePickingAvailable?'button':undefined} tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}><title>Fläche {triangle.faceId+1}{selectedFaceIds.includes(triangle.faceId)?' · ausgewählt':''}</title></path>
+        <path d={path(triangle.points,true)} class="step-face" class:selectable-face={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable} class:selected-face={stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId)} style={`fill:${faceFill(triangle.shade,stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId))}`} role={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable?'button':undefined} tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}><title>Fläche {triangle.faceId+1}{selectedFaceIds.includes(triangle.faceId)?' · ausgewählt':''}</title></path>
       {/each}
       {#if showZLevels||preflightFaceTargetToolpaths.length||preflightStepToolpaths.length||canonicalToolpath?.operationKind==='surface-finishing'}
         {#if showZLevels}{#each s3.roughRegions as region}<path d={region} class="roughing-region" fill-rule="evenodd"/>{/each}{/if}
@@ -457,7 +473,7 @@
         {#each s3.modelRegionPaths as region}<path d={region} class="model-slice-region"/>{/each}
         {#each s3.invalidModelPaths as invalid}<path d={invalid} class="model-slice-invalid"/>{/each}
       {/if}
-      {#each s3.edges as edge}<path d={edge} class="step-edge"/>{/each}
+      {#each s3.edges as edge}<path d={edge.d} class="step-edge" class:selectable-step-edge={stepEdgeSelectable(edge.edgeId)} class:selected-step-edge={stepSelectionOperation?.kind==='contour'&&stepSelectionOperation.stepWireId!=null&&stepFeatureSourceResult?.ok&&[...stepFeatureSourceResult.source.wiresByFace.values()].flat().some(w=>w.wireId===stepSelectionOperation!.stepWireId&&w.edgeIds.includes(edge.edgeId))} role={stepEdgeSelectable(edge.edgeId)?'button':undefined} tabindex="-1" onclick={()=>toggleStepEdge(edge.edgeId)}><title>Kante {edge.edgeId+1}</title></path>{/each}
       <path d={s3.axes[0]} class="axis x"/><path d={s3.axes[1]} class="axis y"/><path d={s3.axes[2]} class="axis z"/>
       <text x={s3.labels[0].x+7} y={s3.labels[0].y-5}>X</text><text x={s3.labels[1].x+7} y={s3.labels[1].y-5}>Y</text><text x={s3.labels[2].x+7} y={s3.labels[2].y-5}>Z</text>
       <circle cx={s3.wcs.x} cy={s3.wcs.y} r="10" class="wcs-marker"/><circle cx={s3.wcs.x} cy={s3.wcs.y} r="3" class="wcs-dot"/>

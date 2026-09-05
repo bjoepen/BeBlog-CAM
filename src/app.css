@@ -30,3 +30,5 @@
 .tools-page .name-row .quiet,.tools-page .name-row .primary-action{min-width:0!important;max-width:100%!important}
 @media(max-width:980px){.tools-page .name-row{grid-template-columns:minmax(0,1fr) auto!important}.tools-page .name-row .primary-action{grid-column:1/-1!important;width:100%!important}}
 @media(max-width:720px){.tools-page .name-row{grid-template-columns:1fr!important}.tools-page .name-row .quiet,.tools-page .name-row .primary-action{width:100%!important}}
+
+.selectable-step-edge{cursor:pointer;stroke-width:2.2}.selectable-step-edge:hover{stroke-width:3.4}.selected-step-edge{stroke-width:4;stroke-dasharray:7 3}

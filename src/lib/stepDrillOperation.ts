@@ -93,11 +93,11 @@ export function buildStepDrillOperationState(args:{
   const recognized=recognizeStepHoles(sourceResult.source);
   if(!recognized.holes.length)errors.push('Im STEP/BRep wurden keine sicher erkannten Bohrungen gefunden.');
   const requestedIds=operation.stepHoleFeatureIds??[];
-  const selectedIds=requestedIds.length?requestedIds:recognized.holes.map(h=>h.featureId);
+  if(!requestedIds.length)errors.push('Keine STEP-Bohrung explizit gewählt. Wähle mindestens eine erkannte Bohrung im Viewport.');
+  const selectedIds=requestedIds;
   const byId=new Map(recognized.holes.map(h=>[h.featureId,h]));
   const holes=selectedIds.flatMap(id=>byId.get(id)?[byId.get(id)!]:[]);
   if(holes.length!==selectedIds.length)errors.push('Mindestens eine ausgewählte STEP-Bohrung ist im aktuellen BRep nicht mehr verfügbar.');
-  if(!requestedIds.length&&holes.length)warnings.push(`Keine Teilmenge gewählt: alle ${holes.length} sicher erkannten STEP-Bohrungen werden bearbeitet.`);
   for(const hole of holes){
     if(Math.abs(Math.abs(hole.axisDirection[2])-1)>1e-5)errors.push(`${hole.featureId}: Bohrungsachse ist nicht parallel zur Maschinen-Z-Achse.`);
     if(operation.method==='helical-mill'){
