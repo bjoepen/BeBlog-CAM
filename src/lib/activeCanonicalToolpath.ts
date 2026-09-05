@@ -4,6 +4,7 @@ import { generateContourGcode } from './gcode';
 import { canonicalContourToolpathFromGcode } from './contourCanonicalToolpath';
 import { buildStepContourOperationState } from './stepContourOperation';
 import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
+import { buildStepPocketOperationState } from './stepPocketOperation';
 import { buildCarveCanonicalToolpath } from './carveCanonicalToolpath';
 import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
 import { buildStepDrillOperationState } from './stepDrillOperation';
@@ -15,19 +16,16 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;
   if(operation.kind==='facing'){if(stockMode==='none')return null;return buildFacingToolpath({stock,wcs,operation}).toolpath;}
   if(operation.kind==='contour'){
-    if(summary.kind==='step'){
-      const state=buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
-      return state.ok?state.toolpath:null;
-    }
+    if(summary.kind==='step'){const state=buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});return state.ok?state.toolpath:null;}
     const generated=generateContourGcode({summary,stock,stockMode,placement,orientation,wcs,operation});if(!generated.ok)return null;return canonicalContourToolpathFromGcode(generated.code,operation.tool.diameterMm);
   }
-  if(operation.kind==='pocket')return buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
+  if(operation.kind==='pocket'){
+    if(summary.kind==='step'){const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});return state.ok?state.toolpath:null;}
+    return buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
+  }
   if(operation.kind==='carve')return buildCarveCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
   if(operation.kind==='drill'){
-    if(summary.kind==='step'){
-      const state=buildStepDrillOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
-      return state.ok?state.toolpath:null;
-    }
+    if(summary.kind==='step'){const state=buildStepDrillOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});return state.ok?state.toolpath:null;}
     return buildDrillCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
   }
   if(operation.kind==='surface-finishing'){const state=buildSurfaceFinishingOperationState({summary,stock,placement,orientation,wcs,operation});return state.ok?state.toolpath:null;}
