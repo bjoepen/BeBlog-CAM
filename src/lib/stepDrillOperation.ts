@@ -57,11 +57,13 @@ export function buildStepDrillOperationState(args:{
   const sourceResult=buildStepManufacturingFeatureSource(summary);
   if(!sourceResult.ok){errors.push(...sourceResult.errors);return{ok:false,toolpath:null,errors,warnings,holes:[]};}
   const recognized=recognizeStepHoles(sourceResult.source);
-  const selectedIds=operation.stepHoleFeatureIds??[];
-  if(!selectedIds.length)errors.push('Keine erkannte STEP-Bohrung ausgewählt.');
+  if(!recognized.holes.length)errors.push('Im STEP/BRep wurden keine sicher erkannten Bohrungen gefunden.');
+  const requestedIds=operation.stepHoleFeatureIds??[];
+  const selectedIds=requestedIds.length?requestedIds:recognized.holes.map(h=>h.featureId);
   const byId=new Map(recognized.holes.map(h=>[h.featureId,h]));
   const holes=selectedIds.flatMap(id=>byId.get(id)?[byId.get(id)!]:[]);
   if(holes.length!==selectedIds.length)errors.push('Mindestens eine ausgewählte STEP-Bohrung ist im aktuellen BRep nicht mehr verfügbar.');
+  if(!requestedIds.length&&holes.length)warnings.push(`Keine Teilmenge gewählt: alle ${holes.length} sicher erkannten STEP-Bohrungen werden bearbeitet.`);
   for(const hole of holes){
     if(Math.abs(Math.abs(hole.axisDirection[2])-1)>1e-5)errors.push(`${hole.featureId}: Bohrungsachse ist nicht parallel zur Maschinen-Z-Achse.`);
     if(operation.tool.diameterMm>hole.diameterMm+EPS)errors.push(`${hole.featureId}: Werkzeug Ø ${operation.tool.diameterMm.toFixed(3)} mm ist größer als Bohrungs-Ø ${hole.diameterMm.toFixed(3)} mm.`);
