@@ -10,6 +10,6 @@ const checks=[
   ['STEP ramp entry enforces geometric angle length',step.includes('required=Math.abs(zEnd-zStart)/Math.tan(angleDeg*Math.PI/180)')&&step.includes('eine längere erste sichere Bahn')],
   ['STEP helix entry validates a collision-free circle',step.includes('safeCircle')&&step.includes('kein kollisionsfreier Helixkreis')],
   ['STEP entry uses canonical spatial line and arc segments',step.includes("kind:'line3'")&&step.includes("kind:'arc3'")],
-  ['canonical pocket poster emits line3 and arc3 entries',canonical.includes("segment.kind==='line3'")&&canonical.includes("segment.ccw?'G3':'G2'"))
+  ['canonical pocket poster emits line3 and arc3 entries',canonical.includes("segment.kind==='line3'")&&canonical.includes("segment.ccw?'G3':'G2'")]
 ];
 let failed=false;for(const [label,ok] of checks){console.log(`${ok?'PASS':'FAIL'} 004M: ${label}`);if(!ok)failed=true;}if(failed)process.exit(1);
