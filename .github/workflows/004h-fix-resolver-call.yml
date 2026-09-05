@@ -1,0 +1,39 @@
+name: 004H fix resolver call
+
+on:
+  push:
+    branches:
+      - agent/beblog-cam-004h-contour-stock-bottom-overcut
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '004h-fix:') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004h-contour-stock-bottom-overcut
+      - name: Fix resolver call
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/App.svelte')
+          s=p.read_text()
+          old="resolveContourDepth(operation,stock,stockMode,wcs)"
+          new="resolveContourDepth({operation,stock,stockMode,wcs})"
+          assert old in s, 'expected resolver call not found'
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.svelte
+          git commit -m "004h-fix: use object contract for contour depth resolver"
+          git push origin HEAD:agent/beblog-cam-004h-contour-stock-bottom-overcut
