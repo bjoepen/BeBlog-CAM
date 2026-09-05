@@ -1,6 +1,7 @@
 import type { CanonicalToolpath, CanonicalToolpathSegment, ToolpathPoint2 } from './canonicalToolpath';
 import { offsetPolygon, polygonArea, validateOffsetSegments, type P2 } from './contourMath';
 import { buildStepManufacturingFeatureSource, type StepManufacturingEdgeSource, type StepManufacturingWireSource } from './stepManufacturingFeatures';
+import { resolveContourDepth } from './contourDepth';
 import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
 export type StepContourCandidate={wireId:number;faceId:number;zMm:number;areaMm2:number;points:P2[]};
@@ -19,55 +20,22 @@ function sampleEdge(edge:StepManufacturingEdgeSource):P2[]|null{
   if(edge.kind!=='circle'||!edge.center||!edge.radiusMm||!edge.axisDirection)return null;
   const center={x:edge.center[0],y:edge.center[1]},r=edge.radiusMm;
   if(edge.closed||same(start,end))return Array.from({length:97},(_,i)=>{const a=i/96*Math.PI*2;return{x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r};});
-  let a0=Math.atan2(start.y-center.y,start.x-center.x),a1=Math.atan2(end.y-center.y,end.x-center.x);
-  let ccw=edge.axisDirection[2]>=0;
-  if(edge.orientation==='reversed')ccw=!ccw;
-  let d=a1-a0;if(ccw){while(d<=0)d+=Math.PI*2}else{while(d>=0)d-=Math.PI*2}
-  const steps=Math.max(8,Math.ceil(Math.abs(d)/(Math.PI/18)));
-  return Array.from({length:steps+1},(_,i)=>{const a=a0+d*i/steps;return{x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r};});
+  let a0=Math.atan2(start.y-center.y,start.x-center.x),a1=Math.atan2(end.y-center.y,end.x-center.x);let ccw=edge.axisDirection[2]>=0;if(edge.orientation==='reversed')ccw=!ccw;let d=a1-a0;if(ccw){while(d<=0)d+=Math.PI*2}else{while(d>=0)d-=Math.PI*2};const steps=Math.max(8,Math.ceil(Math.abs(d)/(Math.PI/18)));return Array.from({length:steps+1},(_,i)=>{const a=a0+d*i/steps;return{x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r};});
 }
-
 function chainWire(wire:StepManufacturingWireSource,edges:StepManufacturingEdgeSource[]):P2[]|null{
-  const remaining=wire.edgeIds.map(id=>edges[id]).filter(Boolean).map(edge=>sampleEdge(edge)).filter((p):p is P2[]=>!!p&&p.length>=2);
-  if(remaining.length!==wire.edgeIds.length||!remaining.length)return null;
-  const out=[...remaining.shift()!];
-  while(remaining.length){const end=out[out.length-1];let index=-1,reverse=false;for(let i=0;i<remaining.length;i++){const p=remaining[i];if(same(end,p[0])){index=i;break;}if(same(end,p[p.length-1])){index=i;reverse=true;break;}}if(index<0)return null;const next=remaining.splice(index,1)[0];const ordered=reverse?[...next].reverse():next;out.push(...ordered.slice(1));}
-  if(!same(out[0],out[out.length-1]))out.push({...out[0]});
-  return out;
+  const remaining=wire.edgeIds.map(id=>edges[id]).filter(Boolean).map(edge=>sampleEdge(edge)).filter((p):p is P2[]=>!!p&&p.length>=2);if(remaining.length!==wire.edgeIds.length||!remaining.length)return null;const out=[...remaining.shift()!];while(remaining.length){const end=out[out.length-1];let index=-1,reverse=false;for(let i=0;i<remaining.length;i++){const p=remaining[i];if(same(end,p[0])){index=i;break;}if(same(end,p[p.length-1])){index=i;reverse=true;break;}}if(index<0)return null;const next=remaining.splice(index,1)[0];const ordered=reverse?[...next].reverse():next;out.push(...ordered.slice(1));}if(!same(out[0],out[out.length-1]))out.push({...out[0]});return out;
 }
-
 function candidates(summary:ImportSummary):StepContourCandidate[]{
-  const source=buildStepManufacturingFeatureSource(summary);if(!source.ok)return[];
-  const result:StepContourCandidate[]=[];
-  for(const face of source.source.planarFaces){
-    if(Math.abs(Math.abs(face.normal[2])-1)>1e-5)continue;
-    for(const wire of source.source.wiresByFace.get(face.faceId)??[]){
-      if(!wire.closed)continue;
-      const points=chainWire(wire,source.source.edges);if(!points||points.length<4)continue;
-      const area=Math.abs(polygonArea(points));if(area<=EPS)continue;
-      result.push({wireId:wire.wireId,faceId:face.faceId,zMm:face.origin[2],areaMm2:area,points});
-    }
-  }
-  return result.sort((a,b)=>b.zMm-a.zMm||b.areaMm2-a.areaMm2);
+  const source=buildStepManufacturingFeatureSource(summary);if(!source.ok)return[];const result:StepContourCandidate[]=[];for(const face of source.source.planarFaces){if(Math.abs(Math.abs(face.normal[2])-1)>1e-5)continue;for(const wire of source.source.wiresByFace.get(face.faceId)??[]){if(!wire.closed)continue;const points=chainWire(wire,source.source.edges);if(!points||points.length<4)continue;const area=Math.abs(polygonArea(points));if(area<=EPS)continue;result.push({wireId:wire.wireId,faceId:face.faceId,zMm:face.origin[2],areaMm2:area,points});}}return result.sort((a,b)=>b.zMm-a.zMm||b.areaMm2-a.areaMm2);
 }
-
-function placementTransform(summary:ImportSummary,stock:StockDefinition,stockMode:StockMode,placement:PartPlacement,orientation:PartOrientation){
-  const values=summary.brep?.displayVertices??[],raw:P3[]=[];for(let i=0;i+2<values.length;i+=3)raw.push(rotateZ({x:values[i],y:values[i+1],z:values[i+2]},orientation.rotationZDeg));if(!raw.length)return null;
-  const b=bounds3(raw),w=b.maxX-b.minX,h=b.maxY-b.minY;const tx=stockMode==='none'?0:placement.horizontal==='left'?0:placement.horizontal==='right'?stock.width-w:(stock.width-w)/2;const ty=stockMode==='none'?0:placement.vertical==='front'?0:placement.vertical==='back'?stock.height-h:(stock.height-h)/2;
-  return{dx:tx-b.minX+placement.offsetX,dy:ty-b.minY+placement.offsetY,partBounds:{minX:tx+placement.offsetX,maxX:tx+w+placement.offsetX,minY:ty+placement.offsetY,maxY:ty+h+placement.offsetY}};
-}
+function placementTransform(summary:ImportSummary,stock:StockDefinition,stockMode:StockMode,placement:PartPlacement,orientation:PartOrientation){const values=summary.brep?.displayVertices??[],raw:P3[]=[];for(let i=0;i+2<values.length;i+=3)raw.push(rotateZ({x:values[i],y:values[i+1],z:values[i+2]},orientation.rotationZDeg));if(!raw.length)return null;const b=bounds3(raw),w=b.maxX-b.minX,h=b.maxY-b.minY;const tx=stockMode==='none'?0:placement.horizontal==='left'?0:placement.horizontal==='right'?stock.width-w:(stock.width-w)/2;const ty=stockMode==='none'?0:placement.vertical==='front'?0:placement.vertical==='back'?stock.height-h:(stock.height-h)/2;return{dx:tx-b.minX+placement.offsetX,dy:ty-b.minY+placement.offsetY,partBounds:{minX:tx+placement.offsetX,maxX:tx+w+placement.offsetX,minY:ty+placement.offsetY,maxY:ty+h+placement.offsetY}};}
 function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateSystem,b:{minX:number;maxX:number;minY:number;maxY:number}){const r=stockMode==='none'?b:{minX:0,maxX:stock.width,minY:0,maxY:stock.height};return{x:wcs.x==='left'?r.minX:wcs.x==='right'?r.maxX:(r.minX+r.maxX)/2,y:wcs.y==='front'?r.minY:wcs.y==='back'?r.maxY:(r.minY+r.maxY)/2};}
 
 export function buildStepContourOperationState(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation;}):StepContourOperationState{
-  const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;const errors:string[]=[],warnings:string[]=[];
-  if(summary.kind!=='step')errors.push('STEP-Kontur benötigt einen STEP/BRep-Import.');if(operation.topology!=='closed')errors.push('004F gibt STEP zunächst nur für geschlossene Konturen frei.');if(wcs.z!=='top')errors.push('STEP-Kontur ist aktuell nur mit Z-Null oben freigegeben.');if(Math.abs(orientation.rotationXDeg)>EPS||Math.abs(orientation.rotationYDeg)>EPS)errors.push('STEP-Kontur unterstützt aktuell keine X/Y-Kippung.');if(operation.totalDepthMm<=0||operation.stepDownMm<=0)errors.push('Gesamttiefe und Zustellung müssen größer als 0 sein.');if(operation.tool.diameterMm<=0)errors.push('Werkzeugdurchmesser muss größer als 0 sein.');
-  const all=candidates(summary);if(!all.length)errors.push('Keine geschlossene horizontale STEP-Wire als Konturkandidat erkannt.');
-  const chosen=operation.stepWireId==null?all[0]??null:all.find(c=>c.wireId===operation.stepWireId)??null;if(operation.stepWireId!=null&&!chosen)errors.push('Gewählte STEP-Wire ist nicht mehr als Konturkandidat verfügbar.');if(operation.stepWireId==null&&chosen)warnings.push(`Keine STEP-Wire explizit gewählt: größte obere geschlossene Wire ${chosen.wireId} wird verwendet.`);
-  if(errors.length||!chosen)return{ok:false,toolpath:null,errors,warnings,candidates:all,selected:chosen};
-  const t=placementTransform(summary,stock,stockMode,placement,orientation);if(!t)return{ok:false,toolpath:null,errors:['STEP-Bauteil konnte nicht transformiert werden.'],warnings,candidates:all,selected:chosen};const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);
-  const source=chosen.points.map(p=>{const q=rotateZ({x:p.x,y:p.y,z:0},orientation.rotationZDeg);return{x:q.x+t.dx-origin.x,y:q.y+t.dy-origin.y};});
-  const radius=operation.tool.diameterMm/2,correction=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;let path=offsetPolygon(source,correction);const validation=validateOffsetSegments(source,path,correction,.01);if(!validation.ok)return{ok:false,toolpath:null,errors:[`STEP-Kontur-Radiuskorrektur ist geometrisch nicht freigegeben (max. Abweichung ${validation.maxDeviationMm.toFixed(4)} mm).`],warnings,candidates:all,selected:chosen};if(operation.direction==='conventional')path=[...path].reverse();
-  const passes=Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm)),runs:CanonicalToolpath['runs']=[];
-  for(let pass=1;pass<=passes;pass++){const z=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);const points=path.map(p=>({x:p.x,y:p.y}));if(points.length&&!same(points[0],points[points.length-1]))points.push({...points[0]});const segments:CanonicalToolpathSegment[]=[];for(let i=1;i<points.length;i++)segments.push({kind:'line',start:points[i-1],end:points[i]});runs.push({kind:'cut',z,points,segments});}
+  const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;const errors:string[]=[],warnings:string[]=[];const depth=resolveContourDepth({operation,stock,stockMode,wcs});errors.push(...depth.errors);warnings.push(...depth.warnings);
+  if(summary.kind!=='step')errors.push('STEP-Kontur benötigt einen STEP/BRep-Import.');if(operation.topology!=='closed')errors.push('004F gibt STEP zunächst nur für geschlossene Konturen frei.');if(wcs.z!=='top')errors.push('STEP-Kontur ist aktuell nur mit Z-Null oben freigegeben.');if(Math.abs(orientation.rotationXDeg)>EPS||Math.abs(orientation.rotationYDeg)>EPS)errors.push('STEP-Kontur unterstützt aktuell keine X/Y-Kippung.');if(operation.stepDownMm<=0)errors.push('Zustellung muss größer als 0 sein.');if(operation.tool.diameterMm<=0)errors.push('Werkzeugdurchmesser muss größer als 0 sein.');
+  const all=candidates(summary);if(!all.length)errors.push('Keine geschlossene horizontale STEP-Wire als Konturkandidat erkannt.');const chosen=operation.stepWireId==null?all[0]??null:all.find(c=>c.wireId===operation.stepWireId)??null;if(operation.stepWireId!=null&&!chosen)errors.push('Gewählte STEP-Wire ist nicht mehr als Konturkandidat verfügbar.');if(operation.stepWireId==null&&chosen)warnings.push(`Keine STEP-Wire explizit gewählt: größte obere geschlossene Wire ${chosen.wireId} wird verwendet.`);if(errors.length||!chosen)return{ok:false,toolpath:null,errors,warnings,candidates:all,selected:chosen};
+  const t=placementTransform(summary,stock,stockMode,placement,orientation);if(!t)return{ok:false,toolpath:null,errors:['STEP-Bauteil konnte nicht transformiert werden.'],warnings,candidates:all,selected:chosen};const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);const source=chosen.points.map(p=>{const q=rotateZ({x:p.x,y:p.y,z:0},orientation.rotationZDeg);return{x:q.x+t.dx-origin.x,y:q.y+t.dy-origin.y};});const radius=operation.tool.diameterMm/2,correction=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;let path=offsetPolygon(source,correction);const validation=validateOffsetSegments(source,path,correction,.01);if(!validation.ok)return{ok:false,toolpath:null,errors:[`STEP-Kontur-Radiuskorrektur ist geometrisch nicht freigegeben (max. Abweichung ${validation.maxDeviationMm.toFixed(4)} mm).`],warnings,candidates:all,selected:chosen};if(operation.direction==='conventional')path=[...path].reverse();
+  const passes=Math.max(1,Math.ceil(depth.depthMm/operation.stepDownMm)),runs:CanonicalToolpath['runs']=[];for(let pass=1;pass<=passes;pass++){const z=-Math.min(depth.depthMm,pass*operation.stepDownMm);const points=path.map(p=>({x:p.x,y:p.y}));if(points.length&&!same(points[0],points[points.length-1]))points.push({...points[0]});const segments:CanonicalToolpathSegment[]=[];for(let i=1;i<points.length;i++)segments.push({kind:'line',start:points[i-1],end:points[i]});runs.push({kind:'cut',z,points,segments});}
   return{ok:true,toolpath:{version:1,operationKind:'contour',strategy:'contour',tool:{diameterMm:operation.tool.diameterMm},stepoverPercent:0,runs},errors:[],warnings,candidates:all,selected:chosen};
 }

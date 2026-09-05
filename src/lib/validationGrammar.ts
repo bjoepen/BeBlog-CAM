@@ -1,5 +1,6 @@
 import type { CamOperation, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 import type { MillingToolKind } from './toolTypes';
+import { resolveContourDepth } from './contourDepth';
 
 export type ValidationLevel = 'pass' | 'warn' | 'fail';
 export type ValidationCategory = 'geometry' | 'tool' | 'strategy' | 'depth' | 'cut-data' | 'setup' | 'stock' | 'toolpath';
@@ -17,10 +18,15 @@ export function validateCommonOperation(operation: CamOperation, stock: StockDef
     ? { level: 'pass', category: 'tool', title: 'Werkzeugdurchmesser', detail: `Ø ${operation.tool.diameterMm.toFixed(3)} mm.` }
     : { level: 'fail', category: 'tool', title: 'Werkzeugdurchmesser', detail: 'Werkzeugdurchmesser muss größer als 0 sein.' });
 
+  const contourDepth=operation.kind==='contour'?resolveContourDepth({operation,stock,stockMode,wcs}):null;
   if(operation.kind==='z-level-roughing'){
     checks.push((operation.roughingMode??'face-target')==='model'?{level:'pass',category:'depth',title:'Z-Level',detail:'Z-Ebenen werden aus Rohlingoberseite, STEP-Modell und Zustellung rekonstruiert.'}:{level:'pass',category:'depth',title:'Zielhöhe',detail:'Wird aus der ausgewählten STEP/BRep-Zielfläche abgeleitet.'});
   }else if(operation.kind==='surface-finishing'){
     checks.push({level:'pass',category:'depth',title:'3D Schlichten',detail:'Zielhöhe wird aus der ausgewählten STEP/BRep-Zielfläche und der Ballnose-Kompensation abgeleitet.'});
+  }else if(contourDepth?.mode==='stock-bottom'){
+    if(contourDepth.ok)checks.push({level:'pass',category:'depth',title:'Durchfräsen',detail:`Rohlingunterseite ${(-stock.thickness).toFixed(3)} mm · Overcut ${contourDepth.overcutMm.toFixed(3)} mm · End-Z ${contourDepth.bottomZMm.toFixed(3)} mm.`});
+    else checks.push(...contourDepth.errors.map(detail=>({level:'fail' as const,category:'depth' as const,title:'Durchfräsen',detail})));
+    checks.push(...contourDepth.warnings.map(detail=>({level:'warn' as const,category:'depth' as const,title:'Overcut',detail})));
   }else{
     checks.push(operation.totalDepthMm > 0
       ? { level: 'pass', category: 'depth', title: operation.kind === 'facing' ? 'Planabtrag' : 'Tiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm.` }
@@ -40,10 +46,12 @@ export function validateCommonOperation(operation: CamOperation, stock: StockDef
     : { level: 'fail', category: 'setup', title: 'Sicherheits-Z', detail: 'Sicherheits-Z muss größer als 0 sein.' });
 
   if(stockMode==='none'){
-    const requiresStock=operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing';
-    checks.push({level:requiresStock?'fail':'warn',category:'stock',title:'Rohling',detail:requiresStock?(operation.kind==='facing'?'Planen benötigt einen definierten Rohling.':'Z-Level Schruppen benötigt einen definierten Rohling.'):'Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.'});
+    const requiresStock=operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'||(operation.kind==='contour'&&(operation.depthMode??'manual')==='stock-bottom');
+    checks.push({level:requiresStock?'fail':'warn',category:'stock',title:'Rohling',detail:requiresStock?(operation.kind==='facing'?'Planen benötigt einen definierten Rohling.':operation.kind==='contour'?'Durchfräsen bis Rohlingunterseite benötigt einen definierten Rohling.':'Z-Level Schruppen benötigt einen definierten Rohling.'):'Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.'});
   }else if(operation.kind==='z-level-roughing'){
     checks.push({level:'pass',category:'stock',title:'Rohlingtiefe',detail:`Zielfläche und Schrupp-Endhöhe werden geometrisch gegen den Rohling mit ${stock.thickness.toFixed(3)} mm Dicke bestimmt.`});
+  }else if(operation.kind==='contour'&&(operation.depthMode??'manual')==='stock-bottom'){
+    if(contourDepth?.ok)checks.push({level:'pass',category:'stock',title:'Rohlingunterseite',detail:`Kontur wird bis ${stock.thickness.toFixed(3)} mm Rohlingdicke plus ${contourDepth.overcutMm.toFixed(3)} mm Overcut geführt.`});
   }else if(operation.totalDepthMm > stock.thickness){
     checks.push({ level: operation.kind === 'facing' ? 'fail' : 'warn', category: 'stock', title: 'Rohlingtiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm überschreiten die Rohlingdicke ${stock.thickness.toFixed(3)} mm.` });
   }else{
