@@ -4,6 +4,7 @@ const types=read('src/lib/types.ts');
 const rest=read('src/lib/pocketRestMachining.ts');
 const job=read('src/lib/jobGcode.ts');
 const preflight=read('src/lib/jobPreflight.ts');
+const app=read('src/App.svelte');
 const checks=[
   ['pocket operation stores rest machining controls',types.includes('restMachiningEnabled?:boolean')&&types.includes('restFromOperationId?:string|null')],
   ['defaults keep rest machining disabled',types.includes('restMachiningEnabled:false')&&types.includes('restFromOperationId:null')],
@@ -15,5 +16,6 @@ const checks=[
   ['job export requires matching STEP or DXF pocket target',job.includes('source.stepFaceId!==pocket.stepFaceId')&&job.includes('source.contourId!==pocket.contourId')],
   ['job export posts filtered canonical rest path',job.includes('applyPocketRestMachining')&&job.includes('postPocketCanonicalToolpath(rest.toolpath')],
   ['job preflight applies the same rest machining safety rules',preflight.includes('applyPocketRestMachining')&&preflight.includes('Restmaterialquelle muss im Job vor der aktuellen Taschenbearbeitung liegen.')&&preflight.includes('dieselbe STEP-Taschenfläche')],
+  ['pocket inspector exposes rest machining controls and eligible source selection',app.includes('Restmaterial</p>')&&app.includes('setPocketRestMachining')&&app.includes('restSourcePocketOperations')&&app.includes('restFromOperationId')],
 ];
 let failed=false;for(const [label,ok] of checks){console.log(`${ok?'PASS':'FAIL'} 004N: ${label}`);if(!ok)failed=true;}if(failed)process.exit(1);
