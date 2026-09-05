@@ -2,27 +2,26 @@ name: CI
 
 on:
   push:
-    branches:
-      - agent/beblog-cam-004k-contour-leads
-
-permissions:
-  contents: write
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  apply-004k-ui:
-    runs-on: ubuntu-latest
+  macos:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
-      - name: Apply 004K UI patch
-        run: python3 scripts/patch-004k-ui.py
-      - name: Restore CI definition and commit
-        run: |
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git rm scripts/patch-004k-ui.py
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'feat(004k): expose contour lead controls in inspector'
-          git push origin HEAD:agent/beblog-cam-004k-contour-leads
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Svelte check
+        run: pnpm check
+      - name: Frontend build
+        run: pnpm build
+      - name: Rust check
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
