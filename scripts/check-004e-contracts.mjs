@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');
+const assert=(c,m)=>{console.log(`${c?'PASS':'FAIL'} 004E: ${m}`);if(!c)process.exitCode=1;};
+const helix=read('src/lib/helicalMotion.ts');
+const op=read('src/lib/stepDrillOperation.ts');
+const panel=read('src/lib/DrillPreflightPanel.svelte');
+assert(helix.includes('buildCanonicalHelicalDescent'),'shared helix primitive exposes canonical spatial segments');
+assert(helix.includes("kind:'arc3'")&&helix.includes('ccw:true'),'shared helix primitive emits canonical CCW arc motions');
+assert(op.includes('buildCanonicalHelicalDescent'),'STEP helical milling reuses the shared helix primitive');
+assert(op.includes("strategy:operation.method==='helical-mill'?'helical-bore':'drill'"),'STEP helix owns canonical helical-bore strategy');
+assert(op.includes('operation.tool.diameterMm>=hole.diameterMm-EPS'),'STEP helix requires cutter smaller than target bore');
+assert(op.includes('Fertig')||op.includes('rightBottom'),'STEP helix includes a finishing revolution at final depth');
+assert(panel.includes('Für Helixfräsen muss Werkzeug')&&!panel.includes('folgt in 004E'),'STEP helix preflight is released and diameter-aware');
+assert(!op.includes('planarGeometry'),'STEP helix remains BRep-first without pseudo-DXF');
+if(process.exitCode)process.exit(process.exitCode);
