@@ -12,5 +12,8 @@ DXF und STEP laufen nach der jeweiligen Konturgeometrie durch denselben `applyCo
 ## Verhalten
 Oberhalb der Tab-Resthöhe bleiben Zustellungen unverändert. Tiefere Zustellungen werden an gleichmäßig verteilten Tab-Fenstern auf die Resthöhe angehoben. Offene Konturen werden fail-closed abgewiesen.
 
+## Bearbeiten-UI
+Im Kontur-Inspector stehen Haltestege Aus/Aktiv sowie Anzahl, Breite und Resthöhe direkt zur Verfügung.
+
 ## Scope 004I
 Die erste robuste Version verteilt Tabs automatisch gleichmäßig. Manuelles Verschieben einzelner Tabs ist ein späteres UX-Upgrade; die Fertigungssemantik ist bereits operation-owned.
