@@ -1,0 +1,42 @@
+name: Patch 004N UI
+on:
+  push:
+    branches: [agent/beblog-cam-004n-rest-machining]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004n-rest-machining
+      - shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/App.svelte'); s=p.read_text()
+          anchor="  function updatePocket(patch:Partial<PocketOperation>){if(operation.kind!=='pocket')return;setOperation({...operation,...patch});}\n"
+          insert=anchor+"  function restSourcePocketOperations(){if(operation.kind!=='pocket')return[];const currentIndex=operationsProject.operations.findIndex(op=>op.id===operation.id);return operationsProject.operations.slice(0,currentIndex).filter((op):op is PocketOperation=>op.kind==='pocket'&&op.enabled!==false&&op.tool.diameterMm>operation.tool.diameterMm&&(importSummary?.kind==='step'?op.stepFaceId===operation.stepFaceId:op.contourId===operation.contourId));}\n  function setPocketRestMachining(enabled:boolean){if(operation.kind!=='pocket')return;if(!enabled){updatePocket({restMachiningEnabled:false,restFromOperationId:null});return;}const candidates=restSourcePocketOperations();const currentValid=candidates.some(op=>op.id===operation.restFromOperationId);updatePocket({restMachiningEnabled:true,restFromOperationId:currentValid?operation.restFromOperationId:candidates.at(-1)?.id??null});}\n  function choosePocketRestSource(event:Event){if(operation.kind!=='pocket')return;const id=(event.currentTarget as HTMLSelectElement).value||null;updatePocket({restFromOperationId:id});}\n"
+          if anchor not in s: raise SystemExit('updatePocket anchor not found')
+          s=s.replace(anchor,insert,1)
+          anchor2="<div class=\"placement-section\"><p class=\"placement-title\">Ausräumen</p><label>Seitliche Zustellung"
+          block="<div class=\"placement-section\"><p class=\"placement-title\">Restmaterial</p><div class=\"placement-grid two\"><button class:active={!(operation.restMachiningEnabled??false)} onclick={()=>setPocketRestMachining(false)}>Aus</button><button class:active={operation.restMachiningEnabled??false} onclick={()=>setPocketRestMachining(true)}>Aktiv</button></div>{#if operation.restMachiningEnabled??false}<label>Vorherige Tasche <select value={operation.restFromOperationId??''} onchange={choosePocketRestSource}><option value=\"\">Quelle wählen …</option>{#each restSourcePocketOperations() as source}<option value={source.id}>{source.name} · Ø {source.tool.diameterMm.toFixed(3)} mm</option>{/each}</select></label>{#if restSourcePocketOperations().length===0}<p class=\"note\"><strong>Keine geeignete Quelle:</strong> Zuerst muss eine frühere aktive Tasche mit demselben Ziel und größerem Werkzeug existieren.</p>{:else}<p class=\"note\">Nur tatsächlich verbliebene Restsegmente werden mit dem kleineren Werkzeug nachgeräumt. Quelle und Folgeoperation müssen dasselbe Taschenziel verwenden.</p>{/if}{/if}</div>"+anchor2
+          if anchor2 not in s: raise SystemExit('pocket clearing anchor not found')
+          s=s.replace(anchor2,block,1)
+          p.write_text(s)
+
+          p=Path('scripts/check-004n-contracts.mjs'); s=p.read_text()
+          s=s.replace("const preflight=read('src/lib/jobPreflight.ts');", "const preflight=read('src/lib/jobPreflight.ts');\nconst app=read('src/App.svelte');")
+          marker="  ['job preflight applies the same rest machining safety rules',preflight.includes('applyPocketRestMachining')&&preflight.includes('Restmaterialquelle muss im Job vor der aktuellen Taschenbearbeitung liegen.')&&preflight.includes('dieselbe STEP-Taschenfläche')],\n"
+          addition=marker+"  ['pocket inspector exposes rest machining controls and eligible source selection',app.includes('Restmaterial</p>')&&app.includes('setPocketRestMachining')&&app.includes('restSourcePocketOperations')&&app.includes('restFromOperationId')],\n"
+          if marker not in s: raise SystemExit('004n gate anchor not found')
+          s=s.replace(marker,addition,1)
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/App.svelte scripts/check-004n-contracts.mjs
+          git diff --cached --quiet || git commit -m "feat(004n): expose rest machining in pocket inspector"
+          git push
