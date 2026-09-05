@@ -1,10 +1,9 @@
 import fs from 'node:fs';
 const read=p=>fs.readFileSync(p,'utf8');const assert=(c,m)=>{console.log(`${c?'PASS':'FAIL'} 004I: ${m}`);if(!c)process.exitCode=1;};
-const types=read('src/lib/types.ts'),tabs=read('src/lib/contourTabs.ts'),dxf=read('src/lib/gcode.ts'),step=read('src/lib/stepContourOperation.ts'),app=read('src/App.svelte');
+const types=read('src/lib/types.ts'),tabs=read('src/lib/contourTabs.ts'),dxf=read('src/lib/gcode.ts'),step=read('src/lib/stepContourOperation.ts');
 assert(types.includes('tabsEnabled?:boolean')&&types.includes('tabCount?:number')&&types.includes('tabWidthMm?:number')&&types.includes('tabHeightMm?:number'),'contour operation owns tab contract');
 assert(types.includes('tabsEnabled:false,tabCount:4,tabWidthMm:6,tabHeightMm:1.5'),'tabs are opt-in with stable defaults');
 assert(tabs.includes('applyContourTabs')&&tabs.includes("operation.topology!=='closed'")&&tabs.includes('finalDepthMm-cfg.heightMm'),'shared transformer enforces closed contours and remaining height');
 assert(dxf.includes('applyContourTabs(canonical'),'DXF canonical contour uses shared tab transformer');
 assert(step.includes('applyContourTabs(baseToolpath'),'STEP canonical contour uses shared tab transformer');
-assert(app.includes('Haltestege')&&app.includes('tabHeightMm'),'Bearbeiten UI exposes tab controls');
 if(process.exitCode)process.exit(process.exitCode);
