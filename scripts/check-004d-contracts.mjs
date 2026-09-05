@@ -1,0 +1,17 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');
+const assert=(c,m)=>{console.log(`${c?'PASS':'FAIL'} 004D: ${m}`);if(!c)process.exitCode=1;};
+const op=read('src/lib/stepDrillOperation.ts');
+const types=read('src/lib/types.ts');
+const active=read('src/lib/activeCanonicalToolpath.ts');
+const job=read('src/lib/jobGcode.ts');
+const preflight=read('src/lib/jobPreflight.ts');
+assert(types.includes('stepHoleFeatureIds?:string[]'),'drill operations own STEP hole feature IDs');
+assert(op.includes('recognizeStepHoles')&&op.includes("strategy:'drill'"),'STEP holes become canonical axial drill toolpaths');
+assert(op.includes("operation.method!=='drill'")&&op.includes('004E'),'STEP helix remains fail-closed for 004E');
+assert(op.includes('axisDirection[2]'),'STEP drilling rejects non-Z hole axes');
+assert(active.includes('buildStepDrillOperationState'),'active canonical dispatcher routes STEP drilling');
+assert(job.includes('generateStepDrillGcode'),'total-job export posts STEP drilling');
+assert(preflight.includes('buildStepDrillOperationState'),'job preflight uses STEP drill canonical truth');
+assert(!op.includes('planarGeometry'),'STEP drilling does not synthesize pseudo-DXF geometry');
+if(process.exitCode)process.exit(process.exitCode);
