@@ -52,7 +52,7 @@
       .map(op=>buildActiveCanonicalToolpath({summary:importSummary!,stock,stockMode,placement,orientation,wcs,operation:op}))
       .filter((toolpath):toolpath is CanonicalToolpath=>toolpath!==null)
     :[];
-  $: contourDepthState=operation.kind==='contour'?resolveContourDepth(operation,stock,stockMode,wcs):null;
+  $: contourDepthState=operation.kind==='contour'?resolveContourDepth({operation,stock,stockMode,wcs}):null;
 
   const operationLabel=(kind:OperationKind)=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
   function setOperation(next:CamOperation){operation=cloneOperation(next);operationsProject=replaceOperation(operationsProject,operation);}
