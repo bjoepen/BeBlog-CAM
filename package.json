@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check:004a": "node scripts/check-004a-contracts.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
     "native:dev": "bash scripts/dev-macos-native.sh",
