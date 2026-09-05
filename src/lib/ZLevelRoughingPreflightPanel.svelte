@@ -2,7 +2,7 @@
   import type { ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem, ZLevelRoughingOperation } from './types';
   import { validateOperationGrammar, type ValidationCheck } from './validationGrammar';
   import { validateCanonicalToolpath } from './canonicalPreflight';
-  import { buildFaceTargetOperationState } from './faceTargetOperation';
+  import { buildZLevelOperationState, zLevelMode } from './zLevelOperationState';
 
   export let summary:ImportSummary;
   export let stock:StockDefinition;
@@ -14,21 +14,15 @@
 
   type Check={level:'pass'|'warn'|'fail';title:string;detail:string};
 
-  $: reconstructed=buildFaceTargetOperationState({summary,stock,placement,orientation,wcs,operation});
+  $: reconstructed=buildZLevelOperationState({summary,stock,placement,orientation,wcs,operation});
+  $: mode=zLevelMode(operation);
   $: grammar=validateOperationGrammar(operation,stock,stockMode,wcs);
-  $: canonical=reconstructed?validateCanonicalToolpath(reconstructed.toolpath):null;
+  $: canonical=reconstructed.toolpath?validateCanonicalToolpath(reconstructed.toolpath):null;
   $: checks=[
     ...grammar.map((check:ValidationCheck):Check=>({level:check.level,title:check.title,detail:check.detail})),
-    operation.faceIds.length&&reconstructed
-      ? {level:'pass' as const,title:'Zielfläche',detail:`${operation.faceIds.length} operation-owned STEP/BRep Face Target${operation.faceIds.length===1?'':'s'} aktiv · Ziel Z ${reconstructed.targetZ.toFixed(3)} mm · Schrupp-Endhöhe ${reconstructed.roughBottomZ.toFixed(3)} mm.`}
-      : {level:'fail' as const,title:'Zielfläche',detail:'Keine gültige operation-owned STEP/BRep-Zielfläche gewählt. Ohne Face Target darf kein Z-Level-Werkzeugweg freigegeben werden.'},
-    ...(canonical
-      ? [
-          ...(canonical.errors.map(detail=>({level:'fail' as const,title:'Kanonischer Werkzeugweg',detail}))),
-          ...(canonical.warnings.map(detail=>({level:'warn' as const,title:'Kanonischer Werkzeugweg',detail}))),
-          ...(canonical.ok?[{level:'pass' as const,title:'Kanonischer Werkzeugweg',detail:canonical.summary}]:[])
-        ]
-      : [])
+    mode==='model'?(reconstructed.toolpath&&!reconstructed.errors.length?{level:'pass' as const,title:'Modellregion',detail:`STEP Stock−Model · ${reconstructed.levelCount} Z-Ebenen · Top-Zugänglichkeit geprüft.`}:{level:'fail' as const,title:'Modellregion',detail:reconstructed.errors[0]??'Modellbasierte Schruppregion konnte nicht rekonstruiert werden.'}):(operation.faceIds.length&&reconstructed.toolpath?{level:'pass' as const,title:'Zielfläche',detail:`${operation.faceIds.length} Face Target${operation.faceIds.length===1?'':'s'} · Ziel Z ${reconstructed.targetZ?.toFixed(3)??'—'} mm.`}:{level:'fail' as const,title:'Zielfläche',detail:reconstructed.errors[0]??'Keine gültige Zielfläche gewählt.'}),
+    ...reconstructed.warnings.map(detail=>({level:'warn' as const,title:'Z-Level',detail})),
+    ...(canonical?[...canonical.errors.map(detail=>({level:'fail' as const,title:'Kanonischer Werkzeugweg',detail})),...canonical.warnings.map(detail=>({level:'warn' as const,title:'Kanonischer Werkzeugweg',detail})),...(canonical.ok?[{level:'pass' as const,title:'Kanonischer Werkzeugweg',detail:canonical.summary}]:[])]:[])
   ];
   $: level=checks.some(check=>check.level==='fail')?'fail':checks.some(check=>check.level==='warn')?'warn':'pass';
 </script>
@@ -42,6 +36,7 @@
 </div>
 
 <div class="facts">
+  <span><b>Geometriequelle</b> {mode==='model'?'STEP-Modell · Stock − Model':'Face Target'}</span>
   <span><b>Werkzeug</b> {operation.tool.name} · Ø {operation.tool.diameterMm.toFixed(3)} mm</span>
   <span><b>Zustellung</b> {operation.stepDownMm.toFixed(3)} mm</span>
   <span><b>Stepover</b> {operation.stepoverPercent.toFixed(1)} %</span>

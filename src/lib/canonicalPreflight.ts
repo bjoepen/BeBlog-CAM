@@ -41,10 +41,10 @@ export function validateCanonicalToolpath(toolpath:CanonicalToolpath|null|undefi
   }
 
   if(toolpath.operationKind==='drill'&&motionCount===0)errors.push('Bohren/Helix muss als kanonische XYZ-Maschinenbewegung vorliegen.');
-  if(toolpath.operationKind!=='drill'&&runCount===0)errors.push(`${toolpath.operationKind}: keine kanonische Schnittbahn vorhanden.`);
+  if(toolpath.operationKind!=='drill'&&toolpath.operationKind!=='surface-finishing'&&runCount===0)errors.push(`${toolpath.operationKind}: keine kanonische Schnittbahn vorhanden.`);
 
-  const summary=toolpath.operationKind==='drill'
-    ? `${motionCount} kanonische Maschinenbewegung${motionCount===1?'':'en'} · ${toolpath.strategy}`
+  const summary=toolpath.operationKind==='drill'||toolpath.operationKind==='surface-finishing'
+    ? `${motionCount} kanonische XYZ-Bewegung${motionCount===1?'':'en'} · ${toolpath.strategy}`
     : `${runCount} kanonische Werkzeugbahn${runCount===1?'':'en'}${spatialEntryCount?` · ${spatialEntryCount} räumliche Einstiegsbewegung${spatialEntryCount===1?'':'en'}`:''} · ${toolpath.strategy}`;
 
   return{ok:errors.length===0,errors,warnings,runCount,motionCount,spatialEntryCount,summary};

@@ -18,7 +18,9 @@ export function validateCommonOperation(operation: CamOperation, stock: StockDef
     : { level: 'fail', category: 'tool', title: 'Werkzeugdurchmesser', detail: 'Werkzeugdurchmesser muss größer als 0 sein.' });
 
   if(operation.kind==='z-level-roughing'){
-    checks.push({level:'pass',category:'depth',title:'Zielhöhe',detail:'Wird aus der ausgewählten STEP/BRep-Zielfläche abgeleitet.'});
+    checks.push((operation.roughingMode??'face-target')==='model'?{level:'pass',category:'depth',title:'Z-Level',detail:'Z-Ebenen werden aus Rohlingoberseite, STEP-Modell und Zustellung rekonstruiert.'}:{level:'pass',category:'depth',title:'Zielhöhe',detail:'Wird aus der ausgewählten STEP/BRep-Zielfläche abgeleitet.'});
+  }else if(operation.kind==='surface-finishing'){
+    checks.push({level:'pass',category:'depth',title:'3D Schlichten',detail:'Zielhöhe wird aus der ausgewählten STEP/BRep-Zielfläche und der Ballnose-Kompensation abgeleitet.'});
   }else{
     checks.push(operation.totalDepthMm > 0
       ? { level: 'pass', category: 'depth', title: operation.kind === 'facing' ? 'Planabtrag' : 'Tiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm.` }
@@ -38,7 +40,7 @@ export function validateCommonOperation(operation: CamOperation, stock: StockDef
     : { level: 'fail', category: 'setup', title: 'Sicherheits-Z', detail: 'Sicherheits-Z muss größer als 0 sein.' });
 
   if(stockMode==='none'){
-    const requiresStock=operation.kind==='facing'||operation.kind==='z-level-roughing';
+    const requiresStock=operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing';
     checks.push({level:requiresStock?'fail':'warn',category:'stock',title:'Rohling',detail:requiresStock?(operation.kind==='facing'?'Planen benötigt einen definierten Rohling.':'Z-Level Schruppen benötigt einen definierten Rohling.'):'Kein Rohling definiert: Material- und Kollisionsgrenzen sind nur eingeschränkt prüfbar.'});
   }else if(operation.kind==='z-level-roughing'){
     checks.push({level:'pass',category:'stock',title:'Rohlingtiefe',detail:`Zielfläche und Schrupp-Endhöhe werden geometrisch gegen den Rohling mit ${stock.thickness.toFixed(3)} mm Dicke bestimmt.`});
@@ -48,7 +50,7 @@ export function validateCommonOperation(operation: CamOperation, stock: StockDef
     checks.push({ level: 'pass', category: 'stock', title: 'Rohlingtiefe', detail: `${operation.totalDepthMm.toFixed(3)} mm liegen innerhalb der Rohlingdicke ${stock.thickness.toFixed(3)} mm.` });
   }
 
-  if (wcs.z !== 'top') checks.push({ level: 'fail', category: 'setup', title: 'WCS Z', detail: 'Die aktuellen 2D/2,5D- und Face-Target-Bearbeitungen sind nur mit Z-Null auf der Rohlingoberseite freigegeben.' });
+  if (wcs.z !== 'top') checks.push({ level: 'fail', category: 'setup', title: 'WCS Z', detail: 'Die aktuellen 2D/2,5D- und 3D-Bearbeitungen sind nur mit Z-Null auf der Rohlingoberseite freigegeben.' });
   else checks.push({ level: 'pass', category: 'setup', title: 'WCS Z', detail: 'Z-Null liegt auf der Rohlingoberseite.' });
   return checks;
 }
@@ -61,6 +63,11 @@ export function validateToolCompatibility(operation: CamOperation): ValidationCh
     if (kind === 'face-mill') return { level: 'pass', category: 'tool', title: 'Werkzeug · Operation', detail: 'Planfräser ist die bevorzugte Werkzeugart für Planen.' };
     if (kind === 'end-mill' || !kind) return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: `${label} ist für Planen zulässig; für größere Planflächen ist ein Planfräser bevorzugt.` };
     return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: `${label} ist für Planen nicht freigegeben.` };
+  }
+
+  if(operation.kind==='surface-finishing'){
+    if(kind==='ball-nose')return{level:'pass',category:'tool',title:'Werkzeug · Operation',detail:'Vollradiusfräser ist für 3D-Schlichten freigegeben.'};
+    return{level:'fail',category:'tool',title:'Werkzeug · Operation',detail:`${label} ist für 3D-Schlichten nicht freigegeben. Diese Strategie benötigt einen Vollradiusfräser.`};
   }
 
   if(operation.kind==='z-level-roughing'){

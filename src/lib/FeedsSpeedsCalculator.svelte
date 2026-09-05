@@ -132,10 +132,19 @@
     <main class="main-column">
       <header class="page-title"><span class="cutter">▥</span><div><h1>Werkzeugdaten</h1><p>Erst den Fräsertyp wählen, dann nur die dafür relevanten technischen Daten erfassen.</p></div></header>
       <p class="section-label">FRÄSERTYP</p>
+      {#if targetOperation?.kind==='surface-finishing'}
+        <p class="inline-message"><strong>3D Schlichten:</strong> Für diese Bearbeitung ist ausschließlich ein Vollradiusfräser zulässig.</p>
+      {/if}
       <section class="type-card">
         <div class="type-grid">
           {#each millingToolKinds as kind}
-            <button class:active={tool.kind===kind} aria-pressed={tool.kind===kind} onclick={()=>chooseToolKind(kind)}><b>{millingToolLabels[kind]}</b><span>{millingToolDescriptions[kind]}</span></button>
+            <button
+              class:active={tool.kind===kind}
+              aria-pressed={tool.kind===kind}
+              disabled={targetOperation?.kind==='surface-finishing'&&kind!=='ball-nose'}
+              title={targetOperation?.kind==='surface-finishing'&&kind!=='ball-nose'?'3D Schlichten erlaubt ausschließlich Vollradiusfräser.':undefined}
+              onclick={()=>chooseToolKind(kind)}
+            ><b>{millingToolLabels[kind]}</b><span>{millingToolDescriptions[kind]}</span></button>
           {/each}
         </div>
       </section>

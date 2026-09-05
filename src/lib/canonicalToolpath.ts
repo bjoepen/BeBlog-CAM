@@ -24,8 +24,8 @@ export type CanonicalToolpathRun={
 
 export type CanonicalToolpath={
   version:1;
-  operationKind:'z-level-roughing'|'facing'|'contour'|'pocket'|'carve'|'drill';
-  strategy:'raster'|'zigzag'|'contour'|'concentric'|'parallel-pocket'|'carve'|'drill'|'helical-bore';
+  operationKind:'z-level-roughing'|'facing'|'contour'|'pocket'|'carve'|'drill'|'surface-finishing';
+  strategy:'raster'|'zigzag'|'contour'|'concentric'|'parallel-pocket'|'carve'|'drill'|'helical-bore'|'parallel-surface';
   tool:{diameterMm:number};
   stepoverPercent:number;
   runs:CanonicalToolpathRun[];

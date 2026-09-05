@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import type { CamOperation, OperationKind, OperationsProject } from './types';
-import { defaultFacingOperation, defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultDrillOperation, defaultZLevelRoughingOperation, defaultOperationsProject } from './types';
+import { defaultFacingOperation, defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultDrillOperation, defaultZLevelRoughingOperation, defaultSurfaceFinishingOperation, defaultOperationsProject } from './types';
 
 export const operationsProjectStore=writable<OperationsProject>({
   operations:defaultOperationsProject.operations.map(op=>cloneOperation(op)),
@@ -10,7 +10,7 @@ export const operationsProjectStore=writable<OperationsProject>({
 function sync(project:OperationsProject){operationsProjectStore.set({operations:project.operations.map(cloneOperation),activeOperationId:project.activeOperationId});return project;}
 
 export function cloneOperation<T extends CamOperation>(operation:T):T {
-  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...(operation.excludedSegmentIds??[])]}:{})} as T;
+  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{}),...((operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')?{faceIds:[...operation.faceIds]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...(operation.excludedSegmentIds??[])]}:{})} as T;
 }
 
 export function createOperation(kind:OperationKind,index:number):CamOperation {
@@ -20,6 +20,7 @@ export function createOperation(kind:OperationKind,index:number):CamOperation {
   if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:`Tasche ${serial}`,tool:{...defaultPocketOperation.tool}};
   if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:`Bohren ${serial}`,curveIds:[],tool:{...defaultDrillOperation.tool}};
   if(kind==='z-level-roughing') return {...defaultZLevelRoughingOperation,id:`op-z-level-roughing-${serial}`,name:`Z-Level Schruppen ${serial}`,faceIds:[],tool:{...defaultZLevelRoughingOperation.tool}};
+  if(kind==='surface-finishing') return {...defaultSurfaceFinishingOperation,id:`op-surface-finishing-${serial}`,name:`3D Schlichten ${serial}`,faceIds:[],tool:{...defaultSurfaceFinishingOperation.tool}};
   return {...defaultCarveOperation,id:`op-carve-${serial}`,name:`Carve ${serial}`,curveIds:[],tool:{...defaultCarveOperation.tool}};
 }
 
@@ -65,8 +66,12 @@ export function operationSummary(operation:CamOperation):string {
     const method=operation.method==='helical-mill'?'Helixfräsen':'Bohren';
     return `${method} · ${source} · ${operation.curveIds.length} Bohrung${operation.curveIds.length===1?'':'en'} · ${tool}`;
   }
+  if(operation.kind==='surface-finishing'){
+    return `${operation.direction==='x'?'Parallel X':'Parallel Y'} · ${operation.stepoverPercent}% Stepover · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${tool}`;
+  }
   if(operation.kind==='z-level-roughing'){
-    return `Face Target · ${operation.stepDownMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Aufmaß · ${tool}`;
+    const source=(operation.roughingMode??'face-target')==='model'?'Modell':'Face Target';
+    return `${source} · ${operation.stepDownMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Aufmaß · ${tool}`;
   }
   if(operation.kind==='contour'){
     const side=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');

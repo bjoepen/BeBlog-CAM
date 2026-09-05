@@ -11,14 +11,16 @@ import { canonicalContourToolpathFromGcode } from './contourCanonicalToolpath';
 import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
 import { buildCarveCanonicalToolpath } from './carveCanonicalToolpath';
 import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
-import { buildFaceTargetOperationState } from './faceTargetOperation';
+import { buildZLevelOperationState, zLevelMode } from './zLevelOperationState';
+import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';
+import { toolIdentityKey } from './toolIdentity.js';
 
 export type JobPreflightLevel='pass'|'warn'|'fail';
 export type JobPreflightOperation={id:string;index:number;kind:CamOperation['kind'];label:string;detail:string;canonical:string;level:JobPreflightLevel;errors:string[];warnings:string[]};
 export type JobPreflightResult={level:JobPreflightLevel;operations:JobPreflightOperation[];enabledCount:number;toolChanges:number;errors:string[];warnings:string[]};
 
-const kindLabel=(kind:CamOperation['kind'])=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':'Z-Level Schruppen';
-const toolKey=(op:CamOperation)=>`${op.tool.name}|${op.tool.diameterMm.toFixed(6)}`;
+const kindLabel=(kind:CamOperation['kind'])=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
+const toolKey=(op:CamOperation)=>toolIdentityKey(op);
 const unique=(items:string[])=>[...new Set(items)];
 
 export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[]}):JobPreflightResult{
@@ -39,15 +41,18 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
     }else if(operation.kind==='pocket'){
       const r=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`Tasche · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
       if(r.ok)canonicalToolpath=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
-    }else if(operation.kind==='z-level-roughing'){
-      detail=`Face Target · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.stepDownMm.toFixed(3)} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toFixed(3)} mm Aufmaß`;
-      const reconstructed=buildFaceTargetOperationState({summary,stock,placement,orientation,wcs,operation});
-      if(!operation.faceIds.length)opErrors.push('Keine STEP/BRep-Zielfläche gewählt.');
-      else if(!reconstructed)opErrors.push('Die gewählte STEP/BRep-Zielfläche ist für die aktuelle Z-Level-Strategie nicht rekonstruierbar.');
-      else{
+    }else if(operation.kind==='surface-finishing'){
+      detail=`3D Schlichten · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${operation.direction==='x'?'Parallel X':'Parallel Y'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.stepoverPercent}% Stepover`;
+      const reconstructed=buildSurfaceFinishingOperationState({summary,stock,placement,orientation,wcs,operation});
+      opErrors.push(...reconstructed.errors);
+      opWarnings.push(...reconstructed.warnings);
+      if(reconstructed.ok&&reconstructed.toolpath){
         canonicalToolpath=reconstructed.toolpath;
-        detail+=` · ${operation.faceIds.length} Face Target${operation.faceIds.length===1?'':'s'} · Ziel Z ${reconstructed.targetZ.toFixed(3)} mm`;
+        detail+=` · ${reconstructed.chainCount} Schlichtketten · ${reconstructed.contactPointCount} Kontaktpunkte`;
       }
+    }else if(operation.kind==='z-level-roughing'){
+      const mode=zLevelMode(operation);detail=`${mode==='model'?'Modell · Stock−Model':'Face Target'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.stepDownMm.toFixed(3)} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toFixed(3)} mm Aufmaß`;
+      const reconstructed=buildZLevelOperationState({summary,stock,placement,orientation,wcs,operation});opErrors.push(...reconstructed.errors);opWarnings.push(...reconstructed.warnings);if(reconstructed.toolpath){canonicalToolpath=reconstructed.toolpath;if(reconstructed.targetKind==='model')detail+=` · ${reconstructed.levelCount} Modell-Z-Ebenen · Top-Zugänglichkeit geprüft`;else if(reconstructed.targetKind==='curved-face')detail+=` · ${operation.faceIds.length} gekrümmtes Face Target${operation.faceIds.length===1?'':'s'} · ${reconstructed.levelCount} Z-Ebenen · Zielbereich Z ${reconstructed.targetMinZ?.toFixed(3)??'—'}…${reconstructed.targetMaxZ?.toFixed(3)??'—'} mm`;else detail+=` · ${operation.faceIds.length} planares Face Target${operation.faceIds.length===1?'':'s'} · Ziel Z ${reconstructed.targetZ?.toFixed(3)??'—'} mm`;}
     }else{
       const r=generateContourGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];
       const excluded=operation.excludedSegmentIds??[];
