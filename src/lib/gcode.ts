@@ -4,6 +4,7 @@ import { generateOpenContourGcode } from './openContourGcode';
 import { generateBrokenContourGcode } from './brokenContourGcode';
 import { canonicalContourToolpathFromGcode, postContourCanonicalToolpath } from './contourCanonicalToolpath';
 import { contourOperationWithResolvedDepth } from './contourDepth';
+import { applyContourTabs } from './contourTabs';
 
 export type { GcodeResult, InterpolationMode };
 
@@ -27,7 +28,10 @@ export function generateContourGcode(args:ContourArgs):GcodeResult{
   if(!canonical){
     return{...result,ok:false,errors:[...result.errors,'Die geprüfte Konturbahn konnte nicht in den kanonischen Toolpath-Vertrag übernommen werden.'],code:'',lineCount:0};
   }
+  const tabbed=applyContourTabs(canonical,args.operation,resolved.resolution.depthMm);
+  if(tabbed.errors.length)return{...result,ok:false,errors:[...result.errors,...tabbed.errors],warnings:[...result.warnings,...tabbed.warnings],code:'',lineCount:0};
+  result.warnings=[...result.warnings,...tabbed.warnings];
 
-  const code=postContourCanonicalToolpath(canonical,{safeZMm:args.operation.safeZMm,feedMmMin:args.operation.feedMmMin,plungeMmMin:args.operation.plungeMmMin,spindleRpm:args.operation.spindleRpm});
+  const code=postContourCanonicalToolpath(tabbed.toolpath,{safeZMm:args.operation.safeZMm,feedMmMin:args.operation.feedMmMin,plungeMmMin:args.operation.plungeMmMin,spindleRpm:args.operation.spindleRpm});
   return{...result,code,lineCount:code.trimEnd().split(/\r?\n/).length};
 }
