@@ -5,6 +5,9 @@ import { postContourCanonicalToolpath } from './contourCanonicalToolpath';
 import { buildStepContourOperationState } from './stepContourOperation';
 import { generatePocketGcode } from './pocketGcode';
 import { generateStepPocketGcode } from './stepPocketGcode';
+import { buildStepPocketOperationState } from './stepPocketOperation';
+import { buildPocketCanonicalToolpath, postPocketCanonicalToolpath } from './pocketCanonicalToolpath';
+import { applyPocketRestMachining } from './pocketRestMachining';
 import { optimizeParallelPocketStayDown } from './pocketStayDown';
 import { generateCarveGcode } from './carveGcode';
 import { generateCanonicalDrillGcode } from './drillCanonicalToolpath';
@@ -40,6 +43,8 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
       if(!source||source.kind!=='pocket')return{ok:false,errors:['Restmaterial benötigt eine gültige vorherige Taschenbearbeitung.'],warnings:[],code:''};
       if(sourceIndex>=currentIndex)return{ok:false,errors:['Restmaterialquelle muss im Job vor der aktuellen Taschenbearbeitung liegen.'],warnings:[],code:''};
       if(source.tool.diameterMm<=pocket.tool.diameterMm)return{ok:false,errors:['Restmaterial benötigt ein kleineres Folgewerkzeug als die vorherige Taschenbearbeitung.'],warnings:[],code:''};
+      if(args.summary.kind==='step'&&source.stepFaceId!==pocket.stepFaceId)return{ok:false,errors:['Restmaterialquelle und Folgeoperation müssen dieselbe STEP-Taschenfläche verwenden.'],warnings:[],code:''};
+      if(args.summary.kind==='dxf'&&source.contourId!==pocket.contourId)return{ok:false,errors:['Restmaterialquelle und Folgeoperation müssen dieselbe DXF-Taschenkontur verwenden.'],warnings:[],code:''};
       const build=(op:PocketOperation)=>{if(args.summary.kind==='step'){const state=buildStepPocketOperationState({...common,operation:op});return state.ok?state.toolpath:null;}return buildPocketCanonicalToolpath({...common,operation:op});};
       const previous=build(source),current=build(pocket);if(!previous||!current)return{ok:false,errors:['Restmaterial konnte die kanonischen Taschenbahnen nicht rekonstruieren.'],warnings:[],code:''};
       const rest=applyPocketRestMachining({current,previous,currentToolDiameterMm:pocket.tool.diameterMm,previousToolDiameterMm:source.tool.diameterMm});if(rest.errors.length)return{ok:false,errors:rest.errors,warnings:rest.warnings,code:''};
