@@ -5,7 +5,7 @@ import { canonicalContourToolpathFromGcode } from './contourCanonicalToolpath';
 import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
 import { buildCarveCanonicalToolpath } from './carveCanonicalToolpath';
 import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
-import { buildModelRoughingOperationState } from './modelRoughingOperation';
+import { buildZLevelOperationState } from './zLevelOperationState';
 import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';
 import type {
   CamOperation,
@@ -51,6 +51,9 @@ export function buildActiveCanonicalToolpath(args:{
     const state=buildSurfaceFinishingOperationState({summary,stock,placement,orientation,wcs,operation});
     return state.ok?state.toolpath:null;
   }
-  if(operation.kind==='z-level-roughing'){if((operation.roughingMode??'face-target')!=='model')return null;const state=buildModelRoughingOperationState({summary,stock,placement,orientation,wcs,operation});return state.ok?state.toolpath:null;}
+  if(operation.kind==='z-level-roughing'){
+    const state=buildZLevelOperationState({summary,stock,placement,orientation,wcs,operation});
+    return state.errors.length===0?state.toolpath:null;
+  }
   return buildDrillCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
 }

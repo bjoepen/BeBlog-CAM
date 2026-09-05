@@ -64,7 +64,7 @@
     <strong>PASS</strong>
     <span>{levels.length} Z-Ebene{levels.length===1?'':'n'} · {toolpath.runs.length} begrenzte Werkzeugbahnen · Werkzeug Ø {toolpath.tool.diameterMm.toFixed(3)} mm.</span>
   </div>
-  <p class="boundary"><strong>Begrenzung aktiv:</strong> Nur die im STEP-Viewport gewählte BRep-Zielfläche wird geräumt. Seitliche Rohlingüberstände und innere Öffnungen bleiben außerhalb der Werkzeugbahn.</p>
+  <p class="boundary"><strong>Begrenzung aktiv:</strong> Nur die im STEP-Viewport gewählte BRep-Zielfläche wird geräumt. Planare und freigegebene gekrümmte Face Targets verwenden denselben operation-owned Z-Level-Vertrag.</p>
   {#if targetZ!==null&&roughBottomZ!==null}<p class="facts">Zielfläche Z {targetZ.toFixed(3)} mm · Schrupp-Endhöhe {roughBottomZ.toFixed(3)} mm.</p>{/if}
 
   <PostProcessorPicker/>

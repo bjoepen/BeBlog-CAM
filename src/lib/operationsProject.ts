@@ -20,6 +20,7 @@ export function createOperation(kind:OperationKind,index:number):CamOperation {
   if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:`Tasche ${serial}`,tool:{...defaultPocketOperation.tool}};
   if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:`Bohren ${serial}`,curveIds:[],tool:{...defaultDrillOperation.tool}};
   if(kind==='z-level-roughing') return {...defaultZLevelRoughingOperation,id:`op-z-level-roughing-${serial}`,name:`Z-Level Schruppen ${serial}`,faceIds:[],tool:{...defaultZLevelRoughingOperation.tool}};
+  if(kind==='surface-finishing') return {...defaultSurfaceFinishingOperation,id:`op-surface-finishing-${serial}`,name:`3D Schlichten ${serial}`,faceIds:[],tool:{...defaultSurfaceFinishingOperation.tool}};
   return {...defaultCarveOperation,id:`op-carve-${serial}`,name:`Carve ${serial}`,curveIds:[],tool:{...defaultCarveOperation.tool}};
 }
 
