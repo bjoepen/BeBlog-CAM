@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');
+const assert=(c,m)=>{console.log(`${c?'PASS':'FAIL'} 004B: ${m}`);if(!c)process.exitCode=1;};
+const cpp=read('src-tauri/native/occt_bridge.cpp');
+const rust=read('src-tauri/src/occt.rs');
+const ts=read('src/lib/stepManufacturingFeatures.ts');
+assert(cpp.includes('manufacturingEdges')&&cpp.includes('manufacturingWires'),'OCCT exports manufacturing edges and wires');
+assert(cpp.includes('TopTools_IndexedMapOfShape')&&cpp.includes('edgeIds'),'wires reference stable global edge IDs');
+assert(cpp.includes('BRepTools::IsReallyClosed'),'wire closed state comes from OCCT topology');
+assert(rust.includes('ManufacturingEdgeSummary')&&rust.includes('ManufacturingWireSummary'),'Rust boundary types edge/wire topology');
+assert(ts.includes('StepManufacturingEdgeSource')&&ts.includes('StepManufacturingWireSource'),'frontend has typed edge/wire contract');
+assert(ts.includes('wiresByFace'),'frontend exposes face-to-wire topology');
+assert(!ts.includes('HoleFeature')&&!ts.includes('PocketFeature'),'004B does not prematurely classify holes or pockets');
+if(process.exitCode)process.exit(process.exitCode);
