@@ -45,10 +45,10 @@ assert(
   'manufacturing source exposes analytic planar and cylindrical candidates'
 );
 assert(
-  feature.includes('does NOT classify holes')&&
+  !feature.includes('StepHoleFeature')&&
   !feature.includes('buildHoleFeature')&&
   !feature.includes('buildPocketFeature'),
-  '004A does not prematurely create higher-level machining features'
+  '004A manufacturing-source module does not create higher-level machining features'
 );
 
 if(process.exitCode)process.exit(process.exitCode);
