@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');const assert=(c,m)=>{console.log(`${c?'PASS':'FAIL'} 004J: ${m}`);if(!c)process.exitCode=1;};
+const contour=read('src/lib/stepContourOperation.ts'),pocket=read('src/lib/stepPocketOperation.ts'),drill=read('src/lib/stepDrillOperation.ts'),view=read('src/lib/GeometryView.svelte'),app=read('src/App.svelte'),edge=read('src/lib/stepEdgeView.ts');
+assert(contour.includes('Keine STEP-Kontur explizit gewählt')&&!contour.includes('größte obere geschlossene Wire'),'STEP contour fails closed without explicit wire');
+assert(pocket.includes('Keine STEP-Taschenfläche explizit gewählt')&&!pocket.includes('obere innere planare Face'),'STEP pocket fails closed without explicit face');
+assert(drill.includes('Keine STEP-Bohrung explizit gewählt')&&drill.includes('const selectedIds=requestedIds;'),'STEP drill fails closed without explicit hole set');
+assert(edge.includes('edgeId:number')&&view.includes('toggleStepEdge')&&view.includes('stepEdgeSelectable'),'STEP contour supports explicit edge-to-wire picking');
+assert(view.includes('stepFaceSelectable')&&view.includes('onStepHoleFeatureIdsChange')&&view.includes('onStepFaceIdChange'),'STEP pocket and drill support face picking');
+assert(app.includes('stepSelectionOperation=')&&app.includes('Noch keine Wire explizit gewählt')&&app.includes('explizit gewählt.'),'Bearbeiten UI exposes explicit STEP selection state');
+if(process.exitCode)process.exit(process.exitCode);
