@@ -1,0 +1,25 @@
+name: 004J apply patch
+on:
+  push:
+    branches:
+      - agent/beblog-cam-004j-explicit-step-selection
+    paths:
+      - .github/workflows/004j-apply.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004j-explicit-step-selection
+      - name: Apply targeted patch
+        run: python3 scripts/patch-004j.py
+      - name: Commit result
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/lib/stepContourOperation.ts src/lib/stepPocketOperation.ts src/lib/stepDrillOperation.ts src/lib/stepEdgeView.ts src/lib/GeometryView.svelte src/App.svelte src/app.css package.json scripts/check-004j-contracts.mjs docs/BUILD-004J-EXPLICIT-STEP-SELECTION.md
+          git commit -m '004j-patch: require and expose explicit STEP selection'
+          git push origin HEAD:agent/beblog-cam-004j-explicit-step-selection
