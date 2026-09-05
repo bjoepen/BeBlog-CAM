@@ -46,9 +46,9 @@ type BrepWithManufacturingFaces=NonNullable<ImportSummary['brep']>&{
   manufacturingFaces?:StepManufacturingFaceSource[];
 };
 
-const finite3=(value:unknown):value is Point3Tuple=>Array.isArray(value)&&value.length===3&&value.every(Number.isFinite);
+const finite3=(value:unknown):value is Point3Tuple=>Array.isArray(value)&&value.length===3&&value.every(item=>typeof item==='number'&&Number.isFinite(item));
 const finitePositive=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>0;
-const unitish=(value:Point3Tuple)=>Math.abs(Math.hypot(...value)-1)<=1e-6;
+const unitish=(value:Point3Tuple)=>Math.abs(Math.hypot(value[0],value[1],value[2])-1)<=1e-6;
 
 function validateFace(face:StepManufacturingFaceSource,index:number):string[]{
   const prefix=`STEP BRep Face ${index}`;
