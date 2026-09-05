@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');
+const assert=(c,m)=>{console.log(`${c?'PASS':'FAIL'} 004G: ${m}`);if(!c)process.exitCode=1;};
+const op=read('src/lib/stepPocketOperation.ts');
+const types=read('src/lib/types.ts');
+const active=read('src/lib/activeCanonicalToolpath.ts');
+const job=read('src/lib/jobGcode.ts');
+const preflight=read('src/lib/jobPreflight.ts');
+assert(types.includes('stepFaceId?:number|null'),'pocket operations own optional STEP face targets');
+assert(op.includes('buildStepManufacturingFeatureSource'),'STEP pockets use exact BRep manufacturing semantics');
+assert(op.includes('islands')&&op.includes('pointInPolygon'),'STEP pocket region preserves islands');
+assert(op.includes("strategy:'raster'")&&op.includes('scanlineSegments'),'STEP pocket produces canonical raster toolpaths');
+assert(op.includes('targetDepth')&&op.includes('faceMachineZ'),'STEP pocket depth comes from selected planar face, not DXF totalDepth');
+assert(!op.includes('planarGeometry'),'STEP pocket does not synthesize pseudo-DXF geometry');
+assert(active.includes('buildStepPocketOperationState'),'active canonical dispatcher routes STEP pockets');
+assert(job.includes('generateStepPocketGcode'),'total-job export posts STEP pockets');
+assert(preflight.includes('buildStepPocketOperationState'),'job preflight validates STEP pocket canonical truth');
+if(process.exitCode)process.exit(process.exitCode);

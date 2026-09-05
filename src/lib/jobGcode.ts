@@ -4,6 +4,7 @@ import { generateContourGcode } from './gcode';
 import { postContourCanonicalToolpath } from './contourCanonicalToolpath';
 import { buildStepContourOperationState } from './stepContourOperation';
 import { generatePocketGcode } from './pocketGcode';
+import { generateStepPocketGcode } from './stepPocketGcode';
 import { optimizeParallelPocketStayDown } from './pocketStayDown';
 import { generateCarveGcode } from './carveGcode';
 import { generateCanonicalDrillGcode } from './drillCanonicalToolpath';
@@ -29,14 +30,14 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
   if(operation.kind==='facing')return generateFacingGcode({stock:args.stock,stockMode:args.stockMode,wcs:args.wcs,operation:operation as FacingOperation});
   if(operation.kind==='contour'){
     const contour=operation as ContourOperation;
-    if(args.summary.kind==='step'){
-      const state=buildStepContourOperationState({...common,operation:contour});
-      if(!state.ok||!state.toolpath)return{ok:false,errors:state.errors,warnings:state.warnings,code:''};
-      try{return{ok:true,errors:[],warnings:state.warnings,code:normalizeGcodeComments(postContourCanonicalToolpath(state.toolpath,{safeZMm:contour.safeZMm,feedMmMin:contour.feedMmMin,plungeMmMin:contour.plungeMmMin,spindleRpm:contour.spindleRpm}))};}catch(error){return{ok:false,errors:[String(error)],warnings:state.warnings,code:''};}
-    }
+    if(args.summary.kind==='step'){const state=buildStepContourOperationState({...common,operation:contour});if(!state.ok||!state.toolpath)return{ok:false,errors:state.errors,warnings:state.warnings,code:''};try{return{ok:true,errors:[],warnings:state.warnings,code:normalizeGcodeComments(postContourCanonicalToolpath(state.toolpath,{safeZMm:contour.safeZMm,feedMmMin:contour.feedMmMin,plungeMmMin:contour.plungeMmMin,spindleRpm:contour.spindleRpm}))};}catch(error){return{ok:false,errors:[String(error)],warnings:state.warnings,code:''};}}
     return generateContourGcode({...common,operation:contour});
   }
-  if(operation.kind==='pocket'){const pocket=operation as PocketOperation,result=generatePocketGcode({...common,operation:pocket});if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:normalizeGcodeComments(optimized.code)};}
+  if(operation.kind==='pocket'){
+    const pocket=operation as PocketOperation;
+    if(args.summary.kind==='step'){const r=generateStepPocketGcode({...common,operation:pocket});return{...r,code:normalizeGcodeComments(r.code)};}
+    const result=generatePocketGcode({...common,operation:pocket});if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:normalizeGcodeComments(optimized.code)};
+  }
   if(operation.kind==='drill'){const drill=operation as DrillOperation;const r=args.summary.kind==='step'?generateStepDrillGcode({...common,operation:drill}):generateCanonicalDrillGcode({...common,operation:drill});return{...r,code:normalizeGcodeComments(r.code)};}
   if(operation.kind==='carve'){const r=generateCarveGcode({...common,operation:operation as CarveOperation});return{...r,code:normalizeGcodeComments(r.code)};}
   if(operation.kind==='surface-finishing'){const state=buildSurfaceFinishingOperationState({summary:args.summary,stock:args.stock,placement:args.placement,orientation:args.orientation,wcs:args.wcs,operation});if(!state.ok||!state.toolpath)return{ok:false,errors:state.errors.length?state.errors:['3D-Schlichtwerkzeugweg konnte nicht rekonstruiert werden.'],warnings:state.warnings,code:''};const posted=postSurfaceFinishingCanonicalToolpath(state.toolpath,operation);return{...posted,code:posted.ok?normalizeGcodeComments(posted.code):''};}
