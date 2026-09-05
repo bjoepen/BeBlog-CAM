@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');
+const assert=(c,m)=>{console.log(`${c?'PASS':'FAIL'} 004F: ${m}`);if(!c)process.exitCode=1;};
+const op=read('src/lib/stepContourOperation.ts');
+const types=read('src/lib/types.ts');
+const active=read('src/lib/activeCanonicalToolpath.ts');
+const job=read('src/lib/jobGcode.ts');
+const preflight=read('src/lib/jobPreflight.ts');
+assert(types.includes('stepWireId?:number|null'),'contour operations own STEP wire selection');
+assert(op.includes('buildStepManufacturingFeatureSource')&&op.includes('wiresByFace'),'STEP contour derives from exact BRep wires');
+assert(op.includes('offsetPolygon')&&op.includes("strategy:'contour'"),'STEP wire becomes radius-corrected canonical contour');
+assert(op.includes("operation.topology!=='closed'"),'004F remains fail-closed for open STEP contours');
+assert(op.includes('largest upper')||op.includes('größte obere geschlossene Wire'),'empty STEP selection has deterministic outer-wire fallback');
+assert(!op.includes('planarGeometry'),'STEP contour does not synthesize pseudo-DXF geometry');
+assert(active.includes('buildStepContourOperationState'),'active canonical dispatcher routes STEP contour');
+assert(job.includes('postContourCanonicalToolpath')&&job.includes('buildStepContourOperationState'),'total-job export posts STEP contour canonical truth');
+assert(preflight.includes('buildStepContourOperationState'),'job preflight validates STEP contour canonical truth');
+if(process.exitCode)process.exit(process.exitCode);
