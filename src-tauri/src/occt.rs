@@ -14,6 +14,8 @@ pub struct BrepSummary {
     #[serde(default)]
     pub cylinder_radii_mm: Vec<f64>,
     #[serde(default)]
+    pub manufacturing_faces: Vec<ManufacturingFaceSummary>,
+    #[serde(default)]
     pub display_triangles: usize,
     #[serde(default)]
     pub display_vertices: Vec<f64>,
@@ -29,6 +31,24 @@ pub struct BrepSummary {
 pub struct SurfaceTypeSummary {
     pub kind: String,
     pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManufacturingFaceSummary {
+    pub face_id: usize,
+    pub kind: String,
+    pub orientation: String,
+    #[serde(default)]
+    pub origin: Option<[f64; 3]>,
+    #[serde(default)]
+    pub normal: Option<[f64; 3]>,
+    #[serde(default)]
+    pub axis_origin: Option<[f64; 3]>,
+    #[serde(default)]
+    pub axis_direction: Option<[f64; 3]>,
+    #[serde(default)]
+    pub radius_mm: Option<f64>,
 }
 
 pub trait BrepBackend {
@@ -89,6 +109,10 @@ mod tests {
         assert!(summary.native_brep);
         assert!(summary.faces > 0);
         assert!(summary.edges > 0);
+        assert_eq!(summary.manufacturing_faces.len(), summary.faces);
+        assert!(summary.manufacturing_faces.iter().enumerate().all(|(face_id, face)| face.face_id == face_id));
+        assert!(summary.manufacturing_faces.iter().filter(|face| face.kind == "plane").all(|face| face.origin.is_some() && face.normal.is_some()));
+        assert!(summary.manufacturing_faces.iter().filter(|face| face.kind == "cylinder").all(|face| face.axis_origin.is_some() && face.axis_direction.is_some() && face.radius_mm.unwrap_or(0.0) > 0.0));
         assert!(summary.display_triangles > 0);
         assert_eq!(summary.display_vertices.len(), summary.display_triangles * 9);
         assert_eq!(summary.display_face_ids.len(), summary.display_triangles);
