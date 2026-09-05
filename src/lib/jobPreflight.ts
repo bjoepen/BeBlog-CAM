@@ -11,6 +11,7 @@ import { canonicalContourToolpathFromGcode } from './contourCanonicalToolpath';
 import { buildStepContourOperationState } from './stepContourOperation';
 import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
 import { buildStepPocketOperationState } from './stepPocketOperation';
+import { applyPocketRestMachining } from './pocketRestMachining';
 import { buildCarveCanonicalToolpath } from './carveCanonicalToolpath';
 import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
 import { buildStepDrillOperationState } from './stepDrillOperation';
@@ -37,6 +38,19 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
     else if(operation.kind==='pocket'){
       if(summary.kind==='step'){const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...state.errors];opWarnings=[...state.warnings];canonicalToolpath=state.toolpath;detail=`STEP BRep · planare Face${state.selected?` ${state.selected.faceId}`:''} · ${state.selected?.islands.length??0} Insel(n) · Raster · Ø ${operation.tool.diameterMm.toFixed(3)} mm · Ziel ${state.targetDepthMm?.toFixed(3)??'—'} mm`;}
       else{const r=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`Tasche · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;if(r.ok)canonicalToolpath=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});}
+      if(operation.restMachiningEnabled){
+        const currentIndex=enabled.findIndex(op=>op.id===operation.id),sourceIndex=enabled.findIndex(op=>op.id===operation.restFromOperationId),source=sourceIndex>=0?enabled[sourceIndex]:null;
+        if(!source||source.kind!=='pocket')opErrors.push('Restmaterial benötigt eine gültige vorherige Taschenbearbeitung.');
+        else if(sourceIndex>=currentIndex)opErrors.push('Restmaterialquelle muss im Job vor der aktuellen Taschenbearbeitung liegen.');
+        else if(source.tool.diameterMm<=operation.tool.diameterMm)opErrors.push('Restmaterial benötigt ein kleineres Folgewerkzeug als die vorherige Taschenbearbeitung.');
+        else if(summary.kind==='step'&&source.stepFaceId!==operation.stepFaceId)opErrors.push('Restmaterialquelle und Folgeoperation müssen dieselbe STEP-Taschenfläche verwenden.');
+        else if(summary.kind==='dxf'&&source.contourId!==operation.contourId)opErrors.push('Restmaterialquelle und Folgeoperation müssen dieselbe DXF-Taschenkontur verwenden.');
+        else if(canonicalToolpath){
+          const previous=summary.kind==='step'?buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation:source}).toolpath:buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation:source});
+          if(!previous)opErrors.push('Restmaterial konnte die vorherige kanonische Taschenbahn nicht rekonstruieren.');
+          else{const rest=applyPocketRestMachining({current:canonicalToolpath,previous,currentToolDiameterMm:operation.tool.diameterMm,previousToolDiameterMm:source.tool.diameterMm});opErrors.push(...rest.errors);opWarnings.push(...rest.warnings);canonicalToolpath=rest.toolpath;detail+=` · Restmaterial aus ${source.name} · Ø ${source.tool.diameterMm.toFixed(3)} → ${operation.tool.diameterMm.toFixed(3)} mm`;}
+        }
+      }
     }
     else if(operation.kind==='surface-finishing'){detail=`3D Schlichten · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${operation.direction==='x'?'Parallel X':'Parallel Y'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.stepoverPercent}% Stepover`;const reconstructed=buildSurfaceFinishingOperationState({summary,stock,placement,orientation,wcs,operation});opErrors.push(...reconstructed.errors);opWarnings.push(...reconstructed.warnings);if(reconstructed.ok&&reconstructed.toolpath){canonicalToolpath=reconstructed.toolpath;detail+=` · ${reconstructed.chainCount} Schlichtketten · ${reconstructed.contactPointCount} Kontaktpunkte`;}}
     else if(operation.kind==='z-level-roughing'){const mode=zLevelMode(operation);detail=`${mode==='model'?'Modell · Stock−Model':'Face Target'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.stepDownMm.toFixed(3)} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toFixed(3)} mm Aufmaß`;const reconstructed=buildZLevelOperationState({summary,stock,placement,orientation,wcs,operation});opErrors.push(...reconstructed.errors);opWarnings.push(...reconstructed.warnings);if(reconstructed.toolpath){canonicalToolpath=reconstructed.toolpath;}}
