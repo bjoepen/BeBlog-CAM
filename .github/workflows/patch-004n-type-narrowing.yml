@@ -1,0 +1,29 @@
+name: Patch 004N Type Narrowing
+on:
+  push:
+    branches: [agent/beblog-cam-004n-rest-machining]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004n-rest-machining
+      - shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/App.svelte'); s=p.read_text()
+          old="  function restSourcePocketOperations(){if(operation.kind!=='pocket')return[];const currentIndex=operationsProject.operations.findIndex(op=>op.id===operation.id);return operationsProject.operations.slice(0,currentIndex).filter((op):op is PocketOperation=>op.kind==='pocket'&&op.enabled!==false&&op.tool.diameterMm>operation.tool.diameterMm&&(importSummary?.kind==='step'?op.stepFaceId===operation.stepFaceId:op.contourId===operation.contourId));}\n  function setPocketRestMachining(enabled:boolean){if(operation.kind!=='pocket')return;if(!enabled){updatePocket({restMachiningEnabled:false,restFromOperationId:null});return;}const candidates=restSourcePocketOperations();const currentValid=candidates.some(op=>op.id===operation.restFromOperationId);updatePocket({restMachiningEnabled:true,restFromOperationId:currentValid?operation.restFromOperationId:candidates.at(-1)?.id??null});}\n"
+          new="  function restSourcePocketOperations(){if(operation.kind!=='pocket')return[];const pocket=operation;const currentIndex=operationsProject.operations.findIndex(op=>op.id===pocket.id);return operationsProject.operations.slice(0,currentIndex).filter((op):op is PocketOperation=>op.kind==='pocket'&&op.enabled!==false&&op.tool.diameterMm>pocket.tool.diameterMm&&(importSummary?.kind==='step'?op.stepFaceId===pocket.stepFaceId:op.contourId===pocket.contourId));}\n  function setPocketRestMachining(enabled:boolean){if(operation.kind!=='pocket')return;const pocket=operation;if(!enabled){updatePocket({restMachiningEnabled:false,restFromOperationId:null});return;}const candidates=restSourcePocketOperations();const currentValid=candidates.some(op=>op.id===pocket.restFromOperationId);updatePocket({restMachiningEnabled:true,restFromOperationId:currentValid?pocket.restFromOperationId:candidates.at(-1)?.id??null});}\n"
+          if old not in s: raise SystemExit('004N narrowing anchor not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/App.svelte
+          git diff --cached --quiet || git commit -m "fix(004n): preserve pocket narrowing across callbacks"
+          git push
