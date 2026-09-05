@@ -1,0 +1,68 @@
+name: 004H targeted UI patch
+
+on:
+  push:
+    branches:
+      - agent/beblog-cam-004h-contour-stock-bottom-overcut
+
+permissions:
+  contents: write
+
+jobs:
+  patch-app:
+    if: ${{ !contains(github.event.head_commit.message, '004h-ui:') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004h-contour-stock-bottom-overcut
+      - name: Patch App.svelte only at stable anchors
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/App.svelte')
+          s = p.read_text()
+          if "import { resolveContourDepth } from './lib/contourDepth';" in s:
+              print('004H UI already applied')
+              raise SystemExit(0)
+
+          old = "  import { buildZLevelOperationState, zLevelMode } from './lib/zLevelOperationState';\n"
+          new = old + "  import { resolveContourDepth } from './lib/contourDepth';\n"
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = "    :[];\n\n  const operationLabel="
+          new = "    :[];\n  $: contourDepthState=operation.kind==='contour'?resolveContourDepth(operation,stock,stockMode,wcs):null;\n\n  const operationLabel="
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = "  function updateContour(patch:Partial<ContourOperation>){if(operation.kind!=='contour')return;setOperation({...operation,...patch});}\n"
+          new = old + "  function updateContourOvercut(event:Event){if(operation.kind!=='contour')return;const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=0)updateContour({overcutMm:value});}\n"
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          start = "{:else if operation.kind==='contour'}<div class=\"placement-section\"><p class=\"placement-title\">Bahn</p>"
+          end = "{:else if operation.kind==='pocket'}"
+          i = s.index(start)
+          j = s.index(end, i)
+          contour_block = s[i:j]
+          depth_ui = "<div class=\"placement-section\"><p class=\"placement-title\">Schnitttiefe</p><div class=\"placement-grid two\"><button class:active={(operation.depthMode??'manual')==='manual'} onclick={()=>updateContour({depthMode:'manual'})}>Manuell</button><button class:active={(operation.depthMode??'manual')==='stock-bottom'} onclick={()=>updateContour({depthMode:'stock-bottom'})}>Durchfräsen</button></div>{#if (operation.depthMode??'manual')==='stock-bottom'}<label>Overcut <input type=\"number\" min=\"0\" step=\"0.1\" value={operation.overcutMm??0} oninput={updateContourOvercut}/> mm</label>{#if contourDepthState?.ok}<p class=\"note\"><strong>Ziel:</strong> Rohling {stock.thickness.toFixed(3)} mm + {Number(operation.overcutMm??0).toFixed(3)} mm Overcut → End-Z <strong>{(-contourDepthState.depthMm).toFixed(3)} mm</strong>.</p>{:else}<p class=\"note\"><strong>Durchfräsen nicht freigegeben:</strong> {contourDepthState?.errors.join(' ')}</p>{/if}{:else}<p class=\"note\">Manuelle Konturtiefe verwendet die unten eingestellte Gesamttiefe.</p>{/if}</div>"
+          s = s[:j] + depth_ui + s[j:]
+
+          old = "{#if operation.kind!=='z-level-roughing'&&operation.kind!=='surface-finishing'}<label>{operation.kind==='facing'?'Planabtrag':'Gesamttiefe'}"
+          new = "{#if operation.kind!=='z-level-roughing'&&operation.kind!=='surface-finishing'&&!(operation.kind==='contour'&&(operation.depthMode??'manual')==='stock-bottom')}<label>{operation.kind==='facing'?'Planabtrag':'Gesamttiefe'}"
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+      - name: Commit targeted UI patch
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.svelte
+          git commit -m "004h-ui: expose through-cut and overcut controls"
+          git push origin HEAD:agent/beblog-cam-004h-contour-stock-bottom-overcut
