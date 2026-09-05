@@ -5,6 +5,7 @@ import { generatePocketGcode } from './pocketGcode';
 import { optimizeParallelPocketStayDown } from './pocketStayDown';
 import { generateCarveGcode } from './carveGcode';
 import { generateCanonicalDrillGcode } from './drillCanonicalToolpath';
+import { generateStepDrillGcode } from './stepDrillGcode';
 import { normalizeGcodeComments } from './gcodeComments';
 import { buildZLevelOperationState, zLevelMode } from './zLevelOperationState';
 import { postFaceTargetCanonicalToolpath } from './faceTargetToolpath';
@@ -19,51 +20,29 @@ type OperationCode={ok:boolean;errors:string[];warnings:string[];code:string};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
 const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':op.kind==='drill'?'Bohren':op.kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
 const toolKey=(op:CamOperation)=>toolIdentityKey(op);
-const operationDisplayName=(op:CamOperation,index:number)=>{
-  const expected=label(op),name=op.name.trim();
-  return name.startsWith(expected)?name:`${expected} ${index+1}`;
-};
+const operationDisplayName=(op:CamOperation,index:number)=>{const expected=label(op),name=op.name.trim();return name.startsWith(expected)?name:`${expected} ${index+1}`;};
 
 function generateOperation(args:Args,operation:CamOperation):OperationCode{
   const common={summary:args.summary,stock:args.stock,stockMode:args.stockMode,placement:args.placement,orientation:args.orientation,wcs:args.wcs};
   if(operation.kind==='facing')return generateFacingGcode({stock:args.stock,stockMode:args.stockMode,wcs:args.wcs,operation:operation as FacingOperation});
   if(operation.kind==='contour')return generateContourGcode({...common,operation:operation as ContourOperation});
-  if(operation.kind==='pocket'){
-    const pocket=operation as PocketOperation,result=generatePocketGcode({...common,operation:pocket});
-    if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:normalizeGcodeComments(optimized.code)};
+  if(operation.kind==='pocket'){const pocket=operation as PocketOperation,result=generatePocketGcode({...common,operation:pocket});if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:normalizeGcodeComments(optimized.code)};}
+  if(operation.kind==='drill'){
+    const drill=operation as DrillOperation;
+    const r=args.summary.kind==='step'?generateStepDrillGcode({...common,operation:drill}):generateCanonicalDrillGcode({...common,operation:drill});
+    return{...r,code:normalizeGcodeComments(r.code)};
   }
-  if(operation.kind==='drill'){const r=generateCanonicalDrillGcode({...common,operation:operation as DrillOperation});return{...r,code:normalizeGcodeComments(r.code)};}
   if(operation.kind==='carve'){const r=generateCarveGcode({...common,operation:operation as CarveOperation});return{...r,code:normalizeGcodeComments(r.code)};}
   if(operation.kind==='surface-finishing'){
-    const state=buildSurfaceFinishingOperationState({
-      summary:args.summary,
-      stock:args.stock,
-      placement:args.placement,
-      orientation:args.orientation,
-      wcs:args.wcs,
-      operation,
-    });
-    if(!state.ok||!state.toolpath){
-      return{
-        ok:false,
-        errors:state.errors.length?state.errors:['3D-Schlichtwerkzeugweg konnte nicht rekonstruiert werden.'],
-        warnings:state.warnings,
-        code:'',
-      };
-    }
-    const posted=postSurfaceFinishingCanonicalToolpath(state.toolpath,operation);
-    return{...posted,code:posted.ok?normalizeGcodeComments(posted.code):''};
+    const state=buildSurfaceFinishingOperationState({summary:args.summary,stock:args.stock,placement:args.placement,orientation:args.orientation,wcs:args.wcs,operation});
+    if(!state.ok||!state.toolpath)return{ok:false,errors:state.errors.length?state.errors:['3D-Schlichtwerkzeugweg konnte nicht rekonstruiert werden.'],warnings:state.warnings,code:''};
+    const posted=postSurfaceFinishingCanonicalToolpath(state.toolpath,operation);return{...posted,code:posted.ok?normalizeGcodeComments(posted.code):''};
   }
   if(operation.kind==='z-level-roughing'){
     const roughing=operation as ZLevelRoughingOperation;
     const state=buildZLevelOperationState({summary:args.summary,stock:args.stock,placement:args.placement,orientation:args.orientation,wcs:args.wcs,operation:roughing});
     if(!state.toolpath||state.errors.length)return{ok:false,errors:state.errors.length?state.errors:['Z-Level-Schruppbahn konnte nicht rekonstruiert werden.'],warnings:state.warnings,code:''};
-    try{
-      const code=postFaceTargetCanonicalToolpath(state.toolpath,{safeZMm:roughing.safeZMm,feedMmMin:roughing.feedMmMin,plungeMmMin:roughing.plungeMmMin,spindleRpm:roughing.spindleRpm,source:zLevelMode(roughing)});
-      return{ok:true,errors:[],warnings:state.warnings,code:normalizeGcodeComments(code)};
-    }catch(error){
-      return{ok:false,errors:[String(error)],warnings:[],code:''};
-    }
+    try{const code=postFaceTargetCanonicalToolpath(state.toolpath,{safeZMm:roughing.safeZMm,feedMmMin:roughing.feedMmMin,plungeMmMin:roughing.plungeMmMin,spindleRpm:roughing.spindleRpm,source:zLevelMode(roughing)});return{ok:true,errors:[],warnings:state.warnings,code:normalizeGcodeComments(code)};}catch(error){return{ok:false,errors:[String(error)],warnings:[],code:''};}
   }
   return generateContourGcode({...common,operation:operation as ContourOperation});
 }
@@ -74,28 +53,13 @@ function operationBody(code:string):string[]{
 }
 
 export function generateJobGcode(args:Args):JobGcodeResult{
-  const operations=args.operations.filter(op=>op.enabled);
-  const preflight=validateJob(args);
-  if(preflight.level==='fail'){
-    return{
-      ok:false,
-      errors:['Gesamtjob ist durch den Preflight nicht freigegeben.',...preflight.errors],
-      warnings:preflight.warnings,
-      code:'',
-      lineCount:0,
-      operationCount:operations.length,
-      toolChangeCount:preflight.toolChanges,
-    };
-  }
+  const operations=args.operations.filter(op=>op.enabled),preflight=validateJob(args);
+  if(preflight.level==='fail')return{ok:false,errors:['Gesamtjob ist durch den Preflight nicht freigegeben.',...preflight.errors],warnings:preflight.warnings,code:'',lineCount:0,operationCount:operations.length,toolChangeCount:preflight.toolChanges};
   const errors:string[]=[],warnings:string[]=[...preflight.warnings];
   if(!operations.length)return{ok:false,errors:['Keine aktive Bearbeitung im Projekt.'],warnings,code:'',lineCount:0,operationCount:0,toolChangeCount:0};
   const generated=operations.map((operation,index)=>{const result=generateOperation(args,operation);if(!result.ok)for(const error of result.errors)errors.push(`Bearbeitung ${index+1} · ${label(operation)}: ${error}`);for(const warning of result.warnings)warnings.push(`Bearbeitung ${index+1} · ${label(operation)}: ${warning}`);return{operation,result};});
   if(errors.length)return{ok:false,errors,warnings,code:'',lineCount:0,operationCount:operations.length,toolChangeCount:0};
   const lines:string[]=[];lines.push('( BeBlog CAM 001Z-A )','( Gesamtjob · kanonische Einzelpfade werden zu einem gemeinsamen Maschinenprogramm verbunden )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');let toolChangeCount=0;
-  generated.forEach(({operation,result},index)=>{
-    lines.push(`( Bearbeitung ${index+1}/${operations.length} · ${label(operation)} · ${operationDisplayName(operation,index)} )`);lines.push(...operationBody(result.code));
-    const next=generated[index+1]?.operation;if(!next)return;const safe=Math.max(operation.safeZMm,next.safeZMm);lines.push(`G0 Z${f3(safe)}`);
-    if(toolKey(operation)!==toolKey(next)){toolChangeCount++;lines.push('M5',`( Werkzeugwechsel ${toolChangeCount} )`,`M0 ( Werkzeug ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm einsetzen und bestaetigen )`);}else lines.push(`( Gleiches Werkzeug · ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm )`);
-  });
+  generated.forEach(({operation,result},index)=>{lines.push(`( Bearbeitung ${index+1}/${operations.length} · ${label(operation)} · ${operationDisplayName(operation,index)} )`);lines.push(...operationBody(result.code));const next=generated[index+1]?.operation;if(!next)return;const safe=Math.max(operation.safeZMm,next.safeZMm);lines.push(`G0 Z${f3(safe)}`);if(toolKey(operation)!==toolKey(next)){toolChangeCount++;lines.push('M5',`( Werkzeugwechsel ${toolChangeCount} )`,`M0 ( Werkzeug ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm einsetzen und bestaetigen )`);}else lines.push(`( Gleiches Werkzeug · ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm )`);});
   const finalSafe=Math.max(...operations.map(op=>op.safeZMm));lines.push(`G0 Z${f3(finalSafe)}`,'M5','M30');const code=lines.join('\n')+'\n';return{ok:true,errors:[],warnings:[...new Set(warnings)],code,lineCount:lines.length,operationCount:operations.length,toolChangeCount};
 }
