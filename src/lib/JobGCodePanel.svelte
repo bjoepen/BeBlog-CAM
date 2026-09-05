@@ -61,7 +61,7 @@
     <span>{raw.operationCount} Bearbeitung{raw.operationCount===1?'':'en'} · {raw.toolChangeCount} Werkzeugwechsel · {raw.lineCount} Maschinenprogramm-Zeilen</span>
   </div>
 
-  <p class="boundary"><strong>Gesamtjob aktiv:</strong> Alle aktivierten Bearbeitungen werden in ihrer Projekt-Reihenfolge zu einem gemeinsamen Maschinenprogramm verbunden. Zwischen Operationen wird auf den größeren Sicherheits-Z-Wert gefahren; Werkzeugwechsel werden explizit mit M5/M0 ausgegeben.</p>
+  <p class="boundary"><strong>Gesamtjob freigegeben:</strong> Derselbe Preflight-Vertrag aus „Prüfen“ hat keinen FAIL geliefert. Alle aktivierten Bearbeitungen werden anschließend in ihrer Projekt-Reihenfolge zu einem gemeinsamen Maschinenprogramm verbunden. Zwischen Operationen wird auf den größeren Sicherheits-Z-Wert gefahren; Werkzeugwechsel werden explizit mit M5/M0 ausgegeben.</p>
 
   <div class="operation-list">
     {#each enabledOperations as operation,index}

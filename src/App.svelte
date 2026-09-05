@@ -10,13 +10,6 @@
   import ZLevelRoughingPreflightPanel from './lib/ZLevelRoughingPreflightPanel.svelte';
   import JobPreflightPanel from './lib/JobPreflightPanel.svelte';
   import JobGCodePanel from './lib/JobGCodePanel.svelte';
-  import GCodePanel from './lib/GCodePanel.svelte';
-  import FacingGCodePanel from './lib/FacingGCodePanel.svelte';
-  import PocketGCodePanel from './lib/PocketGCodePanel.svelte';
-  import CarveGCodePanel from './lib/CarveGCodePanel.svelte';
-  import DrillGCodePanel from './lib/DrillGCodePanel.svelte';
-  import FaceTargetGCodePanel from './lib/FaceTargetGCodePanel.svelte';
-  import SurfaceFinishingGCodePanel from './lib/SurfaceFinishingGCodePanel.svelte';
   import type { CanonicalToolpath } from './lib/canonicalToolpath';
   import FeedsSpeedsCalculator from './lib/FeedsSpeedsCalculator.svelte';
   import type { MillingToolKind } from './lib/toolTypes';
