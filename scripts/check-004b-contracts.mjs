@@ -6,7 +6,7 @@ const rust=read('src-tauri/src/occt.rs');
 const ts=read('src/lib/stepManufacturingFeatures.ts');
 assert(cpp.includes('manufacturingEdges')&&cpp.includes('manufacturingWires'),'OCCT exports manufacturing edges and wires');
 assert(cpp.includes('TopTools_IndexedMapOfShape')&&cpp.includes('edgeIds'),'wires reference stable global edge IDs');
-assert(cpp.includes('BRepTools::IsReallyClosed'),'wire closed state comes from OCCT topology');
+assert(cpp.includes('wire.Closed()')&&cpp.includes('edge.Closed()'),'edge and wire closed state come directly from OCCT topology');
 assert(rust.includes('ManufacturingEdgeSummary')&&rust.includes('ManufacturingWireSummary'),'Rust boundary types edge/wire topology');
 assert(ts.includes('StepManufacturingEdgeSource')&&ts.includes('StepManufacturingWireSource'),'frontend has typed edge/wire contract');
 assert(ts.includes('wiresByFace'),'frontend exposes face-to-wire topology');
