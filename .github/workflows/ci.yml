@@ -23,6 +23,6 @@ jobs:
           git rm scripts/patch-004k-ui.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/ci.yml src/App.svelte scripts/patch-004k-ui.py
+          git add -A
           git commit -m 'feat(004k): expose contour lead controls in inspector'
           git push origin HEAD:agent/beblog-cam-004k-contour-leads
