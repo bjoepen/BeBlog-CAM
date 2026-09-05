@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');
+const assert=(c,m)=>{console.log(`${c?'PASS':'FAIL'} 004H: ${m}`);if(!c)process.exitCode=1;};
+const types=read('src/lib/types.ts');
+const depth=read('src/lib/contourDepth.ts');
+const dxf=read('src/lib/gcode.ts');
+const step=read('src/lib/stepContourOperation.ts');
+assert(types.includes("ContourDepthMode='manual'|'stock-bottom'")&&types.includes('overcutMm'),'contour operation owns depth mode and overcut');
+assert(depth.includes('stock.thickness')&&depth.includes('+overcut'),'stock-bottom depth is stock thickness plus overcut');
+assert(depth.includes("wcs.z!=='top'")&&depth.includes("stockMode==='none'"),'stock-bottom mode fails closed without stock/top WCS');
+assert(dxf.includes('contourOperationWithResolvedDepth'),'DXF contour uses shared depth resolver');
+assert(step.includes('resolveContourDepth')&&step.includes('depth.depthMm'),'STEP contour uses the same resolved depth');
+assert(types.includes("depthMode:'manual',overcutMm:0"),'existing/new default contour behavior stays manual and backward compatible');
+if(process.exitCode)process.exit(process.exitCode);
