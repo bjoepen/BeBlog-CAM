@@ -5,6 +5,7 @@
   import { generateJobGcode } from './jobGcode';
   import type { FixtureVolume } from './fixtureCollision';
   import type { MachineEnvelope, MachineWcsOrigin } from './machineEnvelope';
+  import type { SpindleHeadGeometry } from './spindleHeadCollision';
   import { postProcessGcode } from './postprocessors';
   import { postProcessorStore } from './postProcessorStore';
   import PostProcessorPicker from './PostProcessorPicker.svelte';
@@ -19,13 +20,14 @@
   export let fixtures:FixtureVolume[]=[];
   export let machineEnvelope:MachineEnvelope|null=null;
   export let machineWcsOrigin:MachineWcsOrigin|null=null;
+  export let spindleHead:SpindleHeadGeometry|null=null;
 
   let copied=false;
   let exportMessage='';
   let exportState:''|'saved'|'error'='';
 
   $: enabledOperations=operations.filter(operation=>operation.enabled!==false);
-  $: raw=generateJobGcode({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures,machineEnvelope,machineWcsOrigin});
+  $: raw=generateJobGcode({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures,machineEnvelope,machineWcsOrigin,spindleHead});
   $: processed=raw.ok?postProcessGcode(raw.code,$postProcessorStore):{ok:false,errors:raw.errors,warnings:raw.warnings,code:''};
   $: displayCode=processed.code;
   $: valid=raw.ok&&processed.ok&&raw.operationCount>0&&!!displayCode;
