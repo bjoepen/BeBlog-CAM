@@ -4,9 +4,9 @@ const collision=read('src/lib/toolAssemblyCollision.ts');
 const stock=read('src/lib/stockSimulation.ts');
 const types=read('src/lib/types.ts');
 const preflight=read('src/lib/jobPreflight.ts');
-const tools=read('src/lib/FeedsSpeedsCalculator.svelte');
+const toolEditor=read('src/lib/FeedsSpeedsCalculator.svelte');
 const app=read('src/App.svelte');
-const tools=read('src/lib/toolTypes.ts');
+const toolTypes=read('src/lib/toolTypes.ts');
 const pkg=read('package.json');
 const checks=[
   ['tool assembly geometry contract exists',collision.includes('export type ToolAssemblyGeometry')&&collision.includes('cuttingLengthMm')&&collision.includes('stickoutMm')&&collision.includes('holderDiameterMm')],
@@ -17,10 +17,10 @@ const checks=[
   ['holder collision checks annulus outside cutter radius',collision.includes('distance<=toolRadius')&&collision.includes('distance>holderRadius')&&collision.includes('surfaceZ>holderNoseZ')],
   ['holder collision becomes explicit failure',collision.includes('Halter kollidiert im 2.5D-Reststockmodell')&&collision.includes('collisionCells>0')],
   ['unsupported bottom-zero setup fails instead of guessing',collision.includes("wcs.z!=='top'")&&collision.includes('nur mit Z-Null auf Rohlingoberseite freigegeben')],
-  ['tool library persists 004Q assembly dimensions',tools.includes('stickoutMm: number')&&tools.includes('holderDiameterMm: number')&&tools.includes('Auskragung')],
-  ['legacy tool migration supplies safe assembly defaults',tools.includes('Migrate older library entries')&&tools.includes('Math.max(base.stickoutMm,cuttingLengthMm)')],
+  ['tool library persists 004Q assembly dimensions',toolTypes.includes('stickoutMm: number')&&toolTypes.includes('holderDiameterMm: number')&&toolTypes.includes('Auskragung')],
+  ['legacy tool migration supplies safe assembly defaults',toolTypes.includes('Migrate older library entries')&&toolTypes.includes('Math.max(base.stickoutMm,cuttingLengthMm)')],
   ['operation tool assignment persists holder geometry',types.includes('stickoutMm?:number')&&types.includes('holderDiameterMm?:number')],
-  ['tool editor transfers holder geometry into operations',tools.includes('holderDiameterMm:tool.holderDiameterMm')&&tools.includes('stickoutMm:tool.stickoutMm')],
+  ['tool editor transfers holder geometry into operations',toolEditor.includes('holderDiameterMm:tool.holderDiameterMm')&&toolEditor.includes('stickoutMm:tool.stickoutMm')],
   ['app persists transferred assembly geometry',app.includes('holderDiameterMm:transfer.holderDiameterMm')&&app.includes('stickoutMm:transfer.stickoutMm')],
   ['job preflight runs 004Q against previous rest stock',preflight.includes('validateToolAssemblyAgainstRestStock')&&preflight.includes('previousOperations:stockSimulationOperations')&&preflight.includes('Werkzeugbaugruppe:')],
   ['package exposes local-first 004Q gate',pkg.includes('"check:004q": "node scripts/check-004q-contracts.mjs"')],
