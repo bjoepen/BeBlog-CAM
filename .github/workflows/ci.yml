@@ -21,6 +21,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Svelte check
         run: pnpm check
+      - name: Drill completeness contract
+        run: pnpm check:004w
       - name: Frontend build
         run: pnpm build
       - name: Rust check
