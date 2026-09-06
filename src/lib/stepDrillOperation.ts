@@ -14,6 +14,7 @@ export type StepDrillOperationState={
 
 type P3={x:number;y:number;z:number};
 const EPS=1e-6;
+const DIAMETER_EPS_MM=0.01;
 const rotateZ=(p:P3,deg:number):P3=>{const a=deg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c,z:p.z};};
 const bounds=(points:P3[])=>({
   minX:Math.min(...points.map(p=>p.x)),maxX:Math.max(...points.map(p=>p.x)),
@@ -40,6 +41,12 @@ function wcsOrigin(stock:StockDefinition,wcs:WorkCoordinateSystem):P3{return{
 function machinePoint(tuple:[number,number,number],orientation:PartOrientation,transform:{dx:number;dy:number;dz:number},origin:P3):P3{
   const r=rotateZ({x:tuple[0],y:tuple[1],z:tuple[2]},orientation.rotationZDeg);
   return{x:r.x+transform.dx-origin.x,y:r.y+transform.dy-origin.y,z:r.z+transform.dz-origin.z};
+}
+
+function requestedBottom(top:P3,geometricBottom:P3,operation:DrillOperation):P3{
+  const geometricDepth=top.z-geometricBottom.z;
+  const depth=Math.min(operation.totalDepthMm,geometricDepth);
+  return{x:geometricBottom.x,y:geometricBottom.y,z:top.z-depth};
 }
 
 function appendAxialHole(motions:CanonicalMachineMotion[],state:ToolpathPoint3,hole:StepHoleFeature,top:P3,bottom:P3,operation:DrillOperation):ToolpathPoint3{
@@ -84,6 +91,7 @@ export function buildStepDrillOperationState(args:{
   if(stockMode==='none')errors.push('STEP-Bohren benötigt einen definierten Rohling.');
   if(wcs.z!=='top')errors.push('STEP-Bohren ist aktuell nur mit Z-Null auf der Rohlingoberseite freigegeben.');
   if(Math.abs(orientation.rotationXDeg)>EPS||Math.abs(orientation.rotationYDeg)>EPS)errors.push('STEP-Bohren unterstützt aktuell nur Bauteilorientierung ohne X/Y-Kippung.');
+  if(operation.totalDepthMm<=0)errors.push('Bohrtiefe muss größer als 0 sein.');
   if(operation.stepDownMm<=0||operation.plungeMmMin<=0||operation.safeZMm<=0)errors.push('Zustellung, Eintauchvorschub und Sicherheits-Z müssen größer als 0 sein.');
   if(operation.tool.diameterMm<=0||operation.spindleRpm<=0)errors.push('Werkzeugdurchmesser und Drehzahl müssen größer als 0 sein.');
   if(operation.method==='helical-mill'&&operation.feedMmMin<=0)errors.push('Helixvorschub muss größer als 0 sein.');
@@ -100,9 +108,12 @@ export function buildStepDrillOperationState(args:{
   if(holes.length!==selectedIds.length)errors.push('Mindestens eine ausgewählte STEP-Bohrung ist im aktuellen BRep nicht mehr verfügbar.');
   for(const hole of holes){
     if(Math.abs(Math.abs(hole.axisDirection[2])-1)>1e-5)errors.push(`${hole.featureId}: Bohrungsachse ist nicht parallel zur Maschinen-Z-Achse.`);
+    if(operation.totalDepthMm>hole.depthMm+EPS)errors.push(`${hole.featureId}: Gewählte Bohrtiefe ${operation.totalDepthMm.toFixed(3)} mm überschreitet die erkannte STEP-Tiefe ${hole.depthMm.toFixed(3)} mm.`);
     if(operation.method==='helical-mill'){
       if(operation.tool.diameterMm>=hole.diameterMm-EPS)errors.push(`${hole.featureId}: Für Helixfräsen muss Werkzeug Ø ${operation.tool.diameterMm.toFixed(3)} mm kleiner als Bohrungs-Ø ${hole.diameterMm.toFixed(3)} mm sein.`);
-    }else if(operation.tool.diameterMm>hole.diameterMm+EPS)errors.push(`${hole.featureId}: Werkzeug Ø ${operation.tool.diameterMm.toFixed(3)} mm ist größer als Bohrungs-Ø ${hole.diameterMm.toFixed(3)} mm.`);
+    }else if(Math.abs(operation.tool.diameterMm-hole.diameterMm)>DIAMETER_EPS_MM){
+      errors.push(`${hole.featureId}: Axiales Bohren benötigt Werkzeug-Ø ${hole.diameterMm.toFixed(3)} mm passend zum Soll-Ø; gewählt sind ${operation.tool.diameterMm.toFixed(3)} mm.`);
+    }
   }
   if(errors.length)return{ok:false,toolpath:null,errors,warnings,holes};
 
@@ -114,7 +125,9 @@ export function buildStepDrillOperationState(args:{
   try{
     for(const hole of holes){
       const a=machinePoint(hole.startCenter,orientation,transform,origin),b=machinePoint(hole.endCenter,orientation,transform,origin);
-      const top=a.z>=b.z?a:b,bottom=a.z>=b.z?b:a;
+      const top=a.z>=b.z?a:b,geometricBottom=a.z>=b.z?b:a;
+      const bottom=requestedBottom(top,geometricBottom,operation);
+      if(operation.totalDepthMm<hole.depthMm-EPS)warnings.push(`${hole.featureId}: Teilbohrung ${operation.totalDepthMm.toFixed(3)} mm von erkannter STEP-Tiefe ${hole.depthMm.toFixed(3)} mm.`);
       state=operation.method==='helical-mill'
         ?appendHelicalHole(motions,state,hole,top,bottom,operation)
         :appendAxialHole(motions,state,hole,top,bottom,operation);
