@@ -2,6 +2,7 @@ import fs from 'node:fs';
 const read=p=>fs.readFileSync(p,'utf8');
 const collision=read('src/lib/toolAssemblyCollision.ts');
 const stock=read('src/lib/stockSimulation.ts');
+const tools=read('src/lib/toolTypes.ts');
 const pkg=read('package.json');
 const checks=[
   ['tool assembly geometry contract exists',collision.includes('export type ToolAssemblyGeometry')&&collision.includes('cuttingLengthMm')&&collision.includes('stickoutMm')&&collision.includes('holderDiameterMm')],
@@ -12,6 +13,8 @@ const checks=[
   ['holder collision checks annulus outside cutter radius',collision.includes('distance<=toolRadius')&&collision.includes('distance>holderRadius')&&collision.includes('surfaceZ>holderNoseZ')],
   ['holder collision becomes explicit failure',collision.includes('Halter kollidiert im 2.5D-Reststockmodell')&&collision.includes('collisionCells>0')],
   ['unsupported bottom-zero setup fails instead of guessing',collision.includes("wcs.z!=='top'")&&collision.includes('nur mit Z-Null auf Rohlingoberseite freigegeben')],
+  ['tool library persists 004Q assembly dimensions',tools.includes('stickoutMm: number')&&tools.includes('holderDiameterMm: number')&&tools.includes('Auskragung')],
+  ['legacy tool migration supplies safe assembly defaults',tools.includes('Migrate older library entries')&&tools.includes('Math.max(base.stickoutMm,cuttingLengthMm)')],
   ['package exposes local-first 004Q gate',pkg.includes('"check:004q": "node scripts/check-004q-contracts.mjs"')],
 ];
 let failed=false;for(const [label,ok] of checks){console.log(`${ok?'PASS':'FAIL'} 004Q: ${label}`);if(!ok)failed=true;}if(failed)process.exit(1);
