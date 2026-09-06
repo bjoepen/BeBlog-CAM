@@ -11,7 +11,7 @@ const checks=[
   ['004U preserves fallback for legacy run-only toolpaths',kernel.includes('for(const run of toolpath.runs)')&&kernel.includes("kind:'line3'")],
   ['fixture collision distinguishes spindle nose and carriage',kernel.includes("SpindleHeadCollisionKind='spindle-nose'|'z-carriage'")&&kernel.includes('Spindelnase/Spannzange')&&kernel.includes('Z-Schlitten-Hüllkörper')],
   ['invalid head geometry fails instead of guessing',kernel.includes('validateSpindleHeadGeometry')&&kernel.includes('Spindelnasen-Durchmesser muss positiv sein')],
-  ['canonical contract exposes machine motions for 004U',canonical.includes('CanonicalMachineMotion')&&canonical.includes("kind:'rapid3'")) ,
+  ['canonical contract exposes machine motions for 004U',canonical.includes('CanonicalMachineMotion')&&canonical.includes("kind:'rapid3'")],
   ['package exposes local-first 004U gate',pkg.includes('"check:004u": "node scripts/check-004u-contracts.mjs"')],
 ];
 let failed=false;for(const [label,ok] of checks){console.log(`${ok?'PASS':'FAIL'} 004U: ${label}`);if(!ok)failed=true;}if(failed)process.exit(1);
