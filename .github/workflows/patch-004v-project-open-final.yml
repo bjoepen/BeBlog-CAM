@@ -2,7 +2,7 @@ name: Patch 004V project open final
 on:
   push:
     branches:
-      - agent/beblog-cam-004v-job-persistence
+      - hotfix/004v-project-open-regression
 permissions:
   contents: write
 jobs:
@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/beblog-cam-004v-job-persistence
+          ref: hotfix/004v-project-open-regression
           fetch-depth: 0
       - run: python scripts/patch-004v-project-open-final.py
       - run: |
