@@ -4,6 +4,8 @@ const read=p=>fs.readFileSync(p,'utf8');
 const step=read('src/lib/stepDrillOperation.ts');
 const dxf=read('src/lib/drillGcode.ts');
 const active=read('src/lib/activeCanonicalToolpath.ts');
+const jobPreflight=read('src/lib/jobPreflight.ts');
+const stock=read('src/lib/stockSimulation.ts');
 const job=read('src/lib/jobGcode.ts');
 const persistence=read('src/lib/projectPersistence.ts');
 const app=read('src/App.svelte');
@@ -14,7 +16,10 @@ const checks=[
   ['STEP drill path remains operation-owned and canonical',step.includes("operationKind:'drill'")&&step.includes('motions')&&active.includes('buildStepDrillOperationState')],
   ['manual STEP drill depth remains explicitly operation-owned',step.includes("(operation.depthMode??'manual')==='manual'")&&step.includes('operation.totalDepthMm>hole.depthMm')],
   ['STEP through drilling resolves stock bottom plus overcut',step.includes("depthMode??'manual')==='stock-bottom'")&&step.includes('-stock.thickness-(operation.overcutMm??0)')],
-  ['STEP through drilling starts at stock top rather than buried feature top',step.includes('function requestedStart')&&step.includes("return{x:top.x,y:top.y,z:0}")&&step.includes('const top=requestedStart(featureTop,operation)')],
+  ['004P exposes local rest-stock surface sampling',stock.includes('export function sampleStockSurfaceZ')&&stock.includes('simulation.heights')],
+  ['STEP through drilling derives entry from prior rest stock at hole XY',step.includes('previousToolpaths?:CanonicalToolpath[]')&&step.includes('simulateStockHeightfield')&&step.includes('sampleStockSurfaceZ')&&step.includes('restStockZ??0')],
+  ['job preflight passes only prior canonical toolpaths into STEP drilling',jobPreflight.includes('previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)')],
+  ['active preview rebuilds prior operations in job order before current drilling',app.includes('function buildOrderedActiveCanonicalToolpath')&&app.includes('const previousToolpaths:CanonicalToolpath[]=[]')&&app.includes('previousToolpaths.push(toolpath)')],
   ['DXF through drilling resolves stock thickness plus overcut',dxf.includes('resolvedDxfDrillDepth')&&dxf.includes('stock.thickness+overcut')],
   ['drill model persists depth mode and overcut',types.includes("DrillDepthMode='manual'|'stock-bottom'")&&types.includes('overcutMm?:number')],
   ['STEP axial drilling requires tool diameter to match recognized hole diameter',step.includes('Axiales Bohren benötigt Werkzeug-Ø')&&step.includes('DIAMETER_EPS_MM')],
