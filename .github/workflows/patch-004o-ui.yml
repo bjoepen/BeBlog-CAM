@@ -1,0 +1,41 @@
+name: Patch 004O UI
+on:
+  push:
+    branches: [agent/beblog-cam-004o-stock-aware-roughing]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004o-stock-aware-roughing
+      - shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/App.svelte'); s=p.read_text()
+          anchor="  function choosePocketRestSource(event:Event){if(operation.kind!=='pocket')return;const id=(event.currentTarget as HTMLSelectElement).value||null;updatePocket({restFromOperationId:id});}\n"
+          insert=anchor+"  function setPocketStockAwareRoughing(enabled:boolean){if(operation.kind!=='pocket')return;updatePocket({stockAwareRoughingEnabled:enabled,...(enabled?{restMachiningEnabled:false,restFromOperationId:null}:{})});}\n  function updatePocketMaxRadialEngagement(event:Event){if(operation.kind!=='pocket')return;const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>0&&value<=100)updatePocket({maxRadialEngagementPercent:value});}\n"
+          if anchor not in s: raise SystemExit('004O function anchor not found')
+          s=s.replace(anchor,insert,1)
+          anchor2="<div class=\"placement-section\"><p class=\"placement-title\">Restmaterial</p>"
+          block="<div class=\"placement-section\"><p class=\"placement-title\">Stock-aware Roughing</p><div class=\"placement-grid two\"><button class:active={!(operation.stockAwareRoughingEnabled??false)} onclick={()=>setPocketStockAwareRoughing(false)}>Aus</button><button class:active={operation.stockAwareRoughingEnabled??false} onclick={()=>setPocketStockAwareRoughing(true)}>Aktiv</button></div>{#if operation.stockAwareRoughingEnabled??false}<label>Max. radialer Eingriff <input type=\"number\" min=\"1\" max=\"100\" step=\"1\" value={operation.maxRadialEngagementPercent??35} oninput={updatePocketMaxRadialEngagement}/> %</label><p class=\"note\">Adaptive Clearing v1: Bereits geräumte Werkzeugkorridore werden pro Z-Ebene berücksichtigt. Überschreitet eine Folge-Bahn den erlaubten radialen Eingriff, sperrt der Preflight die Bearbeitung.</p>{/if}</div>"+anchor2
+          if anchor2 not in s: raise SystemExit('004O rest block anchor not found')
+          s=s.replace(anchor2,block,1)
+          p.write_text(s)
+
+          p=Path('scripts/check-004o-contracts.mjs'); s=p.read_text()
+          s=s.replace("const preflight=read('src/lib/jobPreflight.ts');", "const preflight=read('src/lib/jobPreflight.ts');\nconst app=read('src/App.svelte');")
+          marker="  ['job preflight validates stock-aware roughing before export',preflight.includes('applyPocketStockAwareRoughing')&&preflight.includes('Stock-aware Roughing und Restmaterial dürfen in 004O nicht gleichzeitig aktiv sein.')],\n"
+          addition=marker+"  ['pocket inspector exposes stock-aware roughing controls',app.includes('Stock-aware Roughing</p>')&&app.includes('setPocketStockAwareRoughing')&&app.includes('updatePocketMaxRadialEngagement')&&app.includes('maxRadialEngagementPercent??35')],\n"
+          if marker not in s: raise SystemExit('004O gate anchor not found')
+          s=s.replace(marker,addition,1); p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/App.svelte scripts/check-004o-contracts.mjs
+          git diff --cached --quiet || git commit -m "feat(004o): expose stock-aware roughing in pocket inspector"
+          git push
