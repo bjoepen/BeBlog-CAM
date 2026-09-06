@@ -29,9 +29,11 @@
     "check:004s": "node scripts/check-004s-contracts.mjs",
     "check:004t": "node scripts/check-004t-contracts.mjs",
     "check:004u": "node scripts/check-004u-contracts.mjs",
+    "check:004v": "node scripts/check-004v-contracts.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
     "native:dev": "bash scripts/dev-macos-native.sh",
+    "native:build": "bash scripts/build-macos-native-app.sh",
     "native:test": "bash scripts/test-occt-macos.sh"
   },
   "dependencies": {"@tauri-apps/api":"^2.0.0","@tauri-apps/plugin-dialog":"^2.0.0","svelte":"^5.0.0"},
