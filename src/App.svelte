@@ -49,9 +49,18 @@
   let error = '';
   let faceTargetState:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null=null;
   function receiveFaceTargetState(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null){faceTargetState=state;}
-  $: activeCanonicalToolpath = importSummary
-    ? buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation})
-    : null;
+  function buildOrderedActiveCanonicalToolpath(){
+  if(!importSummary)return null;
+  const previousToolpaths:CanonicalToolpath[]=[];
+  for(const candidate of operationsProject.operations){
+    if(candidate.enabled===false)continue;
+    if(candidate.id===operation.id)return buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths});
+    const toolpath=buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation:candidate,previousToolpaths});
+    if(toolpath)previousToolpaths.push(toolpath);
+  }
+  return buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths});
+}
+$: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath();
   $: activeFaceTargetOperationState=importSummary&&operation.kind==='z-level-roughing'?buildZLevelOperationState({summary:importSummary,stock,placement,orientation,wcs,operation}):null;
   $: preflightFaceTargetStates=importSummary?operationsProject.operations.filter((op):op is ZLevelRoughingOperation=>op.enabled!==false&&op.kind==='z-level-roughing').map(op=>({operationId:op.id,state:buildZLevelOperationState({summary:importSummary!,stock,placement,orientation,wcs,operation:op})})).filter(entry=>entry.state.toolpath!==null&&entry.state.errors.length===0):[];
   $: preflightStepToolpaths=importSummary?.kind==='step'
