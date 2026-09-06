@@ -20,9 +20,10 @@ import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation
 import { postSurfaceFinishingCanonicalToolpath } from './surfaceFinishingGcode';
 import { validateJob } from './jobPreflight';
 import { toolIdentityKey } from './toolIdentity.js';
+import type { FixtureVolume } from './fixtureCollision';
 
 export type JobGcodeResult={ok:boolean;errors:string[];warnings:string[];code:string;lineCount:number;operationCount:number;toolChangeCount:number;};
-type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[]};
+type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[]};
 type OperationCode={ok:boolean;errors:string[];warnings:string[];code:string};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
 const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':op.kind==='drill'?'Bohren':op.kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';

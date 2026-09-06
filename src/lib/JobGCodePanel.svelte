@@ -3,6 +3,7 @@
   import { save } from '@tauri-apps/plugin-dialog';
   import type { CamOperation, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
   import { generateJobGcode } from './jobGcode';
+  import type { FixtureVolume } from './fixtureCollision';
   import { postProcessGcode } from './postprocessors';
   import { postProcessorStore } from './postProcessorStore';
   import PostProcessorPicker from './PostProcessorPicker.svelte';
@@ -14,13 +15,14 @@
   export let orientation:PartOrientation;
   export let wcs:WorkCoordinateSystem;
   export let operations:CamOperation[]=[];
+  export let fixtures:FixtureVolume[]=[];
 
   let copied=false;
   let exportMessage='';
   let exportState:''|'saved'|'error'='';
 
   $: enabledOperations=operations.filter(operation=>operation.enabled!==false);
-  $: raw=generateJobGcode({summary,stock,stockMode,placement,orientation,wcs,operations});
+  $: raw=generateJobGcode({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures});
   $: processed=raw.ok?postProcessGcode(raw.code,$postProcessorStore):{ok:false,errors:raw.errors,warnings:raw.warnings,code:''};
   $: displayCode=processed.code;
   $: valid=raw.ok&&processed.ok&&raw.operationCount>0&&!!displayCode;
