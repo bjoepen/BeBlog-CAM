@@ -12,6 +12,7 @@ import { buildStepContourOperationState } from './stepContourOperation';
 import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
 import { buildStepPocketOperationState } from './stepPocketOperation';
 import { applyPocketRestMachining } from './pocketRestMachining';
+import { applyPocketStockAwareRoughing } from './pocketStockAwareRoughing';
 import { buildCarveCanonicalToolpath } from './carveCanonicalToolpath';
 import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
 import { buildStepDrillOperationState } from './stepDrillOperation';
@@ -38,6 +39,11 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
     else if(operation.kind==='pocket'){
       if(summary.kind==='step'){const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...state.errors];opWarnings=[...state.warnings];canonicalToolpath=state.toolpath;detail=`STEP BRep · planare Face${state.selected?` ${state.selected.faceId}`:''} · ${state.selected?.islands.length??0} Insel(n) · Raster · Ø ${operation.tool.diameterMm.toFixed(3)} mm · Ziel ${state.targetDepthMm?.toFixed(3)??'—'} mm`;}
       else{const r=generatePocketGcode({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...r.errors];opWarnings=[...r.warnings];detail=`Tasche · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;if(r.ok)canonicalToolpath=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});}
+      if(operation.stockAwareRoughingEnabled&&canonicalToolpath){
+        if(operation.restMachiningEnabled)opErrors.push('Stock-aware Roughing und Restmaterial dürfen in 004O nicht gleichzeitig aktiv sein.');
+        const adaptive=applyPocketStockAwareRoughing({toolpath:canonicalToolpath,toolDiameterMm:operation.tool.diameterMm,maxRadialEngagementPercent:operation.maxRadialEngagementPercent??35});
+        opErrors.push(...adaptive.errors);opWarnings.push(...adaptive.warnings);canonicalToolpath=adaptive.toolpath;detail+=` · Stock-aware ${operation.maxRadialEngagementPercent??35}% radial`;
+      }
       if(operation.restMachiningEnabled){
         const currentIndex=enabled.findIndex(op=>op.id===operation.id),sourceIndex=enabled.findIndex(op=>op.id===operation.restFromOperationId),source=sourceIndex>=0?enabled[sourceIndex]:null;
         if(!source||source.kind!=='pocket')opErrors.push('Restmaterial benötigt eine gültige vorherige Taschenbearbeitung.');
