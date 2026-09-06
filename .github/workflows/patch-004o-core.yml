@@ -1,0 +1,47 @@
+name: Patch 004O core
+on:
+  push:
+    branches: [agent/beblog-cam-004o-stock-aware-roughing]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004o-stock-aware-roughing
+      - shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p=Path('src/lib/types.ts'); s=p.read_text()
+          s=s.replace("restMachiningEnabled?:boolean;restFromOperationId?:string|null;direction:CutDirection", "restMachiningEnabled?:boolean;restFromOperationId?:string|null;stockAwareRoughingEnabled?:boolean;maxRadialEngagementPercent?:number;direction:CutDirection")
+          s=s.replace("restMachiningEnabled:false,restFromOperationId:null,tool:", "restMachiningEnabled:false,restFromOperationId:null,stockAwareRoughingEnabled:false,maxRadialEngagementPercent:35,tool:")
+          p.write_text(s)
+
+          p=Path('src/lib/jobGcode.ts'); s=p.read_text()
+          s=s.replace("import { applyPocketRestMachining } from './pocketRestMachining';", "import { applyPocketRestMachining } from './pocketRestMachining';\nimport { applyPocketStockAwareRoughing } from './pocketStockAwareRoughing';")
+          anchor="""    if(args.summary.kind==='step'){const r=generateStepPocketGcode({...common,operation:pocket});return{...r,code:normalizeGcodeComments(r.code);}}"""
+          # anchor is deliberately not used; insert before normal STEP branch using exact one-line source
+          old="""    if(args.summary.kind==='step'){const r=generateStepPocketGcode({...common,operation:pocket});return{...r,code:normalizeGcodeComments(r.code)};}\n    const result=generatePocketGcode({...common,operation:pocket});if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:normalizeGcodeComments(optimized.code)};"""
+          new="""    if(pocket.stockAwareRoughingEnabled){\n      const base=args.summary.kind==='step'?buildStepPocketOperationState({...common,operation:pocket}).toolpath:buildPocketCanonicalToolpath({...common,operation:pocket});\n      if(!base)return{ok:false,errors:['Stock-aware Roughing konnte die kanonische Taschenbahn nicht rekonstruieren.'],warnings:[],code:''};\n      const adaptive=applyPocketStockAwareRoughing({toolpath:base,toolDiameterMm:pocket.tool.diameterMm,maxRadialEngagementPercent:pocket.maxRadialEngagementPercent??35});\n      if(adaptive.errors.length||!adaptive.toolpath)return{ok:false,errors:adaptive.errors.length?adaptive.errors:['Stock-aware Roughing erzeugte keinen freigegebenen Werkzeugweg.'],warnings:adaptive.warnings,code:''};\n      const code=postPocketCanonicalToolpath(adaptive.toolpath,{safeZMm:pocket.safeZMm,feedMmMin:pocket.feedMmMin,plungeMmMin:pocket.plungeMmMin,spindleRpm:pocket.spindleRpm});return{ok:true,errors:[],warnings:adaptive.warnings,code:normalizeGcodeComments(code)};\n    }\n    if(args.summary.kind==='step'){const r=generateStepPocketGcode({...common,operation:pocket});return{...r,code:normalizeGcodeComments(r.code)};}\n    const result=generatePocketGcode({...common,operation:pocket});if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:normalizeGcodeComments(optimized.code)};"""
+          if old not in s: raise SystemExit('job pocket anchor not found')
+          s=s.replace(old,new,1); p.write_text(s)
+
+          p=Path('src/lib/jobPreflight.ts'); s=p.read_text()
+          s=s.replace("import { applyPocketRestMachining } from './pocketRestMachining';", "import { applyPocketRestMachining } from './pocketRestMachining';\nimport { applyPocketStockAwareRoughing } from './pocketStockAwareRoughing';")
+          anchor="""      if(operation.restMachiningEnabled){"""
+          insert="""      if(operation.stockAwareRoughingEnabled&&canonicalToolpath){\n        if(operation.restMachiningEnabled)opErrors.push('Stock-aware Roughing und Restmaterial dürfen in 004O nicht gleichzeitig aktiv sein.');\n        const adaptive=applyPocketStockAwareRoughing({toolpath:canonicalToolpath,toolDiameterMm:operation.tool.diameterMm,maxRadialEngagementPercent:operation.maxRadialEngagementPercent??35});\n        opErrors.push(...adaptive.errors);opWarnings.push(...adaptive.warnings);canonicalToolpath=adaptive.toolpath;detail+=` · Stock-aware ${operation.maxRadialEngagementPercent??35}% radial`;\n      }\n      if(operation.restMachiningEnabled){"""
+          if anchor not in s: raise SystemExit('preflight pocket anchor not found')
+          s=s.replace(anchor,insert,1); p.write_text(s)
+
+          p=Path('package.json'); s=p.read_text(); s=s.replace('"check:004n": "node scripts/check-004n-contracts.mjs",','"check:004n": "node scripts/check-004n-contracts.mjs",\n    "check:004o": "node scripts/check-004o-contracts.mjs",'); p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/lib/types.ts src/lib/jobGcode.ts src/lib/jobPreflight.ts package.json
+          git diff --cached --quiet || git commit -m "feat(004o): integrate stock-aware pocket roughing"
+          git push
