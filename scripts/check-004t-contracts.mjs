@@ -12,7 +12,7 @@ const checks=[
   ['run based toolpaths gain explicit rapid and spatial motions',chain.includes("kind:'rapid3'")&&chain.includes("kind:'line3'")&&chain.includes('runCutMotions')],
   ['safe chain explicitly approaches and retracts each run',chain.includes('Entry-Anfahrt')&&chain.includes('Sicherheits-Retract')&&chain.includes('Zustellung')],
   ['safe chain validates continuity instead of teleporting',chain.includes('Bewegungskette ist nicht zusammenhängend')&&chain.includes('samePoint(previous.end,motion.start)')],
-  ['explicit XYZ motion owners remain authoritative',chain.includes('toolpath.motions?.length')&&chain.includes('does not silently rebuild')],
+  ['explicit XYZ motion owners remain authoritative',chain.includes('if(toolpath.motions?.length)')&&chain.includes('const motions=[...toolpath.motions]')&&chain.includes('{...toolpath,motions}')&&chain.includes('explizite canonical motions-Kette ist nicht zusammenhängend')],
   ['operation chain exposes safe start and end anchors',chain.includes('startSafePoint')&&chain.includes('endSafePoint')],
   ['job transition planner connects operations on max safe Z',chain.includes('export function buildJobSafeTransitions')&&chain.includes('Math.max(current.safeZMm,next.safeZMm)')],
   ['canonical contract supports rapid3 motions',canonical.includes("kind:'rapid3'")&&canonical.includes('CanonicalMachineMotion')],
