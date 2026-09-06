@@ -232,7 +232,7 @@
     const modelRegionPaths=mr.map(loop=>path(loop.map(map),true)).filter(Boolean);
     const invalidModelPaths=mi.map(loop=>path(loop.map(map))).filter(Boolean);
     const roughingRegionPaths=rg.map(loop=>path(loop.map(map),true)).filter(Boolean);
-    const invalidRoughingPaths=ri.map(loop=>path(loop.map(map),true)).filter(Boolean);
+    const invalidRoughingPaths=ri.map(loop=>path(loop.map(map))).filter(Boolean);
     const modelRoughingToolPaths=mt.map(run=>path(run.map(map))).filter(Boolean);
     const curvedFaceProofPaths=cf.map(line=>path(line.map(map))).filter(Boolean);
     const curvedRoughingPaths=cr.map(line=>path(line.map(map))).filter(Boolean);
@@ -416,7 +416,7 @@
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;onSelectedFaceIdsChange([])}
-  $: s3=(summary.fileName,preflightFaceTargetToolpaths,preflightStepToolpaths,showModelRegions,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget,showCurvedFaceRoughing,showBallnoseContactProof,scene3d({yaw,pitch},showZLevels&&faceTargetEditing,roughingOperation?.stepDownMm??1,selectedFaceIds,roughingOperation?.finishAllowanceMm??0,roughingOperation?.tool.diameterMm??1,roughingOperation?.stepoverPercent??40,((canonicalToolpath?.operationKind==='z-level-roughing'||canonicalToolpath?.operationKind==='surface-finishing')?[canonicalToolpath]:[...preflightFaceTargetToolpaths,...preflightStepToolpaths]),showModelRegions||showRoughingRegions||showModelRoughingToolpath,modelRegionSliceStepMm,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget||showCurvedFaceRoughing||showBallnoseContactProof,showCurvedFaceRoughing,showBallnoseContactProof));
+  $: s3=(summary.fileName,preflightFaceTargetToolpaths,preflightStepToolpaths,showModelRegions,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget,showCurvedFaceRoughing,showBallnoseContactProof,scene3d({yaw,pitch},showZLevels&&faceTargetEditing,roughingOperation?.stepDownMm??1,selectedFaceIds,roughingOperation?.finishAllowanceMm??0,roughingOperation?.tool.diameterMm??1,roughingOperation?.stepoverPercent??40,((canonicalToolpath?.operationKind==='z-level-roughing'||canonicalToolpath?.operationKind==='surface-finishing'||canonicalToolpath?.operationKind==='drill')?[canonicalToolpath]:[...preflightFaceTargetToolpaths,...preflightStepToolpaths]),showModelRegions||showRoughingRegions||showModelRoughingToolpath,modelRegionSliceStepMm,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget||showCurvedFaceRoughing||showBallnoseContactProof,showCurvedFaceRoughing,showBallnoseContactProof));
   $: onFaceTargetChange(s3?.canonicalFaceTargetToolpath&&s3.targetZ!==null&&s3.roughBottomZ!==null
     ?{toolpath:s3.canonicalFaceTargetToolpath,targetZ:s3.targetZ,roughBottomZ:s3.roughBottomZ}
     :null);
@@ -444,7 +444,7 @@
       {#each s3.triangles as triangle}
         <path d={path(triangle.points,true)} class="step-face" class:selectable-face={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable} class:selected-face={stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId)} style={`fill:${faceFill(triangle.shade,stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId))}`} role={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable?'button':undefined} tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}><title>Fläche {triangle.faceId+1}{selectedFaceIds.includes(triangle.faceId)?' · ausgewählt':''}</title></path>
       {/each}
-      {#if showZLevels||preflightFaceTargetToolpaths.length||preflightStepToolpaths.length||canonicalToolpath?.operationKind==='surface-finishing'}
+      {#if showZLevels||preflightFaceTargetToolpaths.length||preflightStepToolpaths.length||canonicalToolpath?.operationKind==='surface-finishing'||canonicalToolpath?.operationKind==='drill'}
         {#if showZLevels}{#each s3.roughRegions as region}<path d={region} class="roughing-region" fill-rule="evenodd"/>{/each}{/if}
         {#each s3.toolPaths as tool}<path d={tool} class="toolpath-preview"/>{/each}
       {/if}
