@@ -1,0 +1,64 @@
+name: 004W1 Rest Stock Wiring
+
+on:
+  push:
+    branches: [hotfix/004w1-drill-real-world]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/004w1-drill-real-world
+      - name: Apply exact rest-stock wiring
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app = Path('src/App.svelte')
+          text = app.read_text()
+          old = """  $: activeCanonicalToolpath = importSummary
+            ? buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation})
+            : null;
+          """
+          new = """  function buildOrderedActiveCanonicalToolpath(){
+            if(!importSummary)return null;
+            const previousToolpaths:CanonicalToolpath[]=[];
+            for(const candidate of operationsProject.operations){
+              if(candidate.enabled===false)continue;
+              if(candidate.id===operation.id)return buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths});
+              const toolpath=buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation:candidate,previousToolpaths});
+              if(toolpath)previousToolpaths.push(toolpath);
+            }
+            return buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths});
+          }
+          $: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath();
+          """
+          if text.count(old) != 1:
+              raise SystemExit(f'App.svelte wiring anchor count was {text.count(old)}, expected 1')
+          app.write_text(text.replace(old,new))
+
+          job = Path('src/lib/jobPreflight.ts')
+          text = job.read_text()
+          old = "buildStepDrillOperationState({summary,stock,stockMode,placement,orientation,wcs,operation})"
+          new = "buildStepDrillOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)})"
+          if text.count(old) != 1:
+              raise SystemExit(f'jobPreflight.ts wiring anchor count was {text.count(old)}, expected 1')
+          text = text.replace(old,new)
+          text = text.replace(' · Tiefe aus Hole Feature`;', ' · Start aus aktuellem Reststock`;', 1)
+          job.write_text(text)
+
+          Path('.github/workflows/004w1-wire-reststock.yml').unlink()
+          PY
+      - name: Commit wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.svelte src/lib/jobPreflight.ts .github/workflows/004w1-wire-reststock.yml
+          git commit -m "fix(004w1): wire drill start to operation-order rest stock"
+          git push origin HEAD:hotfix/004w1-drill-real-world
