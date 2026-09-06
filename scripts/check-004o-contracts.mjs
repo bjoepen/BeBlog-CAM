@@ -4,6 +4,7 @@ const types=read('src/lib/types.ts');
 const kernel=read('src/lib/pocketStockAwareRoughing.ts');
 const job=read('src/lib/jobGcode.ts');
 const preflight=read('src/lib/jobPreflight.ts');
+const app=read('src/App.svelte');
 const checks=[
   ['pocket operation stores stock-aware roughing controls',types.includes('stockAwareRoughingEnabled?:boolean')&&types.includes('maxRadialEngagementPercent?:number')],
   ['defaults keep stock-aware roughing disabled and conservative',types.includes('stockAwareRoughingEnabled:false')&&types.includes('maxRadialEngagementPercent:35')],
@@ -15,5 +16,6 @@ const checks=[
   ['kernel can skip already cleared duplicate paths',kernel.includes('skippedRuns++')&&kernel.includes('bereits geräumte Werkzeugbahn')],
   ['job export posts the filtered stock-aware canonical path',job.includes('applyPocketStockAwareRoughing')&&job.includes('postPocketCanonicalToolpath(adaptive.toolpath')],
   ['job preflight validates stock-aware roughing before export',preflight.includes('applyPocketStockAwareRoughing')&&preflight.includes('Stock-aware Roughing und Restmaterial dürfen in 004O nicht gleichzeitig aktiv sein.')],
+  ['pocket inspector exposes stock-aware roughing controls',app.includes('Stock-aware Roughing</p>')&&app.includes('setPocketStockAwareRoughing')&&app.includes('updatePocketMaxRadialEngagement')&&app.includes('maxRadialEngagementPercent??35')],
 ];
 let failed=false;for(const [label,ok] of checks){console.log(`${ok?'PASS':'FAIL'} 004O: ${label}`);if(!ok)failed=true;}if(failed)process.exit(1);
