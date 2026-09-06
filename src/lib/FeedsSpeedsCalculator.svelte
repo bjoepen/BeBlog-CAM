@@ -17,7 +17,7 @@
 
   type ToolTab='data'|'calculator'|'library';
   type ToolOperationChoice={id:string;label:string;name:string;summary:string};
-  type ToolOperationTransfer={operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number};
+  type ToolOperationTransfer={operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number;cuttingLengthMm:number;stickoutMm:number;shaftDiameterMm:number;holderDiameterMm:number};
 
   export let activeOperationName='Aktive Bearbeitung';
   export let operationChoices:ToolOperationChoice[]=[];
@@ -103,7 +103,7 @@
   }
   function applyToOperation(){
     if(!onApplyToOperation||!targetOperationId||toolTransferBlocked||recommendedRpm==null||recommendedFeed==null||!(calculationDiameter>0))return;
-    onApplyToOperation({operationId:targetOperationId,toolId:selectedToolId??'tool-calculator',toolName:tool.name.trim()||millingToolLabels[tool.kind],toolKind:tool.kind,diameterMm:calculationDiameter,feedMmMin:Math.round(recommendedFeed),spindleRpm:Math.round(recommendedRpm)});
+    onApplyToOperation({operationId:targetOperationId,toolId:selectedToolId??'tool-calculator',toolName:tool.name.trim()||millingToolLabels[tool.kind],toolKind:tool.kind,diameterMm:calculationDiameter,feedMmMin:Math.round(recommendedFeed),spindleRpm:Math.round(recommendedRpm),cuttingLengthMm:tool.kind==='end-mill'||tool.kind==='ball-nose'?tool.cuttingLengthMm:(tool.kind==='face-mill'?tool.maxDepthOfCutMm:tool.stickoutMm),stickoutMm:tool.stickoutMm,shaftDiameterMm:tool.kind==='end-mill'||tool.kind==='ball-nose'?tool.shaftDiameterMm:calculationDiameter,holderDiameterMm:tool.holderDiameterMm});
     transferMessage=`Übernommen in ${targetOperationChoice?.label??activeOperationName}: ${millingToolLabels[tool.kind]} · ${materialProfile.label} · Ø ${n(calculationDiameter,2)} mm · ${n(Math.round(recommendedRpm))} 1/min · ${n(Math.round(recommendedFeed))} mm/min.`;
   }
 </script>
