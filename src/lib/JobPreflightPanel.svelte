@@ -4,7 +4,7 @@
   import type { FixtureVolume } from './fixtureCollision';
   import type { MachineEnvelope, MachineWcsOrigin } from './machineEnvelope';
   import type { SpindleHeadGeometry } from './spindleHeadCollision';
-  export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let placement:PartPlacement;export let orientation:PartOrientation;export let wcs:WorkCoordinateSystem;export let fixtures:FixtureVolume[]=[];export let machineEnvelope:MachineEnvelope|null=null;export let machineWcsOrigin:MachineWcsOrigin|null=null;export let spindleHead:SpindleHeadGeometry|null=null;export let spindleHead:SpindleHeadGeometry|null=null;export let operations:CamOperation[];
+  export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let placement:PartPlacement;export let orientation:PartOrientation;export let wcs:WorkCoordinateSystem;export let fixtures:FixtureVolume[]=[];export let machineEnvelope:MachineEnvelope|null=null;export let machineWcsOrigin:MachineWcsOrigin|null=null;export let spindleHead:SpindleHeadGeometry|null=null;export let operations:CamOperation[];
   $: result=validateJob({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures,machineEnvelope,machineWcsOrigin,spindleHead});
 </script>
 <p class="eyebrow">05 · Prüfen</p><h2>Gesamtjob</h2>
