@@ -1,0 +1,26 @@
+name: Patch 004R integration
+on:
+  push:
+    branches:
+      - agent/beblog-cam-004r-fixture-collision
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004r-fixture-collision
+          fetch-depth: 0
+      - name: Apply 004R integration
+        run: python scripts/patch-004r-integration.py
+      - name: Commit integration
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/App.svelte src/lib/jobPreflight.ts src/lib/JobPreflightPanel.svelte src/lib/jobGcode.ts src/lib/JobGCodePanel.svelte scripts/check-004r-contracts.mjs
+          git commit -m "feat(004r): integrate fixtures into setup preflight and export"
+          git push
