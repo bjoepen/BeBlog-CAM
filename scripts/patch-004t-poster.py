@@ -5,7 +5,6 @@ def replace_once(s, old, new, label):
         raise SystemExit(f'{label} anchor missing')
     return s.replace(old, new, 1)
 
-# Preflight exposes the exact materialized toolpath used by all safety checks.
 p=Path('src/lib/jobPreflight.ts'); s=p.read_text()
 if "import type { CanonicalToolpath } from './canonicalToolpath';" not in s:
     s=replace_once(s,"import { materializeSafeMotionChain } from './safeMotionChain';\n","import { materializeSafeMotionChain, buildJobSafeTransitions } from './safeMotionChain';\nimport type { CanonicalToolpath } from './canonicalToolpath';\n",'preflight safe imports')
@@ -13,7 +12,6 @@ else:
     s=s.replace("import { materializeSafeMotionChain } from './safeMotionChain';","import { materializeSafeMotionChain, buildJobSafeTransitions } from './safeMotionChain';")
 s=s.replace("export type JobPreflightOperation={id:string;index:number;kind:CamOperation['kind'];label:string;detail:string;canonical:string;level:JobPreflightLevel;errors:string[];warnings:string[];toolAssembly:JobPreflightToolAssembly;fixtureCollision:JobPreflightFixtureCollision;machineEnvelope:JobPreflightMachineEnvelope};","export type JobPreflightOperation={id:string;index:number;kind:CamOperation['kind'];label:string;detail:string;canonical:string;level:JobPreflightLevel;errors:string[];warnings:string[];toolAssembly:JobPreflightToolAssembly;fixtureCollision:JobPreflightFixtureCollision;machineEnvelope:JobPreflightMachineEnvelope;toolpath:CanonicalToolpath|null};")
 s=s.replace("operations.push({id:operation.id,index:index+1,kind:operation.kind,label,detail,canonical:canonical.summary,level,errors:opErrors,warnings:opWarnings,toolAssembly,fixtureCollision,machineEnvelope});","operations.push({id:operation.id,index:index+1,kind:operation.kind,label,detail,canonical:canonical.summary,level,errors:opErrors,warnings:opWarnings,toolAssembly,fixtureCollision,machineEnvelope,toolpath:canonicalToolpath});")
-# Validate job-level transitions too.
 anchor="  if(!enabled.length)errors.push('Der Gesamtjob enthält keine aktivierte Bearbeitung.');"
 block="""  const transitionSource=operations.filter(op=>op.toolpath&&!op.errors.length).map(op=>({id:op.id,safeZMm:enabled.find(item=>item.id===op.id)?.safeZMm??0,toolpath:op.toolpath!}));
   const transitions=buildJobSafeTransitions({operations:transitionSource});
@@ -32,7 +30,6 @@ if 'Safe Motion 004T Job:' not in s:
     s=replace_once(s,anchor,block+anchor,'preflight transition validation')
 p.write_text(s)
 
-# Rewrite generateJobGcode to use preflight toolpaths + canonical motion poster.
 p=Path('src/lib/jobGcode.ts'); s=p.read_text()
 if "from './safeMotionChain'" not in s:
     s=replace_once(s,"import type { MachineEnvelope, MachineWcsOrigin } from './machineEnvelope';\n","import type { MachineEnvelope, MachineWcsOrigin } from './machineEnvelope';\nimport { buildJobSafeTransitions } from './safeMotionChain';\nimport { postCanonicalMachineMotions } from './canonicalMotionGcode';\n",'job safe imports')
@@ -69,13 +66,26 @@ new_func=r'''export function generateJobGcode(args:Args):JobGcodeResult{
 s=s[:start]+new_func
 p.write_text(s)
 
-# Gate proves common truth + explicit transition posting.
 p=Path('scripts/check-004t-contracts.mjs'); s=p.read_text()
 if "const job=read('src/lib/jobGcode.ts');" not in s:
     s=s.replace("const preflight=read('src/lib/jobPreflight.ts');\n","const preflight=read('src/lib/jobPreflight.ts');\nconst job=read('src/lib/jobGcode.ts');\nconst poster=read('src/lib/canonicalMotionGcode.ts');\n")
 marker="  ['package exposes local-first 004T gate',pkg.includes('\"check:004t\": \"node scripts/check-004t-contracts.mjs\"')],\n"
-addition="  ['preflight exposes the exact materialized toolpath used for export',preflight.includes('toolpath:CanonicalToolpath|null')&&preflight.includes('toolpath:canonicalToolpath')],\n  ['job transitions are complete lift XY descend motion chains',chain.includes('motions:CanonicalMachineMotion[]')&&chain.includes('const lifted=')&&chain.includes('const across=')],\n  ['job preflight checks operation transitions against machine envelope',preflight.includes('Safe Motion 004T Job:')&&preflight.includes('Maschinenraum Übergang')],\n  ['NC job posts preflight materialized motions instead of legacy operation G-code',job.includes('item.preflight!.toolpath!')&&job.includes('postCanonicalMachineMotions')&&job.includes('buildJobSafeTransitions')&&!job.slice(job.indexOf('export function generateJobGcode')).includes('generateOperation(args,operation)')],\n  ['canonical poster emits rapid line and arc motions directly',poster.includes("motion.kind==='rapid3'")&&poster.includes("motion.kind==='line3'")&&poster.includes("motion.ccw?'G3':'G2'")],\n"+marker
+addition="""  ['preflight exposes the exact materialized toolpath used for export',preflight.includes('toolpath:CanonicalToolpath|null')&&preflight.includes('toolpath:canonicalToolpath')],
+  ['job transitions are complete lift XY descend motion chains',chain.includes('motions:CanonicalMachineMotion[]')&&chain.includes('const lifted=')&&chain.includes('const across=')],
+  ['job preflight checks operation transitions against machine envelope',preflight.includes('Safe Motion 004T Job:')&&preflight.includes('Maschinenraum Übergang')],
+  ['NC job posts preflight materialized motions instead of legacy operation G-code',job.includes('item.preflight!.toolpath!')&&job.includes('postCanonicalMachineMotions')&&job.includes('buildJobSafeTransitions')&&!job.slice(job.indexOf('export function generateJobGcode')).includes('generateOperation(args,operation)')],
+  ['canonical poster emits rapid line and arc motions directly',poster.includes("motion.kind==='rapid3'")&&poster.includes("motion.kind==='line3'")&&poster.includes("motion.ccw?'G3':'G2'"))],
+"""
+# Fix accidental extra parenthesis in the generated JS check before insertion.
+addition=addition.replace("poster.includes(\"motion.ccw?'G3':'G2'\"))]","poster.includes(\"motion.ccw?'G3':'G2'\"))]")
+addition=addition.replace("poster.includes(\"motion.ccw?'G3':'G2'\"))]","poster.includes(\"motion.ccw?'G3':'G2'\"))]")
+# Simpler stable spelling for the final check.
+addition=addition.replace("&&poster.includes(\"motion.ccw?'G3':'G2'\"))]","&&poster.includes(\"motion.ccw?'G3':'G2'\"))]")
+# Avoid Python quote complexity by replacing the complete final line.
+lines=addition.splitlines()
+lines[-1]="  ['canonical poster emits rapid line and arc motions directly',poster.includes(\"motion.kind==='rapid3'\")&&poster.includes(\"motion.kind==='line3'\")&&poster.includes(\"motion.ccw?'G3':'G2'\")],"
+addition='\n'.join(lines)+'\n'
 if 'preflight exposes the exact materialized toolpath used for export' not in s:
     if marker not in s: raise SystemExit('gate marker missing')
-    s=s.replace(marker,addition,1)
+    s=s.replace(marker,addition+marker,1)
 p.write_text(s)
