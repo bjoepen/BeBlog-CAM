@@ -22,6 +22,8 @@ import { validateJob } from './jobPreflight';
 import { toolIdentityKey } from './toolIdentity.js';
 import type { FixtureVolume } from './fixtureCollision';
 import type { MachineEnvelope, MachineWcsOrigin } from './machineEnvelope';
+import { buildJobSafeTransitions } from './safeMotionChain';
+import { postCanonicalMachineMotions } from './canonicalMotionGcode';
 
 export type JobGcodeResult={ok:boolean;errors:string[];warnings:string[];code:string;lineCount:number;operationCount:number;toolChangeCount:number;};
 type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[];machineEnvelope?:MachineEnvelope|null;machineWcsOrigin?:MachineWcsOrigin|null};
@@ -72,4 +74,31 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
 }
 
 function operationBody(code:string):string[]{const body=code.split(/\r?\n/).filter(line=>{const t=line.trim();if(!t)return false;if(t==='G21'||t==='G90'||t==='G17'||t==='M30')return false;if(/^\( BeBlog CAM /.test(t))return false;return true;});while(body.length){const t=body[body.length-1].trim();if(t==='M5'||/^G0\s+Z[-+]?\d+(?:\.\d+)?$/i.test(t)){body.pop();continue;}break;}return body;}
-export function generateJobGcode(args:Args):JobGcodeResult{const operations=args.operations.filter(op=>op.enabled),preflight=validateJob(args);if(preflight.level==='fail')return{ok:false,errors:['Gesamtjob ist durch den Preflight nicht freigegeben.',...preflight.errors],warnings:preflight.warnings,code:'',lineCount:0,operationCount:operations.length,toolChangeCount:preflight.toolChanges};const errors:string[]=[],warnings:string[]=[...preflight.warnings];if(!operations.length)return{ok:false,errors:['Keine aktive Bearbeitung im Projekt.'],warnings,code:'',lineCount:0,operationCount:0,toolChangeCount:0};const generated=operations.map((operation,index)=>{const result=generateOperation(args,operation);if(!result.ok)for(const error of result.errors)errors.push(`Bearbeitung ${index+1} · ${label(operation)}: ${error}`);for(const warning of result.warnings)warnings.push(`Bearbeitung ${index+1} · ${label(operation)}: ${warning}`);return{operation,result};});if(errors.length)return{ok:false,errors,warnings,code:'',lineCount:0,operationCount:operations.length,toolChangeCount:0};const lines:string[]=[];lines.push('( BeBlog CAM 001Z-A )','( Gesamtjob · kanonische Einzelpfade werden zu einem gemeinsamen Maschinenprogramm verbunden )',`( ${operations.length} Bearbeitungen )`,'G21','G90','G17');let toolChangeCount=0;generated.forEach(({operation,result},index)=>{lines.push(`( Bearbeitung ${index+1}/${operations.length} · ${label(operation)} · ${operationDisplayName(operation,index)} )`);lines.push(...operationBody(result.code));const next=generated[index+1]?.operation;if(!next)return;const safe=Math.max(operation.safeZMm,next.safeZMm);lines.push(`G0 Z${f3(safe)}`);if(toolKey(operation)!==toolKey(next)){toolChangeCount++;lines.push('M5',`( Werkzeugwechsel ${toolChangeCount} )`,`M0 ( Werkzeug ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm einsetzen und bestaetigen )`);}else lines.push(`( Gleiches Werkzeug · ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm )`);});const finalSafe=Math.max(...operations.map(op=>op.safeZMm));lines.push(`G0 Z${f3(finalSafe)}`,'M5','M30');const code=lines.join('\n')+'\n';return{ok:true,errors:[],warnings:[...new Set(warnings)],code,lineCount:lines.length,operationCount:operations.length,toolChangeCount};}
+export function generateJobGcode(args:Args):JobGcodeResult{
+  const enabled=args.operations.filter(op=>op.enabled!==false),preflight=validateJob(args);
+  if(preflight.level==='fail')return{ok:false,errors:['Gesamtjob ist durch den Preflight nicht freigegeben.',...preflight.errors],warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
+  if(!enabled.length)return{ok:false,errors:['Keine aktive Bearbeitung im Projekt.'],warnings:preflight.warnings,code:'',lineCount:0,operationCount:0,toolChangeCount:0};
+  const prepared=enabled.map(operation=>({operation,preflight:preflight.operations.find(item=>item.id===operation.id)}));
+  const missing=prepared.filter(item=>!item.preflight?.toolpath);
+  if(missing.length)return{ok:false,errors:missing.map(item=>`Bearbeitung ${item.operation.name}: 004T liefert keinen materialisierten Werkzeugweg.`),warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
+  const transitions=buildJobSafeTransitions({operations:prepared.map(item=>({id:item.operation.id,safeZMm:item.operation.safeZMm,toolpath:item.preflight!.toolpath!}))});
+  if(!transitions.ok)return{ok:false,errors:transitions.errors,warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
+  const lines:string[]=['( BeBlog CAM 004T )','( Gesamtjob · Preflight und NC-Ausgabe verwenden dieselbe kanonische Motion-Wahrheit )',`( ${enabled.length} Bearbeitungen )`,'G21','G90','G17'];
+  let toolChangeCount=0;
+  prepared.forEach((item,index)=>{
+    const operation=item.operation,toolpath=item.preflight!.toolpath!;
+    lines.push(`( Bearbeitung ${index+1}/${enabled.length} · ${label(operation)} · ${operationDisplayName(operation,index)} )`,`M3 S${Math.round(operation.spindleRpm)}`);
+    lines.push(...postCanonicalMachineMotions({motions:toolpath.motions??[],operation}));
+    const next=prepared[index+1]?.operation;
+    if(!next)return;
+    if(toolKey(operation)!==toolKey(next)){
+      toolChangeCount++;
+      lines.push('M5',`( Werkzeugwechsel ${toolChangeCount} )`,`M0 ( Werkzeug ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm einsetzen und bestaetigen )`);
+    }else lines.push(`( Gleiches Werkzeug · ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm )`);
+    const transition=transitions.transitions.find(t=>t.fromOperationId===operation.id&&t.toOperationId===next.id);
+    if(transition?.motions.length)lines.push(...postCanonicalMachineMotions({motions:transition.motions,operation:next}));
+  });
+  lines.push('M5','M30');
+  const code=lines.join('\n')+'\n';
+  return{ok:true,errors:[],warnings:[...new Set(preflight.warnings)],code,lineCount:lines.length,operationCount:enabled.length,toolChangeCount};
+}
