@@ -23,13 +23,25 @@ function placementTranslation(summary:ImportSummary,stock:StockDefinition,stockM
 function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateSystem,partBounds:{minX:number;maxX:number;minY:number;maxY:number}){const b=stockMode==='none'?partBounds:{minX:0,maxX:stock.width,minY:0,maxY:stock.height};return{x:wcs.x==='left'?b.minX:wcs.x==='right'?b.maxX:(b.minX+b.maxX)/2,y:wcs.y==='front'?b.minY:wcs.y==='back'?b.maxY:(b.minY+b.maxY)/2};}
 function orderNearest(points:DrillPoint[],start:P2){const remaining=[...points],out:DrillPoint[]=[];let current=start;while(remaining.length){let best=0,bestD=Infinity;for(let i=0;i<remaining.length;i++){const d=dist(current,remaining[i]);if(d<bestD){bestD=d;best=i}}const next=remaining.splice(best,1)[0];out.push(next);current=next;}return out;}
 
+export function resolvedDxfDrillDepth(operation:DrillOperation,stock:StockDefinition,stockMode:StockMode){
+  if((operation.depthMode??'manual')==='stock-bottom'){
+    if(stockMode==='none')return{ok:false,depthMm:0,error:'Durchbohren benötigt einen definierten Rohling.'};
+    const overcut=operation.overcutMm??0;
+    if(overcut<0)return{ok:false,depthMm:0,error:'Bohr-Overcut darf nicht negativ sein.'};
+    return{ok:true,depthMm:stock.thickness+overcut,error:null};
+  }
+  if(!(operation.totalDepthMm>0))return{ok:false,depthMm:0,error:'Bohrtiefe muss größer als 0 sein.'};
+  return{ok:true,depthMm:operation.totalDepthMm,error:null};
+}
+
 export function validateDrillOperation(summary:ImportSummary,operation:DrillOperation){
   const errors:string[]=[],warnings:string[]=[];const curves=summary.planarGeometry?.curves??[];
   if(summary.kind!=='dxf')errors.push('Bohren und Helixfräsen sind aktuell nur aus DXF freigegeben.');
   if(!operation.curveIds.length)errors.push('Keine Bohrposition ausgewählt.');
   for(const id of operation.curveIds){const c=curves[id];if(!c||c.kind!=='circle')errors.push(`Geometrie ${id+1} ist kein nativer DXF-Kreis.`);}
   if(operation.tool.diameterMm<=0)errors.push('Werkzeugdurchmesser muss größer als 0 sein.');
-  if(operation.totalDepthMm<=0)errors.push('Bohrtiefe muss größer als 0 sein.');
+  if((operation.depthMode??'manual')==='manual'&&operation.totalDepthMm<=0)errors.push('Bohrtiefe muss größer als 0 sein.');
+  if((operation.overcutMm??0)<0)errors.push('Bohr-Overcut darf nicht negativ sein.');
   if(operation.stepDownMm<=0)errors.push(operation.method==='helical-mill'?'Helix-Zustellung pro Umdrehung muss größer als 0 sein.':'Zustellung muss größer als 0 sein.');
   if(operation.feedMmMin<=0||operation.plungeMmMin<=0||operation.spindleRpm<=0)errors.push('Vorschub, Eintauchvorschub und Drehzahl müssen größer als 0 sein.');
   if(operation.safeZMm<=0)errors.push('Sicherheits-Z muss größer als 0 sein.');
@@ -51,21 +63,20 @@ export function validateDrillOperation(summary:ImportSummary,operation:DrillOper
       if(Math.abs(operation.tool.diameterMm-boreDiameter)>DIAMETER_EPS_MM)errors.push(`Bohrung ${id+1}: Axiales Bohren benötigt Werkzeug-Ø ${f3(boreDiameter)} mm passend zum Soll-Ø; gewählt sind ${f3(operation.tool.diameterMm)} mm.`);
     }}
   }
-  const passes=operation.stepDownMm>0?Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm)):0;
-  return{ok:!errors.length,errors,warnings,passes,holeCount:operation.curveIds.length};
+  return{ok:!errors.length,errors,warnings,holeCount:operation.curveIds.length};
 }
 
-function emitAxialDrill(lines:string[],p:DrillPoint,index:number,count:number,operation:DrillOperation,passes:number){
+function emitAxialDrill(lines:string[],p:DrillPoint,index:number,count:number,operation:DrillOperation,targetDepthMm:number,passes:number){
   lines.push(`( Bohrung ${index+1}/${count} · DXF-Kreis ${p.id+1} )`,`G0 X${f3(p.x)} Y${f3(p.y)}`);
-  for(let pass=1;pass<=passes;pass++){const depth=-Math.min(operation.totalDepthMm,pass*operation.stepDownMm);lines.push(`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);if(pass<passes)lines.push('G0 Z0.000');}
+  for(let pass=1;pass<=passes;pass++){const depth=-Math.min(targetDepthMm,pass*operation.stepDownMm);lines.push(`G1 Z${f3(depth)} F${Math.round(operation.plungeMmMin)}`);if(pass<passes)lines.push('G0 Z0.000');}
   lines.push(`G0 Z${f3(operation.safeZMm)}`);
 }
 
-function emitHelicalMill(lines:string[],p:DrillPoint,index:number,count:number,operation:DrillOperation){
+function emitHelicalMill(lines:string[],p:DrillPoint,index:number,count:number,operation:DrillOperation,targetDepthMm:number){
   const pathRadius=p.sourceRadiusMm-operation.tool.diameterMm/2;
   const rightX=p.x+pathRadius,leftX=p.x-pathRadius;
   lines.push(`( Helixbohrung ${index+1}/${count} · DXF-Kreis ${p.id+1} · Soll Ø${f3(p.sourceRadiusMm*2)} mm )`,`( Fräsermittelbahnradius ${f3(pathRadius)} mm · Helix-Zustellung ${f3(operation.stepDownMm)} mm/U )`,`G0 X${f3(rightX)} Y${f3(p.y)}`,`G1 Z0.000 F${Math.round(operation.plungeMmMin)}`);
-  const helix=buildHelicalDescent({centerX:p.x,centerY:p.y,radiusMm:pathRadius,startDepthMm:0,targetDepthMm:operation.totalDepthMm,pitchMm:operation.stepDownMm,feedMmMin:operation.feedMmMin});
+  const helix=buildHelicalDescent({centerX:p.x,centerY:p.y,radiusMm:pathRadius,startDepthMm:0,targetDepthMm,pitchMm:operation.stepDownMm,feedMmMin:operation.feedMmMin});
   if(!helix.ok)throw new Error(helix.error??'Helix konnte nicht erzeugt werden.');
   lines.push(...helix.lines);
   lines.push(`( Fertigumlauf auf Endtiefe · ${helix.turns} Helixumdrehung${helix.turns===1?'':'en'} )`,`G3 X${f3(leftX)} Y${f3(p.y)} I${f3(-pathRadius)} J0.000 F${Math.round(operation.feedMmMin)}`,`G3 X${f3(rightX)} Y${f3(p.y)} I${f3(pathRadius)} J0.000 F${Math.round(operation.feedMmMin)}`,`G0 Z${f3(operation.safeZMm)}`);
@@ -73,10 +84,14 @@ function emitHelicalMill(lines:string[],p:DrillPoint,index:number,count:number,o
 
 export function generateDrillGcode(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:DrillOperation}):DrillGcodeResult{
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;const validation=validateDrillOperation(summary,operation),errors=[...validation.errors],warnings=[...validation.warnings];
-  const fail=(extra:string[]=[]):DrillGcodeResult=>({ok:false,errors:[...errors,...extra],warnings,code:'',lineCount:0,holeCount:0,passesPerHole:validation.passes,points:[],method:operation.method});
+  const depthState=resolvedDxfDrillDepth(operation,stock,stockMode),targetDepthMm=depthState.depthMm;
+  if(!depthState.ok&&depthState.error)errors.push(depthState.error);
+  const passes=operation.stepDownMm>0&&targetDepthMm>0?Math.max(1,Math.ceil(targetDepthMm/operation.stepDownMm)):0;
+  const fail=(extra:string[]=[]):DrillGcodeResult=>({ok:false,errors:[...errors,...extra],warnings,code:'',lineCount:0,holeCount:0,passesPerHole:passes,points:[],method:operation.method});
   if(wcs.z!=='top')errors.push('WCS Unterseite ist für Bohren und Helixfräsen nicht freigegeben.');
   if(stockMode==='none')warnings.push('Kein Rohling definiert: Materialgrenzen können nur eingeschränkt geprüft werden.');
-  if(stockMode!=='none'&&operation.totalDepthMm>stock.thickness)warnings.push(`Bohrtiefe ${f3(operation.totalDepthMm)} mm überschreitet die Rohlingdicke ${f3(stock.thickness)} mm.`);
+  if((operation.depthMode??'manual')==='manual'&&stockMode!=='none'&&targetDepthMm>stock.thickness)warnings.push(`Bohrtiefe ${f3(targetDepthMm)} mm überschreitet die Rohlingdicke ${f3(stock.thickness)} mm.`);
+  if((operation.depthMode??'manual')==='stock-bottom')warnings.push(`Durchbohren: Rohling ${f3(stock.thickness)} mm + ${f3(operation.overcutMm??0)} mm Overcut → End-Z ${f3(-targetDepthMm)} mm.`);
   if(errors.length)return fail();
   const t=placementTranslation(summary,stock,stockMode,placement,orientation);if(!t)return fail(['Bauteilgeometrie konnte nicht transformiert werden.']);const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);
   const transform=(p:Point2):P2=>{const q=rotate(p,orientation.rotationZDeg);return{x:q.x+t.dx-origin.x,y:q.y+t.dy-origin.y}};
@@ -84,11 +99,11 @@ export function generateDrillGcode(args:{summary:ImportSummary;stock:StockDefini
   for(const id of operation.curveIds){const c=curves[id];if(!c||c.kind!=='circle')return fail([`Geometrie ${id+1} ist nicht mehr als DXF-Kreis verfügbar.`]);const p=transform(c.center);raw.push({id,x:p.x,y:p.y,sourceRadiusMm:c.radius});}
   const points=orderNearest(raw,{x:0,y:0});const lines:string[]=[];
   if(operation.method==='helical-mill'){
-    lines.push('( BeBlog CAM 001X )','( Operation: Bohren · Verfahren: Helixfräsen )','( Gemeinsame Helixprimitive: Bohren + Kreistasche )',`( Werkzeug: ${operation.tool.name} · Ø${f3(operation.tool.diameterMm)} mm )`,`( ${points.length} Bohrposition${points.length===1?'':'en'} · Tiefe ${f3(operation.totalDepthMm)} mm · Helix ${f3(operation.stepDownMm)} mm/U )`,'G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
-    try{points.forEach((p,i)=>emitHelicalMill(lines,p,i,points.length,operation));}catch(error){return fail([String(error)]);}
+    lines.push('( BeBlog CAM 004W1 )','( Operation: Bohren · Verfahren: Helixfräsen )','( Gemeinsame Helixprimitive: Bohren + Kreistasche )',`( Werkzeug: ${operation.tool.name} · Ø${f3(operation.tool.diameterMm)} mm )`,`( ${points.length} Bohrposition${points.length===1?'':'en'} · Tiefe ${f3(targetDepthMm)} mm · Helix ${f3(operation.stepDownMm)} mm/U )`,'G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
+    try{points.forEach((p,i)=>emitHelicalMill(lines,p,i,points.length,operation,targetDepthMm));}catch(error){return fail([String(error)]);}
   }else{
-    lines.push('( BeBlog CAM 001X )','( Operation: Bohren · Verfahren: Axial bohren )','( Strategie: explizite G0/G1-Bohrbewegungen · keine Canned Cycles )',`( Werkzeug: ${operation.tool.name} · Ø${f3(operation.tool.diameterMm)} mm )`,`( ${points.length} Bohrposition${points.length===1?'':'en'} · Tiefe ${f3(operation.totalDepthMm)} mm · max. Zustellung ${f3(operation.stepDownMm)} mm )`,'G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
-    points.forEach((p,i)=>emitAxialDrill(lines,p,i,points.length,operation,validation.passes));
+    lines.push('( BeBlog CAM 004W1 )','( Operation: Bohren · Verfahren: Axial bohren )','( Strategie: explizite G0/G1-Bohrbewegungen · keine Canned Cycles )',`( Werkzeug: ${operation.tool.name} · Ø${f3(operation.tool.diameterMm)} mm )`,`( ${points.length} Bohrposition${points.length===1?'':'en'} · Tiefe ${f3(targetDepthMm)} mm · max. Zustellung ${f3(operation.stepDownMm)} mm )`,'G21','G90','G17',`S${Math.round(operation.spindleRpm)} M3`,`G0 Z${f3(operation.safeZMm)}`);
+    points.forEach((p,i)=>emitAxialDrill(lines,p,i,points.length,operation,targetDepthMm,passes));
   }
-  lines.push('M5','M30');const code=lines.join('\n')+'\n';return{ok:true,errors:[],warnings,code,lineCount:lines.length,holeCount:points.length,passesPerHole:validation.passes,points,method:operation.method};
+  lines.push('M5','M30');const code=lines.join('\n')+'\n';return{ok:true,errors:[],warnings,code,lineCount:lines.length,holeCount:points.length,passesPerHole:passes,points,method:operation.method};
 }
