@@ -1,0 +1,99 @@
+name: Patch 004R integration
+on:
+  push:
+    branches: [agent/beblog-cam-004r-fixture-collision]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/beblog-cam-004r-fixture-collision
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(s,old,new,label):
+              if old not in s: raise SystemExit(f'{label} anchor missing')
+              return s.replace(old,new,1)
+
+          # App: setup state + editor + pass fixtures into preflight/export.
+          p=Path('src/App.svelte'); s=p.read_text()
+          if "import FixtureSetupPanel from './lib/FixtureSetupPanel.svelte';" not in s:
+              s=replace_once(s,"  import JobGCodePanel from './lib/JobGCodePanel.svelte';\n","  import JobGCodePanel from './lib/JobGCodePanel.svelte';\n  import FixtureSetupPanel from './lib/FixtureSetupPanel.svelte';\n",'App fixture panel import')
+          if "import type { FixtureVolume } from './lib/fixtureCollision';" not in s:
+              s=replace_once(s,"  import type { CanonicalToolpath } from './lib/canonicalToolpath';\n","  import type { CanonicalToolpath } from './lib/canonicalToolpath';\n  import type { FixtureVolume } from './lib/fixtureCollision';\n",'App fixture type import')
+          if 'let fixtures:FixtureVolume[]=[];' not in s:
+              s=replace_once(s,"  let wcs: WorkCoordinateSystem = { ...defaultWcs };\n","  let wcs: WorkCoordinateSystem = { ...defaultWcs };\n  let fixtures:FixtureVolume[]=[];\n",'App fixture state')
+          marker="{:else if activeStep==='Werkzeuge'}"
+          if '<FixtureSetupPanel {fixtures}' not in s:
+              s=replace_once(s,marker,"<FixtureSetupPanel {fixtures} onChange={next=>fixtures=next}/>\n"+marker,'App fixture editor placement')
+          s=s.replace("<JobPreflightPanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operations={operationsProject.operations}/>","<JobPreflightPanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} {fixtures} operations={operationsProject.operations}/>")
+          s=s.replace("<JobGCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} operations={operationsProject.operations}/>","<JobGCodePanel summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs} {fixtures} operations={operationsProject.operations}/>")
+          p.write_text(s)
+
+          # Job preflight: structured fixture collision result and hard FAIL.
+          p=Path('src/lib/jobPreflight.ts'); s=p.read_text()
+          if "from './fixtureCollision'" not in s:
+              s=replace_once(s,"import { validateToolAssemblyAgainstRestStock } from './toolAssemblyCollision';\n","import { validateToolAssemblyAgainstRestStock } from './toolAssemblyCollision';\nimport { validateToolAssemblyAgainstFixtures, type FixtureVolume, type FixtureCollisionKind } from './fixtureCollision';\n",'preflight fixture import')
+          s=s.replace("export type JobPreflightOperation={id:string;index:number;kind:CamOperation['kind'];label:string;detail:string;canonical:string;level:JobPreflightLevel;errors:string[];warnings:string[];toolAssembly:JobPreflightToolAssembly};","export type JobPreflightFixtureCollision={level:JobPreflightLevel;checkedFixtures:number;hits:number;kinds:FixtureCollisionKind[];errors:string[]}|null;\nexport type JobPreflightOperation={id:string;index:number;kind:CamOperation['kind'];label:string;detail:string;canonical:string;level:JobPreflightLevel;errors:string[];warnings:string[];toolAssembly:JobPreflightToolAssembly;fixtureCollision:JobPreflightFixtureCollision};")
+          s=s.replace("export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[]}):JobPreflightResult{\n  const {summary,stock,stockMode,placement,orientation,wcs}=args,enabled=args.operations.filter(op=>op.enabled!==false),operations:JobPreflightOperation[]=[],errors:string[]=[],warnings:string[]=[],stockSimulationOperations:StockSimulationOperation[]=[];","export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[]}):JobPreflightResult{\n  const {summary,stock,stockMode,placement,orientation,wcs}=args,fixtures=args.fixtures??[],enabled=args.operations.filter(op=>op.enabled!==false),operations:JobPreflightOperation[]=[],errors:string[]=[],warnings:string[]=[],stockSimulationOperations:StockSimulationOperation[]=[];")
+          s=s.replace("let opErrors:string[]=[],opWarnings:string[]=[],detail='',canonicalToolpath=null,toolAssembly:JobPreflightToolAssembly=null;","let opErrors:string[]=[],opWarnings:string[]=[],detail='',canonicalToolpath=null,toolAssembly:JobPreflightToolAssembly=null,fixtureCollision:JobPreflightFixtureCollision=null;")
+          fixture_block="""
+    if(canonicalToolpath&&!opErrors.length&&fixtures.some(f=>f.enabled!==false)){const t=operation.tool;if(t.cuttingLengthMm&&t.stickoutMm&&t.shaftDiameterMm&&t.holderDiameterMm){const fixtureResult=validateToolAssemblyAgainstFixtures({toolpath:canonicalToolpath,fixtures,assembly:{cuttingLengthMm:t.cuttingLengthMm,stickoutMm:t.stickoutMm,shankDiameterMm:t.shaftDiameterMm,holderDiameterMm:t.holderDiameterMm}});opErrors.push(...fixtureResult.errors.map(message=>`Spannmittel: ${message}`));opWarnings.push(...fixtureResult.warnings.map(message=>`Spannmittel: ${message}`));const kinds=[...new Set(fixtureResult.hits.map(hit=>hit.kind))];fixtureCollision={level:fixtureResult.errors.length?'fail':fixtureResult.warnings.length?'warn':'pass',checkedFixtures:fixtureResult.checkedFixtures,hits:fixtureResult.hits.length,kinds,errors:[...fixtureResult.errors]};detail+=` · 004R ${fixtureResult.checkedFixtures} Spannmittel geprüft`;}else opWarnings.push('Spannmittelprüfung: Werkzeugbaugruppen-Geometrie für 004R unvollständig.');}
+"""
+          if 'fixtureResult=validateToolAssemblyAgainstFixtures' not in s:
+              anchor="    opErrors=unique(opErrors);opWarnings=unique(opWarnings);"
+              s=replace_once(s,anchor,fixture_block+anchor,'preflight fixture validation')
+          s=s.replace("operations.push({id:operation.id,index:index+1,kind:operation.kind,label,detail,canonical:canonical.summary,level,errors:opErrors,warnings:opWarnings,toolAssembly});","operations.push({id:operation.id,index:index+1,kind:operation.kind,label,detail,canonical:canonical.summary,level,errors:opErrors,warnings:opWarnings,toolAssembly,fixtureCollision});")
+          p.write_text(s)
+
+          # Preflight panel: receive fixtures and show visible 004R status.
+          p=Path('src/lib/JobPreflightPanel.svelte'); s=p.read_text()
+          if "import type { FixtureVolume }" not in s:
+              s=replace_once(s,"  import { validateJob } from './jobPreflight';\n","  import { validateJob } from './jobPreflight';\n  import type { FixtureVolume } from './fixtureCollision';\n",'preflight panel fixture import')
+          s=s.replace("export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let placement:PartPlacement;export let orientation:PartOrientation;export let wcs:WorkCoordinateSystem;export let operations:CamOperation[];","export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let placement:PartPlacement;export let orientation:PartOrientation;export let wcs:WorkCoordinateSystem;export let fixtures:FixtureVolume[]=[];export let operations:CamOperation[];")
+          s=s.replace("$: result=validateJob({summary,stock,stockMode,placement,orientation,wcs,operations});","$: result=validateJob({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures});")
+          fixture_ui="{#if op.fixtureCollision}<div class=\"fixture-check\" class:pass={op.fixtureCollision.level==='pass'} class:fail={op.fixtureCollision.level==='fail'}><strong>004R Spannmittel · {op.fixtureCollision.level.toUpperCase()}</strong><span>{op.fixtureCollision.checkedFixtures} aktiv geprüft · {op.fixtureCollision.hits} Treffer · {op.fixtureCollision.kinds.length?op.fixtureCollision.kinds.map(kind=>kind==='cutter'?'Fräser':kind==='shank'?'Schaft':'Halter').join(' / '):'kein Konflikt'}</span></div>{/if}"
+          if '004R Spannmittel' not in s:
+              anchor="{#each op.errors as message}"
+              s=replace_once(s,anchor,fixture_ui+anchor,'preflight panel fixture UI')
+          if '.fixture-check{' not in s:
+              s=s.replace(".assembly span{line-height:1.35}",".assembly span{line-height:1.35}.fixture-check{display:grid;gap:3px;margin-top:8px;padding:8px 10px;border-left:2px solid #2f6b4d;background:#f6f6f3;font-size:.75rem;color:#666b66}.fixture-check.fail{border-left-color:#a13f38}.fixture-check.pass strong{color:#2f6b4d}.fixture-check.fail strong{color:#a13f38}")
+          p.write_text(s)
+
+          # Job G-code contract: fixtures must reach the same preflight used to authorize export.
+          p=Path('src/lib/jobGcode.ts'); s=p.read_text()
+          if "import type { FixtureVolume } from './fixtureCollision';" not in s:
+              s=replace_once(s,"import { toolIdentityKey } from './toolIdentity.js';\n","import { toolIdentityKey } from './toolIdentity.js';\nimport type { FixtureVolume } from './fixtureCollision';\n",'job gcode fixture import')
+          s=s.replace("type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[]};","type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[]};")
+          p.write_text(s)
+
+          p=Path('src/lib/JobGCodePanel.svelte'); s=p.read_text()
+          if "import type { FixtureVolume }" not in s:
+              s=replace_once(s,"  import { generateJobGcode } from './jobGcode';\n","  import { generateJobGcode } from './jobGcode';\n  import type { FixtureVolume } from './fixtureCollision';\n",'job panel fixture import')
+          s=s.replace("  export let operations:CamOperation[]=[];","  export let operations:CamOperation[]=[];\n  export let fixtures:FixtureVolume[]=[];")
+          s=s.replace("$: raw=generateJobGcode({summary,stock,stockMode,placement,orientation,wcs,operations});","$: raw=generateJobGcode({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures});")
+          p.write_text(s)
+
+          # Gate: product wiring and export blocking are contractual.
+          p=Path('scripts/check-004r-contracts.mjs'); s=p.read_text()
+          if "const app=read('src/App.svelte');" not in s:
+              s=s.replace("const assembly=read('src/lib/toolAssemblyCollision.ts');\n","const assembly=read('src/lib/toolAssemblyCollision.ts');\nconst app=read('src/App.svelte');\nconst setup=read('src/lib/FixtureSetupPanel.svelte');\nconst preflight=read('src/lib/jobPreflight.ts');\nconst panel=read('src/lib/JobPreflightPanel.svelte');\nconst job=read('src/lib/jobGcode.ts');\nconst jobPanel=read('src/lib/JobGCodePanel.svelte');\n")
+          marker="  ['package exposes local-first 004R gate',pkg.includes('\"check:004r\": \"node scripts/check-004r-contracts.mjs\"')],\n"
+          addition="  ['fixture editor is part of setup flow',app.includes('FixtureSetupPanel')&&app.includes('let fixtures:FixtureVolume[]')&&setup.includes('+ Spannmittel')],\n  ['job preflight consumes configured fixtures',preflight.includes('fixtures?:FixtureVolume[]')&&preflight.includes('validateToolAssemblyAgainstFixtures')&&preflight.includes('fixtureCollision')],\n  ['preflight panel exposes visible 004R status',panel.includes('004R Spannmittel')&&panel.includes('op.fixtureCollision')],\n  ['NC export reuses fixture-aware preflight',job.includes('fixtures?:FixtureVolume[]')&&job.includes('preflight=validateJob(args)')&&jobPanel.includes('operations,fixtures')],\n"+marker
+          if 'fixture editor is part of setup flow' not in s:
+              if marker not in s: raise SystemExit('004R gate marker missing')
+              s=s.replace(marker,addition,1)
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/App.svelte src/lib/jobPreflight.ts src/lib/JobPreflightPanel.svelte src/lib/jobGcode.ts src/lib/JobGCodePanel.svelte scripts/check-004r-contracts.mjs
+          git commit -m "feat(004r): integrate fixtures into setup preflight and export"
+          git push
