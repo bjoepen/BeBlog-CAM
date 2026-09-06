@@ -7,6 +7,7 @@ export type DrillPoint={id:number;x:number;y:number;sourceRadiusMm:number};
 export type DrillGcodeResult={ok:boolean;errors:string[];warnings:string[];code:string;lineCount:number;holeCount:number;passesPerHole:number;points:DrillPoint[];method:'drill'|'helical-mill'};
 
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
+const DIAMETER_EPS_MM=0.01;
 const rotate=(p:P2,deg:number):P2=>{const a=deg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c}};
 const bounds=(pts:P2[])=>{const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)}};
 const dist=(a:P2,b:P2)=>Math.hypot(a.x-b.x,a.y-b.y);
@@ -43,6 +44,11 @@ export function validateDrillOperation(summary:ImportSummary,operation:DrillOper
       if(operation.tool.diameterMm>=boreDiameter)errors.push(`Bohrung ${id+1}: Werkzeug Ø ${f3(operation.tool.diameterMm)} mm muss kleiner als Bohrungs-Ø ${f3(boreDiameter)} mm sein.`);
       const pathRadius=c.radius-operation.tool.diameterMm/2;
       if(pathRadius<=0)errors.push(`Bohrung ${id+1}: Es bleibt kein positiver Helixbahnradius.`);
+    }}
+  }else{
+    for(const id of operation.curveIds){const c=curves[id];if(c?.kind==='circle'){
+      const boreDiameter=c.radius*2;
+      if(Math.abs(operation.tool.diameterMm-boreDiameter)>DIAMETER_EPS_MM)errors.push(`Bohrung ${id+1}: Axiales Bohren benötigt Werkzeug-Ø ${f3(boreDiameter)} mm passend zum Soll-Ø; gewählt sind ${f3(operation.tool.diameterMm)} mm.`);
     }}
   }
   const passes=operation.stepDownMm>0?Math.max(1,Math.ceil(operation.totalDepthMm/operation.stepDownMm)):0;
