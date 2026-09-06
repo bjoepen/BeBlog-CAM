@@ -4,6 +4,7 @@ const collision=read('src/lib/toolAssemblyCollision.ts');
 const stock=read('src/lib/stockSimulation.ts');
 const types=read('src/lib/types.ts');
 const preflight=read('src/lib/jobPreflight.ts');
+const preflightPanel=read('src/lib/JobPreflightPanel.svelte');
 const toolEditor=read('src/lib/FeedsSpeedsCalculator.svelte');
 const app=read('src/App.svelte');
 const toolTypes=read('src/lib/toolTypes.ts');
@@ -23,6 +24,8 @@ const checks=[
   ['tool editor transfers holder geometry into operations',toolEditor.includes('holderDiameterMm:tool.holderDiameterMm')&&toolEditor.includes('stickoutMm:tool.stickoutMm')],
   ['app persists transferred assembly geometry',app.includes('holderDiameterMm:transfer.holderDiameterMm')&&app.includes('stickoutMm:transfer.stickoutMm')],
   ['job preflight runs 004Q against previous rest stock',preflight.includes('validateToolAssemblyAgainstRestStock')&&preflight.includes('previousOperations:stockSimulationOperations')&&preflight.includes('Werkzeugbaugruppe:')],
+  ['job preflight exposes structured 004Q result',preflight.includes('JobPreflightToolAssembly')&&preflight.includes('toolAssembly={level:holderLevel')&&preflight.includes('toolAssembly});')],
+  ['preflight panel renders visible 004Q PASS WARN FAIL status',preflightPanel.includes('004Q Werkzeugbaugruppe')&&preflightPanel.includes('op.toolAssembly.level')&&preflightPanel.includes('Reichweite und Halterfreiraum')],
   ['package exposes local-first 004Q gate',pkg.includes('"check:004q": "node scripts/check-004q-contracts.mjs"')],
 ];
 let failed=false;for(const [label,ok] of checks){console.log(`${ok?'PASS':'FAIL'} 004Q: ${label}`);if(!ok)failed=true;}if(failed)process.exit(1);
