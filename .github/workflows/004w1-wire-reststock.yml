@@ -19,14 +19,12 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           app = Path('src/App.svelte')
           text = app.read_text()
-          old = """  $: activeCanonicalToolpath = importSummary
-            ? buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation})
-            : null;
-          """
-          new = """  function buildOrderedActiveCanonicalToolpath(){
+          pattern = re.compile(r"  \$: activeCanonicalToolpath = importSummary\n\s+\? buildActiveCanonicalToolpath\(\{summary:importSummary,stock,stockMode,placement,orientation,wcs,operation\}\)\n\s+: null;\n")
+          replacement = """  function buildOrderedActiveCanonicalToolpath(){
             if(!importSummary)return null;
             const previousToolpaths:CanonicalToolpath[]=[];
             for(const candidate of operationsProject.operations){
@@ -39,17 +37,19 @@ jobs:
           }
           $: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath();
           """
-          if text.count(old) != 1:
-              raise SystemExit(f'App.svelte wiring anchor count was {text.count(old)}, expected 1')
-          app.write_text(text.replace(old,new))
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'App.svelte wiring anchor count was {count}, expected 1')
+          app.write_text(text)
 
           job = Path('src/lib/jobPreflight.ts')
           text = job.read_text()
           old = "buildStepDrillOperationState({summary,stock,stockMode,placement,orientation,wcs,operation})"
           new = "buildStepDrillOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)})"
-          if text.count(old) != 1:
-              raise SystemExit(f'jobPreflight.ts wiring anchor count was {text.count(old)}, expected 1')
-          text = text.replace(old,new)
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'jobPreflight.ts wiring anchor count was {count}, expected 1')
+          text = text.replace(old,new,1)
           text = text.replace(' · Tiefe aus Hole Feature`;', ' · Start aus aktuellem Reststock`;', 1)
           job.write_text(text)
 
