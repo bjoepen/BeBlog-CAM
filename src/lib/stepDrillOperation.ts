@@ -43,6 +43,11 @@ function machinePoint(tuple:[number,number,number],orientation:PartOrientation,t
   return{x:r.x+transform.dx-origin.x,y:r.y+transform.dy-origin.y,z:r.z+transform.dz-origin.z};
 }
 
+function requestedStart(top:P3,operation:DrillOperation):P3{
+  if((operation.depthMode??'manual')==='stock-bottom')return{x:top.x,y:top.y,z:0};
+  return top;
+}
+
 function requestedBottom(top:P3,geometricBottom:P3,operation:DrillOperation,stock:StockDefinition):P3{
   if((operation.depthMode??'manual')==='stock-bottom'){
     return{x:geometricBottom.x,y:geometricBottom.y,z:-stock.thickness-(operation.overcutMm??0)};
@@ -127,11 +132,12 @@ export function buildStepDrillOperationState(args:{
   try{
     for(const hole of holes){
       const a=machinePoint(hole.startCenter,orientation,transform,origin),b=machinePoint(hole.endCenter,orientation,transform,origin);
-      const top=a.z>=b.z?a:b,geometricBottom=a.z>=b.z?b:a;
-      const bottom=requestedBottom(top,geometricBottom,operation,stock);
+      const featureTop=a.z>=b.z?a:b,geometricBottom=a.z>=b.z?b:a;
+      const top=requestedStart(featureTop,operation);
+      const bottom=requestedBottom(featureTop,geometricBottom,operation,stock);
       if(!(top.z-bottom.z>EPS))throw new Error(`${hole.featureId}: Ziel-Z liegt nicht unterhalb der Bohrungsoberseite.`);
       if((operation.depthMode??'manual')==='manual'&&operation.totalDepthMm<hole.depthMm-EPS)warnings.push(`${hole.featureId}: Teilbohrung ${operation.totalDepthMm.toFixed(3)} mm von erkannter STEP-Tiefe ${hole.depthMm.toFixed(3)} mm.`);
-      if((operation.depthMode??'manual')==='stock-bottom')warnings.push(`${hole.featureId}: Durchbohren bis Z ${bottom.z.toFixed(3)} mm (${(operation.overcutMm??0).toFixed(3)} mm unter Rohlingunterseite).`);
+      if((operation.depthMode??'manual')==='stock-bottom')warnings.push(`${hole.featureId}: Durchbohren ab Rohlingoberseite Z 0.000 mm bis Z ${bottom.z.toFixed(3)} mm (${(operation.overcutMm??0).toFixed(3)} mm unter Rohlingunterseite).`);
       state=operation.method==='helical-mill'
         ?appendHelicalHole(motions,state,hole,top,bottom,operation)
         :appendAxialHole(motions,state,hole,top,bottom,operation);
