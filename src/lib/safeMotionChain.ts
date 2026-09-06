@@ -40,8 +40,6 @@ export function materializeSafeMotionChain(args:{toolpath:CanonicalToolpath;safe
   const {toolpath,safeZMm}=args,errors:string[]=[],warnings:string[]=[];
   if(!Number.isFinite(safeZMm))return{ok:false,errors:['004T benötigt einen endlichen Sicherheits-Z-Wert.'],warnings,toolpath:null,motionCount:0,rapidCount:0,cuttingMotionCount:0,startSafePoint:null,endSafePoint:null};
 
-  // Toolpaths that already own explicit XYZ motions remain authoritative. 004T validates continuity;
-  // it does not silently rebuild drill/helix/surface paths from weaker 2D run data.
   if(toolpath.motions?.length){
     const motions=[...toolpath.motions];
     for(let i=0;i<motions.length;i++){
@@ -94,7 +92,7 @@ export function materializeSafeMotionChain(args:{toolpath:CanonicalToolpath;safe
   return{ok:errors.length===0,errors,warnings,toolpath:resultToolpath,motionCount:motions.length,rapidCount:motions.filter(m=>m.kind==='rapid3').length,cuttingMotionCount:motions.filter(m=>m.kind!=='rapid3').length,startSafePoint,endSafePoint};
 }
 
-export type JobSafeTransition={fromOperationId:string;toOperationId:string;motion:CanonicalMachineMotion};
+export type JobSafeTransition={fromOperationId:string;toOperationId:string;motions:CanonicalMachineMotion[]};
 export function buildJobSafeTransitions(args:{operations:{id:string;safeZMm:number;toolpath:CanonicalToolpath}[]}):{ok:boolean;errors:string[];transitions:JobSafeTransition[]}{
   const errors:string[]=[],transitions:JobSafeTransition[]=[];
   for(let i=0;i<args.operations.length-1;i++){
@@ -103,8 +101,14 @@ export function buildJobSafeTransitions(args:{operations:{id:string;safeZMm:numb
     if(!a.ok||!a.endSafePoint)errors.push(`Operation ${current.id}: keine freigegebene 004T-Endposition.`);
     if(!b.ok||!b.startSafePoint)errors.push(`Operation ${next.id}: keine freigegebene 004T-Startposition.`);
     if(!a.endSafePoint||!b.startSafePoint)continue;
-    const safeZ=Math.max(current.safeZMm,next.safeZMm),from={x:a.endSafePoint.x,y:a.endSafePoint.y,z:safeZ},to={x:b.startSafePoint.x,y:b.startSafePoint.y,z:safeZ};
-    transitions.push({fromOperationId:current.id,toOperationId:next.id,motion:rapid(from,to)});
+    const safeZ=Math.max(current.safeZMm,next.safeZMm),motions:CanonicalMachineMotion[]=[];
+    const lifted={x:a.endSafePoint.x,y:a.endSafePoint.y,z:safeZ};
+    if(!samePoint(a.endSafePoint,lifted))motions.push(rapid(a.endSafePoint,lifted));
+    const across={x:b.startSafePoint.x,y:b.startSafePoint.y,z:safeZ};
+    if(!samePoint(lifted,across))motions.push(rapid(lifted,across));
+    if(!samePoint(across,b.startSafePoint))motions.push(rapid(across,b.startSafePoint));
+    for(let m=1;m<motions.length;m++)if(!samePoint(motions[m-1].end,motions[m].start))errors.push(`Operation ${current.id} → ${next.id}: 004T-Übergang ist nicht zusammenhängend.`);
+    transitions.push({fromOperationId:current.id,toOperationId:next.id,motions});
   }
   return{ok:errors.length===0,errors,transitions};
 }
