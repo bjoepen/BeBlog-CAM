@@ -5,7 +5,6 @@ const canonical=read('src/lib/canonicalToolpath.ts');
 const machine=read('src/lib/machineEnvelope.ts');
 const pkg=read('package.json');
 const preflight=read('src/lib/jobPreflight.ts');
-const machine=read('src/lib/machineEnvelope.ts');
 const checks=[
   ['004T safe motion materializer exists',chain.includes('export function materializeSafeMotionChain')&&chain.includes('SafeMotionChainResult')],
   ['run based toolpaths gain explicit rapid and spatial motions',chain.includes("kind:'rapid3'")&&chain.includes("kind:'line3'")&&chain.includes('runCutMotions')],
