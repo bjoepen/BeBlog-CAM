@@ -5,7 +5,7 @@ const preflight=read('src/lib/jobPreflight.ts');
 const pkg=read('package.json');
 const checks=[
   ['deterministic stock heightfield kernel exists',sim.includes('export function simulateStockHeightfield')&&sim.includes('Float32Array')],
-  ['simulation derives WCS-aware stock bounds',sim.includes("wcs.x==='left'")&&sim.includes("wcs.y==='front'")&&sim.includes("wcs.z==='top'")],
+  ['simulation derives WCS-aware stock bounds',sim.includes("wcs.x==='left'")&&sim.includes("wcs.y==='front'")&&sim.includes("wcs.z!=='top'")&&sim.includes('axisBounds(stock.width')&&sim.includes('axisBounds(stock.height')],
   ['tool radius sweeps canonical cutting segments',sim.includes('distanceToSegment')&&sim.includes('entry.toolpath.tool.diameterMm/2')&&sim.includes('cutDisk')],
   ['heightfield clamps removal to stock thickness',sim.includes('clamp(z')&&sim.includes('stock.thickness')],
   ['simulation reports remaining and removed stock volume',sim.includes('remainingVolumeMm3')&&sim.includes('removedVolumeMm3')&&sim.includes('removedPercent')],
