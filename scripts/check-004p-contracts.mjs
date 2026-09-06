@@ -14,5 +14,6 @@ const checks=[
   ['job preflight exposes stock simulation summary',preflight.includes('stockSimulation:')&&preflight.includes('removedPercent')],
   ['package exposes local-first 004P gate',pkg.includes('"check:004p": "node scripts/check-004p-contracts.mjs"')],
   ['Prüfen UI exposes the 004P rest-stock summary',app.includes('Reststock-Simulation')&&app.includes('2.5D Heightfield')&&app.includes('Stock-Simulation 004P ist aktuell nur mit Z-Null auf Rohlingoberseite verfügbar.')],
+  ['Prüfen UI guards nullable import summary',app.includes("{:else if activeStep==='Prüfen'}{#if importSummary}")&&app.includes('<JobPreflightPanel summary={importSummary}')],
 ];
 let failed=false;for(const [label,ok] of checks){console.log(`${ok?'PASS':'FAIL'} 004P: ${label}`);if(!ok)failed=true;}if(failed)process.exit(1);
