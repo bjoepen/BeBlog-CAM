@@ -10,7 +10,7 @@ export const operationsProjectStore=writable<OperationsProject>({
 function sync(project:OperationsProject){operationsProjectStore.set({operations:project.operations.map(cloneOperation),activeOperationId:project.activeOperationId});return project;}
 
 export function cloneOperation<T extends CamOperation>(operation:T):T {
-  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{}),...((operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')?{faceIds:[...operation.faceIds]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...(operation.excludedSegmentIds??[])]}:{})} as T;
+  return {...operation,tool:{...operation.tool},...((operation.kind==='carve'||operation.kind==='drill')?{curveIds:[...operation.curveIds]}:{}),...(operation.kind==='drill'?{stepHoleFeatureIds:[...(operation.stepHoleFeatureIds??[])]}:{}),...((operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')?{faceIds:[...operation.faceIds]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...(operation.excludedSegmentIds??[])]}:{})} as T;
 }
 
 function operationName(kind:OperationKind,serial:number){
@@ -28,7 +28,7 @@ export function createOperation(kind:OperationKind,index:number):CamOperation {
   if(kind==='facing') return {...defaultFacingOperation,id:`op-facing-${serial}`,name:operationName(kind,serial),tool:{...defaultFacingOperation.tool}};
   if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:operationName(kind,serial),excludedSegmentIds:[],tool:{...defaultContourOperation.tool}};
   if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:operationName(kind,serial),tool:{...defaultPocketOperation.tool}};
-  if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:operationName(kind,serial),curveIds:[],tool:{...defaultDrillOperation.tool}};
+  if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:operationName(kind,serial),curveIds:[],stepHoleFeatureIds:[],tool:{...defaultDrillOperation.tool}};
   if(kind==='z-level-roughing') return {...defaultZLevelRoughingOperation,id:`op-z-level-roughing-${serial}`,name:operationName(kind,serial),faceIds:[],tool:{...defaultZLevelRoughingOperation.tool}};
   if(kind==='surface-finishing') return {...defaultSurfaceFinishingOperation,id:`op-surface-finishing-${serial}`,name:operationName(kind,serial),faceIds:[],tool:{...defaultSurfaceFinishingOperation.tool}};
   return {...defaultCarveOperation,id:`op-carve-${serial}`,name:operationName(kind,serial),curveIds:[],tool:{...defaultCarveOperation.tool}};
@@ -77,10 +77,12 @@ export function operationSummary(operation:CamOperation):string {
     return `${source} · ${operation.curveIds.length} Linie${operation.curveIds.length===1?'':'n'} · ${side} · ${tool}`;
   }
   if(operation.kind==='drill'){
-    const source=operation.layerName??'Einzelauswahl';
+    const stepCount=operation.stepHoleFeatureIds?.length??0;
+    const count=stepCount||operation.curveIds.length;
+    const source=stepCount?'STEP-Auswahl':operation.layerName??'Einzelauswahl';
     const method=operation.method==='helical-mill'?'Helixfräsen':'Bohren';
     const depth=(operation.depthMode??'manual')==='stock-bottom'?`Durch Rohling + ${(operation.overcutMm??0).toLocaleString('de-DE',{maximumFractionDigits:3})} mm`:`${operation.totalDepthMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm tief`;
-    return `${method} · ${depth} · ${source} · ${operation.curveIds.length} Bohrung${operation.curveIds.length===1?'':'en'} · ${tool}`;
+    return `${method} · ${depth} · ${source} · ${count} Bohrung${count===1?'':'en'} · ${tool}`;
   }
   if(operation.kind==='surface-finishing'){
     return `${operation.direction==='x'?'Parallel X':'Parallel Y'} · ${operation.stepoverPercent}% Stepover · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${tool}`;
