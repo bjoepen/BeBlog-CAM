@@ -8,6 +8,7 @@ import { generateStepPocketGcode } from './stepPocketGcode';
 import { buildStepPocketOperationState } from './stepPocketOperation';
 import { buildPocketCanonicalToolpath, postPocketCanonicalToolpath } from './pocketCanonicalToolpath';
 import { applyPocketRestMachining } from './pocketRestMachining';
+import { applyPocketStockAwareRoughing } from './pocketStockAwareRoughing';
 import { optimizeParallelPocketStayDown } from './pocketStayDown';
 import { generateCarveGcode } from './carveGcode';
 import { generateCanonicalDrillGcode } from './drillCanonicalToolpath';
@@ -50,6 +51,13 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
       const rest=applyPocketRestMachining({current,previous,currentToolDiameterMm:pocket.tool.diameterMm,previousToolDiameterMm:source.tool.diameterMm});if(rest.errors.length)return{ok:false,errors:rest.errors,warnings:rest.warnings,code:''};
       if(!rest.toolpath)return{ok:true,errors:[],warnings:rest.warnings,code:'( BeBlog CAM 004N )\n( Kein Restmaterial vorhanden )\nG21\nG90\nG17\nM30\n'};
       const code=postPocketCanonicalToolpath(rest.toolpath,{safeZMm:pocket.safeZMm,feedMmMin:pocket.feedMmMin,plungeMmMin:pocket.plungeMmMin,spindleRpm:pocket.spindleRpm});return{ok:true,errors:[],warnings:rest.warnings,code:normalizeGcodeComments(code)};
+    }
+    if(pocket.stockAwareRoughingEnabled){
+      const base=args.summary.kind==='step'?buildStepPocketOperationState({...common,operation:pocket}).toolpath:buildPocketCanonicalToolpath({...common,operation:pocket});
+      if(!base)return{ok:false,errors:['Stock-aware Roughing konnte die kanonische Taschenbahn nicht rekonstruieren.'],warnings:[],code:''};
+      const adaptive=applyPocketStockAwareRoughing({toolpath:base,toolDiameterMm:pocket.tool.diameterMm,maxRadialEngagementPercent:pocket.maxRadialEngagementPercent??35});
+      if(adaptive.errors.length||!adaptive.toolpath)return{ok:false,errors:adaptive.errors.length?adaptive.errors:['Stock-aware Roughing erzeugte keinen freigegebenen Werkzeugweg.'],warnings:adaptive.warnings,code:''};
+      const code=postPocketCanonicalToolpath(adaptive.toolpath,{safeZMm:pocket.safeZMm,feedMmMin:pocket.feedMmMin,plungeMmMin:pocket.plungeMmMin,spindleRpm:pocket.spindleRpm});return{ok:true,errors:[],warnings:adaptive.warnings,code:normalizeGcodeComments(code)};
     }
     if(args.summary.kind==='step'){const r=generateStepPocketGcode({...common,operation:pocket});return{...r,code:normalizeGcodeComments(r.code)};}
     const result=generatePocketGcode({...common,operation:pocket});if(!result.ok)return result;const optimized=optimizeParallelPocketStayDown(result.code,pocket);return{...result,code:normalizeGcodeComments(optimized.code)};
