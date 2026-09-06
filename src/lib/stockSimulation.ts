@@ -23,3 +23,14 @@ export function simulateStockHeightfield(args:{stock:StockDefinition;wcs:WorkCoo
   let remainingVolumeMm3=0,touchedCells=0,minSurfaceZ=Infinity,maxSurfaceZ=-Infinity;for(let i=0;i<heights.length;i++){remainingVolumeMm3+=clamp(heights[i]-bottomZ,0,stock.thickness)*cellArea;if(touched[i])touchedCells++;minSurfaceZ=Math.min(minSurfaceZ,heights[i]);maxSurfaceZ=Math.max(maxSurfaceZ,heights[i]);}
   const initialVolumeMm3=stock.width*stock.height*stock.thickness,removedVolumeMm3=Math.max(0,initialVolumeMm3-remainingVolumeMm3),removedPercent=initialVolumeMm3>0?removedVolumeMm3/initialVolumeMm3*100:0;if(!operations.length)warnings.push('Stock-Simulation enthält noch keine kanonische Bearbeitung.');return{ok:true,errors,warnings,cellSizeMm:Math.max(dx,dy),columns,rows,initialVolumeMm3,remainingVolumeMm3,removedVolumeMm3,removedPercent,minSurfaceZ:Number.isFinite(minSurfaceZ)?minSurfaceZ:topZ,maxSurfaceZ:Number.isFinite(maxSurfaceZ)?maxSurfaceZ:topZ,touchedCells,operationCount:operations.length,heights};
 }
+
+export function sampleStockSurfaceZ(args:{simulation:StockSimulationResult;stock:StockDefinition;wcs:WorkCoordinateSystem;x:number;y:number}):number|null{
+  const {simulation,stock,wcs,x,y}=args;
+  if(!simulation.ok||simulation.columns<=0||simulation.rows<=0||simulation.heights.length!==simulation.columns*simulation.rows)return null;
+  const xb=axisBounds(stock.width,wcs.x==='left'?'min':wcs.x==='right'?'max':'center'),yb=axisBounds(stock.height,wcs.y==='front'?'min':wcs.y==='back'?'max':'center');
+  if(x<xb.min||x>xb.max||y<yb.min||y>yb.max)return null;
+  const dx=stock.width/simulation.columns,dy=stock.height/simulation.rows;
+  const ix=clamp(Math.floor((x-xb.min)/dx),0,simulation.columns-1),iy=clamp(Math.floor((y-yb.min)/dy),0,simulation.rows-1);
+  const z=simulation.heights[iy*simulation.columns+ix];
+  return Number.isFinite(z)?z:null;
+}
