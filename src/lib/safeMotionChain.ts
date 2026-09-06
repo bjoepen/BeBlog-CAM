@@ -62,15 +62,15 @@ export function materializeSafeMotionChain(args:{toolpath:CanonicalToolpath;safe
     const runStart=p3(run.points[0],run.z),runEnd=p3(run.points.at(-1)!,run.z),safeStart={x:runStart.x,y:runStart.y,z:safeZMm},safeEnd={x:runEnd.x,y:runEnd.y,z:safeZMm};
 
     if(previousSafe&&!samePoint(previousSafe,safeStart))appendConnected(motions,rapid(previousSafe,safeStart),errors,`Werkzeugbahn ${runIndex+1} XY-Rapid`);
-    else if(!previousSafe)previousSafe=safeStart;
+    previousSafe=safeStart;
 
     const entry=run.entrySegments??[];
     if(entry.length){
-      if(!samePoint(previousSafe!,entry[0].start))appendConnected(motions,rapid(previousSafe!,entry[0].start),errors,`Werkzeugbahn ${runIndex+1} Entry-Anfahrt`);
+      if(!samePoint(previousSafe,entry[0].start))appendConnected(motions,rapid(previousSafe,entry[0].start),errors,`Werkzeugbahn ${runIndex+1} Entry-Anfahrt`);
       for(const [index,segment] of entry.entries())appendConnected(motions,segment,errors,`Werkzeugbahn ${runIndex+1} Entry ${index+1}`);
       const entryEnd=entry.at(-1)!.end;
       if(!samePoint(entryEnd,runStart))errors.push(`Werkzeugbahn ${runIndex+1}: Entry endet nicht am Schnittstart.`);
-    }else appendConnected(motions,line(previousSafe!,runStart),errors,`Werkzeugbahn ${runIndex+1} Zustellung`);
+    }else appendConnected(motions,line(previousSafe,runStart),errors,`Werkzeugbahn ${runIndex+1} Zustellung`);
 
     for(const [index,motion] of runCutMotions(run).entries())appendConnected(motions,motion,errors,`Werkzeugbahn ${runIndex+1} Schnitt ${index+1}`);
     const currentEnd=motions.at(-1)?.end??runEnd;
