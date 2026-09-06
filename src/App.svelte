@@ -85,7 +85,7 @@
   function appendOperation(kind:OperationKind){operationsProject=addOperation(operationsProject,kind);const next=activeOperation(operationsProject);if(next)operation=cloneOperation(next);}
   function deleteOperation(id:string){if(operationsProject.operations.length<=1)return;operationsProject=removeOperation(operationsProject,id);const next=activeOperation(operationsProject);if(next)operation=cloneOperation(next);}
   function resetOperations(){operationsProject={operations:[cloneOperation(defaultContourOperation)],activeOperationId:defaultContourOperation.id};operation=cloneOperation(defaultContourOperation);}
-  function applyToolOperationTransfer(transfer:{operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number}){
+  function applyToolOperationTransfer(transfer:{operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number;cuttingLengthMm:number;stickoutMm:number;shaftDiameterMm:number;holderDiameterMm:number}){
     if(!(transfer.diameterMm>0&&transfer.feedMmMin>0&&transfer.spindleRpm>0))return;
     const target=operationsProject.operations.find(op=>op.id===transfer.operationId);
     if(!target)return;
@@ -93,7 +93,7 @@
       error='3D Schlichten erlaubt ausschließlich Vollradiusfräser.';
       return;
     }
-    const updated={...target,tool:{id:transfer.toolId,name:transfer.toolName,diameterMm:transfer.diameterMm,kind:transfer.toolKind},feedMmMin:transfer.feedMmMin,spindleRpm:transfer.spindleRpm} as CamOperation;
+    const updated={...target,tool:{id:transfer.toolId,name:transfer.toolName,diameterMm:transfer.diameterMm,kind:transfer.toolKind,cuttingLengthMm:transfer.cuttingLengthMm,stickoutMm:transfer.stickoutMm,shaftDiameterMm:transfer.shaftDiameterMm,holderDiameterMm:transfer.holderDiameterMm},feedMmMin:transfer.feedMmMin,spindleRpm:transfer.spindleRpm} as CamOperation;
     operationsProject=replaceOperation(operationsProject,updated);
     if(operation.id===updated.id)operation=cloneOperation(updated);
   }
