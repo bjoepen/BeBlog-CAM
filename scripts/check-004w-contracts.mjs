@@ -14,6 +14,7 @@ const checks=[
   ['STEP drill path remains operation-owned and canonical',step.includes("operationKind:'drill'")&&step.includes('motions')&&active.includes('buildStepDrillOperationState')],
   ['manual STEP drill depth remains explicitly operation-owned',step.includes("(operation.depthMode??'manual')==='manual'")&&step.includes('operation.totalDepthMm>hole.depthMm')],
   ['STEP through drilling resolves stock bottom plus overcut',step.includes("depthMode??'manual')==='stock-bottom'")&&step.includes('-stock.thickness-(operation.overcutMm??0)')],
+  ['STEP through drilling starts at stock top rather than buried feature top',step.includes('function requestedStart')&&step.includes("return{x:top.x,y:top.y,z:0}")&&step.includes('const top=requestedStart(featureTop,operation)')],
   ['DXF through drilling resolves stock thickness plus overcut',dxf.includes('resolvedDxfDrillDepth')&&dxf.includes('stock.thickness+overcut')],
   ['drill model persists depth mode and overcut',types.includes("DrillDepthMode='manual'|'stock-bottom'")&&types.includes('overcutMm?:number')],
   ['STEP axial drilling requires tool diameter to match recognized hole diameter',step.includes('Axiales Bohren benötigt Werkzeug-Ø')&&step.includes('DIAMETER_EPS_MM')],
