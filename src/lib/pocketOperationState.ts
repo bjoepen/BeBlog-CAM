@@ -33,14 +33,43 @@ const targetKey=(summary:ImportSummary,operation:PocketOperation)=>summary.kind=
 function buildBasePocket(args:PocketBuildArgs,operation:PocketOperation):BasePocketState{
   const {summary,stock,stockMode,placement,orientation,wcs}=args;
   if(summary.kind==='step'){
-    const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
-    const errors=[...state.errors],warnings=[...state.warnings];
-    let toolpath=state.toolpath;
-    if(toolpath&&state.selected&&state.targetDepthMm!=null&&toolpath.strategy==='concentric'){
-      const concentric=buildStepConcentricCleanupToolpath({summary,stock,placement,orientation,wcs,operation,candidate:state.selected,targetDepthMm:state.targetDepthMm});
-      errors.push(...concentric.errors);warnings.push(...concentric.warnings);toolpath=concentric.toolpath;
+    if(operation.strategy==='concentric'){
+      const geometryState=buildStepPocketOperationState({
+        summary,
+        stock,
+        stockMode,
+        placement,
+        orientation,
+        wcs,
+        operation:{...operation,strategy:'parallel',entry:'plunge'},
+      });
+      if(!geometryState.selected||geometryState.targetDepthMm==null||geometryState.errors.length){
+        return{
+          toolpath:null,
+          errors:[...geometryState.errors],
+          warnings:[...geometryState.warnings],
+          targetDepthMm:geometryState.targetDepthMm,
+        };
+      }
+      const concentric=buildStepConcentricCleanupToolpath({
+        summary,
+        stock,
+        placement,
+        orientation,
+        wcs,
+        operation,
+        candidate:geometryState.selected,
+        targetDepthMm:geometryState.targetDepthMm,
+      });
+      return{
+        toolpath:concentric.toolpath,
+        errors:[...concentric.errors],
+        warnings:[...geometryState.warnings,...concentric.warnings],
+        targetDepthMm:geometryState.targetDepthMm,
+      };
     }
-    return{toolpath:errors.length?null:toolpath,errors,warnings,targetDepthMm:state.targetDepthMm};
+    const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
+    return{toolpath:state.toolpath,errors:[...state.errors],warnings:[...state.warnings],targetDepthMm:state.targetDepthMm};
   }
   const toolpath=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
   return{toolpath,errors:toolpath?[]:['DXF-Taschenwerkzeugweg konnte nicht aufgebaut werden.'],warnings:[],targetDepthMm:operation.totalDepthMm};
