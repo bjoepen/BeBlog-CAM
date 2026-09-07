@@ -1,4 +1,4 @@
-import type { CanonicalToolpath } from './canonicalToolpath';
+import type { CanonicalSpatialSegment, CanonicalToolpath } from './canonicalToolpath';
 import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
 import { applyPocketRestMachining } from './pocketRestMachining';
 import { applyPocketStockAwareRoughing } from './pocketStockAwareRoughing';
@@ -13,33 +13,99 @@ export type PocketOperationState={
   targetDepthMm:number|null;
 };
 
-const targetKey=(summary:ImportSummary,operation:PocketOperation)=>summary.kind==='step'
-  ?operation.stepFaceId==null?null:`step-face:${operation.stepFaceId}`
-  :operation.contourId==null?null:`dxf-contour:${operation.contourId}`;
-
-export function buildPocketOperationState(args:{
+type PocketBuildArgs={
   summary:ImportSummary;
   stock:StockDefinition;
   stockMode:StockMode;
   placement:PartPlacement;
   orientation:PartOrientation;
   wcs:WorkCoordinateSystem;
+};
+
+type BasePocketState={toolpath:CanonicalToolpath|null;errors:string[];warnings:string[];targetDepthMm:number|null};
+const EPS=1e-6;
+
+const targetKey=(summary:ImportSummary,operation:PocketOperation)=>summary.kind==='step'
+  ?operation.stepFaceId==null?null:`step-face:${operation.stepFaceId}`
+  :operation.contourId==null?null:`dxf-contour:${operation.contourId}`;
+
+function buildBasePocket(args:PocketBuildArgs,operation:PocketOperation):BasePocketState{
+  const {summary,stock,stockMode,placement,orientation,wcs}=args;
+  if(summary.kind==='step'){
+    const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
+    return{toolpath:state.toolpath,errors:[...state.errors],warnings:[...state.warnings],targetDepthMm:state.targetDepthMm};
+  }
+  const toolpath=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
+  return{toolpath,errors:toolpath?[]:['DXF-Taschenwerkzeugweg konnte nicht aufgebaut werden.'],warnings:[],targetDepthMm:operation.totalDepthMm};
+}
+
+function adjustEntryDepth(entry:CanonicalSpatialSegment[]|undefined,startZ:number,endZ:number):CanonicalSpatialSegment[]|undefined{
+  if(!entry?.length)return undefined;
+  return entry.map((segment,index)=>{
+    const a=index/entry.length,b=(index+1)/entry.length;
+    const z0=startZ+(endZ-startZ)*a,z1=startZ+(endZ-startZ)*b;
+    return segment.kind==='line3'
+      ?{...segment,start:{...segment.start,z:z0},end:{...segment.end,z:z1}}
+      :{...segment,start:{...segment.start,z:z0},end:{...segment.end,z:z1}};
+  });
+}
+
+function limitPocketDepth(toolpath:CanonicalToolpath,depthMm:number):CanonicalToolpath{
+  const targetZ=-depthMm;
+  const kept=toolpath.runs.filter(run=>run.z>=targetZ-EPS);
+  if(kept.some(run=>Math.abs(run.z-targetZ)<=EPS))return{...toolpath,runs:kept};
+  const deeper=toolpath.runs.filter(run=>run.z<targetZ-EPS);
+  if(!deeper.length)return{...toolpath,runs:kept};
+  const nearestZ=Math.max(...deeper.map(run=>run.z));
+  const previousZ=kept.length?Math.min(...kept.map(run=>run.z)):0;
+  const finalRuns=deeper
+    .filter(run=>Math.abs(run.z-nearestZ)<=EPS)
+    .map(run=>({...run,z:targetZ,entrySegments:adjustEntryDepth(run.entrySegments,previousZ,targetZ)}));
+  return{...toolpath,runs:[...kept,...finalRuns]};
+}
+
+function repeatFinishRuns(toolpath:CanonicalToolpath,count:number){
+  return Array.from({length:count},()=>toolpath.runs.map(run=>({...run,points:[...run.points],segments:run.segments?[...run.segments]:undefined,entrySegments:run.entrySegments?[...run.entrySegments]:undefined}))).flat();
+}
+
+export function buildPocketOperationState(args:PocketBuildArgs&{
   operation:PocketOperation;
   previousToolpaths?:CanonicalToolpath[];
 }):PocketOperationState{
-  const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;
+  const {summary,operation}=args;
   const errors:string[]=[],warnings:string[]=[];
-  let toolpath:CanonicalToolpath|null=null,targetDepthMm:number|null=null;
+  const radialAllowance=Math.max(0,Number(operation.radialAllowanceMm??0));
+  const axialAllowance=Math.max(0,Number(operation.axialAllowanceMm??0));
+  const finishEnabled=operation.finishPassEnabled??false;
+  const finishCount=Math.max(1,Math.floor(operation.finishPassCount??1));
 
-  if(summary.kind==='step'){
-    const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
-    errors.push(...state.errors);warnings.push(...state.warnings);toolpath=state.toolpath;targetDepthMm=state.targetDepthMm;
-  }else{
-    toolpath=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
-    targetDepthMm=operation.totalDepthMm;
-    if(!toolpath)errors.push('DXF-Taschenwerkzeugweg konnte nicht aufgebaut werden.');
-  }
+  const nominalOperation:PocketOperation={...operation,radialAllowanceMm:0,axialAllowanceMm:0,finishPassEnabled:false,finishPassCount:1};
+  const nominal=buildBasePocket(args,nominalOperation);
+  errors.push(...nominal.errors);warnings.push(...nominal.warnings);
+  const targetDepthMm=nominal.targetDepthMm;
+  if(!nominal.toolpath||targetDepthMm==null||errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};
+  if(radialAllowance<0||axialAllowance<0)errors.push('Taschen-Aufmaß darf nicht negativ sein.');
+  if(axialAllowance>=targetDepthMm-EPS&&axialAllowance>0)errors.push(`Axiales Taschen-Aufmaß muss kleiner als die Zieltiefe ${targetDepthMm.toFixed(3)} mm sein.`);
+  if(errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};
+
+  const roughDepth=Math.max(EPS,targetDepthMm-axialAllowance);
+  const roughToolDiameter=operation.tool.diameterMm+2*radialAllowance;
+  const roughOperation:PocketOperation={
+    ...operation,
+    tool:{...operation.tool,diameterMm:roughToolDiameter},
+    totalDepthMm:summary.kind==='dxf'?roughDepth:operation.totalDepthMm,
+    radialAllowanceMm:0,
+    axialAllowanceMm:0,
+    finishPassEnabled:false,
+    finishPassCount:1,
+  };
+  const rough=radialAllowance>EPS||axialAllowance>EPS?buildBasePocket(args,roughOperation):nominal;
+  errors.push(...rough.errors);warnings.push(...rough.warnings);
+  let toolpath=rough.toolpath;
   if(!toolpath||errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};
+  if(summary.kind==='step'&&axialAllowance>EPS)toolpath=limitPocketDepth(toolpath,roughDepth);
+  toolpath={...toolpath,tool:{diameterMm:operation.tool.diameterMm}};
+  if(radialAllowance>EPS||axialAllowance>EPS)warnings.push(`Schrupp-Aufmaß aktiv: radial ${radialAllowance.toFixed(3)} mm · axial ${axialAllowance.toFixed(3)} mm.`);
 
   const key=targetKey(summary,operation);
   toolpath={...toolpath,sourceOperationId:operation.id,targetKey:key??undefined};
@@ -74,6 +140,17 @@ export function buildPocketOperationState(args:{
       }
     }
   }
+  if(!toolpath||errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};
 
-  return{ok:errors.length===0&&toolpath!==null,toolpath:errors.length?null:toolpath,errors,warnings,targetDepthMm};
+  if(finishEnabled){
+    const finishOperation:PocketOperation={...nominalOperation,entry:'plunge',stepDownMm:targetDepthMm,totalDepthMm:targetDepthMm};
+    const finish=buildBasePocket(args,finishOperation);
+    errors.push(...finish.errors);warnings.push(...finish.warnings);
+    if(!finish.toolpath||errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};
+    const finishRuns=repeatFinishRuns(finish.toolpath,finishCount);
+    toolpath={...toolpath,runs:[...toolpath.runs,...finishRuns],sourceOperationId:operation.id,targetKey:key??undefined};
+    warnings.push(`Schlichten aktiv: ${finishCount} nominale${finishCount===1?'r':'r'} Taschen-Enddurchgang${finishCount===1?'':'e'} auf Z ${(-targetDepthMm).toFixed(3)} mm.`);
+  }
+
+  return{ok:true,toolpath,errors:[],warnings,targetDepthMm};
 }
