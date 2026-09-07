@@ -2,6 +2,7 @@ import type { CanonicalSpatialSegment, CanonicalToolpath } from './canonicalTool
 import { buildPocketCanonicalToolpath } from './pocketCanonicalToolpath';
 import { applyPocketRestMachining } from './pocketRestMachining';
 import { applyPocketStockAwareRoughing } from './pocketStockAwareRoughing';
+import { buildStepConcentricCleanupToolpath } from './stepPocketConcentric';
 import { buildStepPocketOperationState } from './stepPocketOperation';
 import type { ImportSummary, PartOrientation, PartPlacement, PocketOperation, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
@@ -33,7 +34,13 @@ function buildBasePocket(args:PocketBuildArgs,operation:PocketOperation):BasePoc
   const {summary,stock,stockMode,placement,orientation,wcs}=args;
   if(summary.kind==='step'){
     const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
-    return{toolpath:state.toolpath,errors:[...state.errors],warnings:[...state.warnings],targetDepthMm:state.targetDepthMm};
+    const errors=[...state.errors],warnings=[...state.warnings];
+    let toolpath=state.toolpath;
+    if(toolpath&&state.selected&&state.targetDepthMm!=null&&toolpath.strategy==='concentric'){
+      const concentric=buildStepConcentricCleanupToolpath({summary,stock,placement,orientation,wcs,operation,candidate:state.selected,targetDepthMm:state.targetDepthMm});
+      errors.push(...concentric.errors);warnings.push(...concentric.warnings);toolpath=concentric.toolpath;
+    }
+    return{toolpath:errors.length?null:toolpath,errors,warnings,targetDepthMm:state.targetDepthMm};
   }
   const toolpath=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
   return{toolpath,errors:toolpath?[]:['DXF-Taschenwerkzeugweg konnte nicht aufgebaut werden.'],warnings:[],targetDepthMm:operation.totalDepthMm};
