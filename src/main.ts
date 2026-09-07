@@ -3,9 +3,11 @@ import App from './App.svelte';
 import CamMascot from './lib/CamMascot.svelte';
 import StockMaterialSelector from './lib/StockMaterialSelector.svelte';
 import { syncToolpath25dControl } from './lib/toolpath25dControl';
+import { syncDxfNoStockDrillGuard } from './lib/dxfNoStockDrillGuard';
 import './app.css';
 import './floh.css';
 import './overlay-fix.css';
+import './bearbeiten-inspector.css';
 
 mount(App, { target: document.getElementById('app')! });
 
@@ -37,6 +39,7 @@ function syncMaterialSelector() {
 function syncUiExtensions() {
   syncMaterialSelector();
   syncToolpath25dControl();
+  syncDxfNoStockDrillGuard();
 }
 
 requestAnimationFrame(() => {
