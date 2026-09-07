@@ -23,6 +23,8 @@ jobs:
         run: pnpm check
       - name: Drill completeness contract
         run: pnpm check:004w
+      - name: Unified geometry placement contract
+        run: pnpm check:004x
       - name: Frontend build
         run: pnpm build
       - name: Rust check
