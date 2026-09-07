@@ -1,4 +1,4 @@
-export type DxfPreviewMode='edit-top'|'drill-25d'|'job-top';
+export type DxfPreviewMode='edit-top'|'edit-25d'|'job-top';
 
 export type DxfPreviewPoint={x:number;y:number;z?:number};
 export type DxfPreviewPivot={x:number;y:number};
@@ -13,8 +13,8 @@ export type DxfPreviewCamera={
  *
  * Invariants:
  * - edit-top and job-top are strict XY orthographic projections.
- * - z never affects screen position in top views.
- * - only drill-25d is allowed to map z into the screen plane.
+ * - job-top is deterministic and never camera-dependent.
+ * - edit-25d is a view-only camera transform; it never changes CAM geometry.
  */
 export function projectDxfPreviewPoint(
   point:DxfPreviewPoint,
@@ -22,7 +22,7 @@ export function projectDxfPreviewPoint(
   pivot:DxfPreviewPivot,
   camera:DxfPreviewCamera,
 ){
-  if(mode!=='drill-25d')return{x:point.x,y:point.y};
+  if(mode!=='edit-25d')return{x:point.x,y:point.y};
 
   const yaw=camera.yawDeg*Math.PI/180;
   const tilt=camera.tiltDeg*Math.PI/180;
