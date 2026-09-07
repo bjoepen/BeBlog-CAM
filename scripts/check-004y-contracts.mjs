@@ -18,6 +18,10 @@ requireText(state,'applyPocketStockAwareRoughing','shared state applies stock-aw
 requireText(state,'applyPocketRestMachining','shared state applies rest machining');
 requireText(state,'candidate.sourceOperationId===operation.restFromOperationId','rest source is selected by exact operation identity');
 requireText(state,"previous.targetKey!==key",'rest machining requires identical pocket target');
+requireText(state,'operation.tool.diameterMm+2*radialAllowance','radial pocket allowance changes roughing centerline');
+requireText(state,'targetDepthMm-axialAllowance','axial pocket allowance leaves floor stock');
+requireText(state,"entry:'plunge',stepDownMm:targetDepthMm,totalDepthMm:targetDepthMm",'finishing is a nominal single-depth pocket pass');
+requireText(state,'repeatFinishRuns','finish pass count is materialized in canonical runs');
 requireText(active,'buildPocketOperationState','Bearbeiten uses shared pocket state');
 requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwards prior canonical operations');
 requireText(preflight,'applyPocketStockAwareRoughing','job preflight still validates stock-aware pocket path');
@@ -26,4 +30,4 @@ requireText(step,'targetDepth=Math.max(0,-faceMachineZ)','STEP pocket depth rema
 requireText(dxf,'operation.totalDepthMm','DXF pocket depth remains operation-owned');
 requireText(persistence,'operationsProject','004V persistence remains operation-project owned');
 
-console.log('004Y PASS: pocket preview modifiers, exact rest source identity, depth-source split and persistence contract are present.');
+console.log('004Y PASS: pocket preview modifiers, allowances/finishing, exact rest source identity, depth-source split and persistence contract are present.');
