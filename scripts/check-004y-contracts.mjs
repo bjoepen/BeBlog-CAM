@@ -2,6 +2,7 @@ import fs from 'node:fs';
 
 const read=(path)=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 const requireText=(text,needle,label)=>{if(!text.includes(needle))throw new Error(`${label}: missing ${needle}`);};
+const rejectText=(text,needle,label)=>{if(text.includes(needle))throw new Error(`${label}: forbidden ${needle}`);};
 
 const canonical=read('src/lib/canonicalToolpath.ts');
 const state=read('src/lib/pocketOperationState.ts');
@@ -24,10 +25,12 @@ requireText(state,"entry:'plunge',stepDownMm:targetDepthMm,totalDepthMm:targetDe
 requireText(state,'repeatFinishRuns','finish pass count is materialized in canonical runs');
 requireText(active,'buildPocketOperationState','Bearbeiten uses shared pocket state');
 requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwards prior canonical operations');
-requireText(preflight,'applyPocketStockAwareRoughing','job preflight still validates stock-aware pocket path');
-requireText(preflight,'applyPocketRestMachining','job preflight still validates rest-machining pocket path');
+requireText(preflight,"import { buildPocketOperationState } from './pocketOperationState'",'Job preflight imports shared pocket state');
+requireText(preflight,'previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)','Job preflight forwards prior accepted canonical paths');
+rejectText(preflight,"import { applyPocketRestMachining }",'Job preflight must not own a second rest-machining implementation');
+rejectText(preflight,"import { applyPocketStockAwareRoughing }",'Job preflight must not own a second stock-aware implementation');
 requireText(step,'targetDepth=Math.max(0,-faceMachineZ)','STEP pocket depth remains derived from selected BRep floor face');
 requireText(dxf,'operation.totalDepthMm','DXF pocket depth remains operation-owned');
 requireText(persistence,'operationsProject','004V persistence remains operation-project owned');
 
-console.log('004Y PASS: pocket preview modifiers, allowances/finishing, exact rest source identity, depth-source split and persistence contract are present.');
+console.log('004Y PASS: Bearbeiten and Job use one pocket state with allowances/finishing, exact rest source identity, depth-source split and persistence.');
