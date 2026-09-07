@@ -31,6 +31,8 @@ export type CanonicalToolpath={
   stepoverPercent:number;
   runs:CanonicalToolpathRun[];
   motions?:CanonicalMachineMotion[];
+  sourceOperationId?:string;
+  targetKey?:string;
 };
 
 export function canonicalToolpathRunCount(toolpath:CanonicalToolpath|null|undefined):number{
