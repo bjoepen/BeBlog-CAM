@@ -26,7 +26,7 @@ requireText(geometryView,"summary.kind==='dxf'&&drillViewMode==='25d'",'DXF 2.5D
 requireText(projection,"'edit-top'|'edit-25d'|'job-top'",'DXF projection modes are explicit');
 requireText(projection,"if(mode!=='edit-25d')",'job/top projection remains deterministic');
 rejectText(projection,'drill-25d','DXF camera must not be coupled to drill operation');
-requireText(viewState,"data.dxfEditView=state.mode",'shared DXF view state reaches overlay visibility contract');
+requireText(viewState,'document.documentElement.dataset.dxfEditView=state.mode','shared DXF view state reaches overlay visibility contract');
 requireText(viewState,'html[data-dxf-edit-view="25d"] .contour-overlay{display:none!important}','selection overlay is disabled in rotated view');
 requireText(overlay,'orientation.rotationZDeg','DXF top-view selection still follows part orientation');
 
