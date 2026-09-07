@@ -25,6 +25,8 @@ jobs:
         run: pnpm check:004w
       - name: Unified geometry placement contract
         run: pnpm check:004x
+      - name: Pocket completeness contract
+        run: pnpm check:004y
       - name: Frontend build
         run: pnpm build
       - name: Rust check
