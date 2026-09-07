@@ -7,6 +7,7 @@ import { syncDxfNoStockDrillGuard } from './lib/dxfNoStockDrillGuard';
 import './app.css';
 import './floh.css';
 import './overlay-fix.css';
+import './bearbeiten-inspector.css';
 
 mount(App, { target: document.getElementById('app')! });
 
