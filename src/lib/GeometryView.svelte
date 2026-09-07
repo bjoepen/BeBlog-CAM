@@ -7,6 +7,7 @@
   import { buildFaceTargetRasterToolpath } from './faceTargetToolpath';
   import type { CanonicalMachineMotion, CanonicalToolpath, ToolpathPoint3 } from './canonicalToolpath';
   import { projectDxfPreviewPoint, type DxfPreviewMode } from './dxfPreviewProjection';
+  import { dxfEditView } from './dxfViewState';
   import { sliceTrianglesByStep } from './zLevelSlice';
   import { buildModelSliceRegions } from './modelSliceRegion';
   import { buildRoughingRegions } from './roughingRegion';
@@ -54,6 +55,7 @@
   let showCurvedFaceTarget=false;
   let showCurvedFaceRoughing=false;
   let showBallnoseContactProof=false;
+  $: dxfEditView.set({mode:drillViewMode,yawDeg:drillYawDeg,tiltDeg:drillTiltDeg});
   $: faceTargetEditing=!!roughingOperation&&(roughingOperation.roughingMode??'face-target')==='face-target';
   $: surfaceFinishingEditing=!!surfaceFinishingOperation;
   $: selectableSurfaceEditing=faceTargetEditing||surfaceFinishingEditing;
@@ -105,120 +107,34 @@
     const b=bounds3(raw),p=place(b.minX,b.maxX,b.minY,b.maxY);
     const place3=(q:P3)=>({x:q.x+p.dx,y:q.y+p.dy,z:q.z-b.minZ+placement.offsetZ});
     const part=raw.map(place3),faceIds=summary.brep?.displayFaceIds??[];
-    const curvedFaceTarget=includeCurvedFaceProof
-      ?buildCurvedFaceTarget(part,faceIds,faceSelection)
-      :null;
+    const curvedFaceTarget=includeCurvedFaceProof?buildCurvedFaceTarget(part,faceIds,faceSelection):null;
     const curvedFaceSampleWorld:{x:number;y:number;z:number}[][]=[];
     if(curvedFaceTarget?.valid&&curvedFaceTarget.bounds){
-      const bounds=curvedFaceTarget.bounds;
-      const nx=24,ny=24;
-      for(let iy=0;iy<=ny;iy++){
-        const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;
-        let row:{x:number;y:number;z:number}[]=[];
-        for(let ix=0;ix<=nx;ix++){
-          const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;
-          const z=curvedFaceTargetZAt(curvedFaceTarget,x,y);
-          if(z===null){
-            if(row.length>=2)curvedFaceSampleWorld.push(row);
-            row=[];
-          }else{
-            row.push({x,y,z:z+0.04});
-          }
-        }
-        if(row.length>=2)curvedFaceSampleWorld.push(row);
-      }
-      for(let ix=0;ix<=nx;ix++){
-        const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;
-        let column:{x:number;y:number;z:number}[]=[];
-        for(let iy=0;iy<=ny;iy++){
-          const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;
-          const z=curvedFaceTargetZAt(curvedFaceTarget,x,y);
-          if(z===null){
-            if(column.length>=2)curvedFaceSampleWorld.push(column);
-            column=[];
-          }else{
-            column.push({x,y,z:z+0.04});
-          }
-        }
-        if(column.length>=2)curvedFaceSampleWorld.push(column);
-      }
+      const bounds=curvedFaceTarget.bounds;const nx=24,ny=24;
+      for(let iy=0;iy<=ny;iy++){const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;let row:{x:number;y:number;z:number}[]=[];for(let ix=0;ix<=nx;ix++){const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;const z=curvedFaceTargetZAt(curvedFaceTarget,x,y);if(z===null){if(row.length>=2)curvedFaceSampleWorld.push(row);row=[];}else row.push({x,y,z:z+0.04});}if(row.length>=2)curvedFaceSampleWorld.push(row);}
+      for(let ix=0;ix<=nx;ix++){const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;let column:{x:number;y:number;z:number}[]=[];for(let iy=0;iy<=ny;iy++){const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;const z=curvedFaceTargetZAt(curvedFaceTarget,x,y);if(z===null){if(column.length>=2)curvedFaceSampleWorld.push(column);column=[];}else column.push({x,y,z:z+0.04});}if(column.length>=2)curvedFaceSampleWorld.push(column);}
     }
     const modelSlices=includeModelRegions?sliceTrianglesByStep(part,Math.max(.1,modelSliceStepMm)):[];
     const modelRegions=buildModelSliceRegions(modelSlices);
-    const roughingRegions=(includeRoughingRegions||includeModelToolpath)
-      ?buildRoughingRegions(modelRegions,{minX:0,minY:0,maxX:stock.width,maxY:stock.height})
-      :[];
-    const modelRegionWorld=modelRegions.flatMap(region=>region.valid?region.islands.flatMap(island=>[
-      island.outer.points.map(point=>({x:point.x,y:point.y,z:region.z})),
-      ...island.holes.map(hole=>hole.points.map(point=>({x:point.x,y:point.y,z:region.z}))),
-    ]):[]);
+    const roughingRegions=(includeRoughingRegions||includeModelToolpath)?buildRoughingRegions(modelRegions,{minX:0,minY:0,maxX:stock.width,maxY:stock.height}):[];
+    const modelRegionWorld=modelRegions.flatMap(region=>region.valid?region.islands.flatMap(island=>[island.outer.points.map(point=>({x:point.x,y:point.y,z:region.z})),...island.holes.map(hole=>hole.points.map(point=>({x:point.x,y:point.y,z:region.z}))) ]):[]);
     const invalidModelWorld=modelSlices.flatMap((slice,index)=>modelRegions[index]?.valid?[]:slice.chains.map(chain=>chain.points.map(point=>({x:point.x,y:point.y,z:slice.z}))));
-    const roughingRegionWorld=roughingRegions.flatMap(region=>region.valid?region.islands.flatMap(island=>[
-      island.outer.map(point=>({x:point.x,y:point.y,z:region.z})),
-      ...island.holes.map(hole=>hole.map(point=>({x:point.x,y:point.y,z:region.z}))),
-    ]):[]);
-    const invalidRoughingWorld=roughingRegions.flatMap(region=>region.valid?[]:[
-      [{x:0,y:0,z:region.z},{x:stock.width,y:0,z:region.z},{x:stock.width,y:stock.height,z:region.z},{x:0,y:stock.height,z:region.z}]
-    ]);
+    const roughingRegionWorld=roughingRegions.flatMap(region=>region.valid?region.islands.flatMap(island=>[island.outer.map(point=>({x:point.x,y:point.y,z:region.z})),...island.holes.map(hole=>hole.map(point=>({x:point.x,y:point.y,z:region.z}))) ]):[]);
+    const invalidRoughingWorld=roughingRegions.flatMap(region=>region.valid?[]:[[{x:0,y:0,z:region.z},{x:stock.width,y:0,z:region.z},{x:stock.width,y:stock.height,z:region.z},{x:0,y:stock.height,z:region.z}]]);
     const ballnoseContactWorld:{surface:{x:number;y:number;z:number};center:{x:number;y:number;z:number};normalEnd:{x:number;y:number;z:number}}[]=[];
-    if(includeBallnoseContactProof&&curvedFaceTarget?.valid&&curvedFaceTarget.bounds&&roughingOperation){
-      const bounds=curvedFaceTarget.bounds;
-      const ballRadius=Math.max(.05,roughingOperation.tool.diameterMm/2);
-      const nx=5,ny=4;
-      for(let iy=1;iy<ny;iy++){
-        const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;
-        for(let ix=1;ix<nx;ix++){
-          const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;
-          const result=ballnoseContactAt(curvedFaceTarget,x,y,ballRadius);
-          if(!result.valid||!result.contact)continue;
-          const {surface,center,normal}=result.contact;
-          const normalScale=Math.max(2,Math.min(8,ballRadius*1.5));
-          ballnoseContactWorld.push({
-            surface:{...surface,z:surface.z+0.03},
-            center:{...center,z:center.z+0.03},
-            normalEnd:{
-              x:surface.x+normal.x*normalScale,
-              y:surface.y+normal.y*normalScale,
-              z:surface.z+normal.z*normalScale+0.03,
-            },
-          });
-        }
-      }
-    }
-    const curvedRoughing=includeCurvedFaceRoughing&&curvedFaceTarget?.valid&&roughingOperation
-      ?buildCurvedFaceRoughing(
-        curvedFaceTarget,
-        stock.thickness,
-        roughingOperation.tool.diameterMm,
-        roughingOperation.stepDownMm,
-        roughingOperation.stepoverPercent,
-        roughingOperation.finishAllowanceMm,
-      )
-      :null;
-    const curvedRoughingWorld=curvedRoughing?.levels.flatMap(level=>
-      level.chains.map(chain=>chain.points.map(point=>({x:point.x,y:point.y,z:level.z+0.06})))
-    )??[];
+    if(includeBallnoseContactProof&&curvedFaceTarget?.valid&&curvedFaceTarget.bounds&&roughingOperation){const bounds=curvedFaceTarget.bounds;const ballRadius=Math.max(.05,roughingOperation.tool.diameterMm/2);const nx=5,ny=4;for(let iy=1;iy<ny;iy++){const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;for(let ix=1;ix<nx;ix++){const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;const result=ballnoseContactAt(curvedFaceTarget,x,y,ballRadius);if(!result.valid||!result.contact)continue;const {surface,center,normal}=result.contact;const normalScale=Math.max(2,Math.min(8,ballRadius*1.5));ballnoseContactWorld.push({surface:{...surface,z:surface.z+0.03},center:{...center,z:center.z+0.03},normalEnd:{x:surface.x+normal.x*normalScale,y:surface.y+normal.y*normalScale,z:surface.z+normal.z*normalScale+0.03}});}}}
+    const curvedRoughing=includeCurvedFaceRoughing&&curvedFaceTarget?.valid&&roughingOperation?buildCurvedFaceRoughing(curvedFaceTarget,stock.thickness,roughingOperation.tool.diameterMm,roughingOperation.stepDownMm,roughingOperation.stepoverPercent,roughingOperation.finishAllowanceMm):null;
+    const curvedRoughingWorld=curvedRoughing?.levels.flatMap(level=>level.chains.map(chain=>chain.points.map(point=>({x:point.x,y:point.y,z:level.z+0.06}))))??[];
     const edgeWorld=decodeStepEdges(summary.brep?.displayEdges).map(edge=>{const points:P3[]=[];for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));return{edgeId:edge.edgeId,points}}).filter(edge=>edge.points.length>=2);
     const wp=wcsPoint();
-    const modelRoughingProof=includeModelToolpath&&roughingOperation&&wcs.z==='top'
-      ?buildModelRoughingCanonicalToolpath(
-        roughingRegions,
-        Math.max(.1,roughingOperation.tool.diameterMm),
-        Math.max(1,Math.min(100,roughingOperation.stepoverPercent)),
-        wp,
-      )
-      :null;
-    const modelRoughingWorld=modelRoughingProof?.toolpath?.runs.map(run=>
-      run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z}))
-    )??[];
+    const modelRoughingProof=includeModelToolpath&&roughingOperation&&wcs.z==='top'?buildModelRoughingCanonicalToolpath(roughingRegions,Math.max(.1,roughingOperation.tool.diameterMm),Math.max(1,Math.min(100,roughingOperation.stepoverPercent)),wp):null;
+    const modelRoughingWorld=modelRoughingProof?.toolpath?.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z})))??[];
     const target=includeZLevels&&wcs.z==='top'?buildFaceTargetRoughing(part,faceIds,faceSelection,stock.thickness,Math.max(.1,sliceStepMm),Math.max(0,allowanceMm)):null;
     const toolpath=target?buildFaceTargetRasterToolpath(target,Math.max(.1,toolDiameterMm),Math.max(1,Math.min(100,stepoverPercent)),wp):null;
     const regionWorld=target?target.levels.map(z=>target.loops.map(loop=>loop.points.map(point=>({x:point.x,y:point.y,z})))):[];
     const activeToolWorld=toolpath?.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z})))??[];
     const jobToolWorld=jobToolpaths.flatMap(path=>path.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z}))));
-    const jobMotionWorld=jobToolpaths.flatMap(toolpath=>(toolpath.motions??[])
-      .filter(motion=>motion.kind!=='rapid3')
-      .map(motion=>sampleMachineMotion(motion).map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:point.z+wp.z}))));
+    const jobMotionWorld=jobToolpaths.flatMap(toolpath=>(toolpath.motions??[]).filter(motion=>motion.kind!=='rapid3').map(motion=>sampleMachineMotion(motion).map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:point.z+wp.z}))));
     const toolWorld=[...activeToolWorld,...jobToolWorld,...jobMotionWorld];
     const m=Math.max(stock.width,stock.height)*.12+10;
     const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
@@ -232,62 +148,20 @@
     const modelRegionPaths=mr.map(loop=>path(loop.map(map),true)).filter(Boolean);
     const invalidModelPaths=mi.map(loop=>path(loop.map(map))).filter(Boolean);
     const roughingRegionPaths=rg.map(loop=>path(loop.map(map),true)).filter(Boolean);
-    const invalidRoughingPaths=ri.map(loop=>path(loop.map(map))).filter(Boolean);
+    const invalidRoughingPaths=ri.map(loop=>path(loop.map(map),true)).filter(Boolean);
     const modelRoughingToolPaths=mt.map(run=>path(run.map(map))).filter(Boolean);
     const curvedFaceProofPaths=cf.map(line=>path(line.map(map))).filter(Boolean);
     const curvedRoughingPaths=cr.map(line=>path(line.map(map))).filter(Boolean);
-    const ballnoseContactProof=bn.map(item=>({
-      surface:map(item.surface),
-      center:map(item.center),
-      normalEnd:map(item.normalEnd),
-    }));
-    const ballnoseContactStatus=!includeBallnoseContactProof
-      ?''
-      :!roughingOperation
-        ?'Z-Level-Schruppoperation als Werkzeugquelle erforderlich.'
-        :!curvedFaceTarget?.valid
-          ?'Gekrümmte Zielfläche wählen.'
-          :ballnoseContactProof.length
-            ?`${ballnoseContactProof.length} Kontaktproben · Kugelradius ${(roughingOperation.tool.diameterMm/2).toFixed(3)} mm`
-            :'Keine gültigen Kontaktproben auf der gewählten Fläche.';
+    const ballnoseContactProof=bn.map(item=>({surface:map(item.surface),center:map(item.center),normalEnd:map(item.normalEnd)}));
+    const ballnoseContactStatus=!includeBallnoseContactProof?'':!roughingOperation?'Z-Level-Schruppoperation als Werkzeugquelle erforderlich.':!curvedFaceTarget?.valid?'Gekrümmte Zielfläche wählen.':ballnoseContactProof.length?`${ballnoseContactProof.length} Kontaktproben · Kugelradius ${(roughingOperation.tool.diameterMm/2).toFixed(3)} mm`:'Keine gültigen Kontaktproben auf der gewählten Fläche.';
     const curvedRoughingRunCount=curvedRoughing?.levels.reduce((sum,level)=>sum+level.chains.length,0)??0;
-    const curvedRoughingStatus=!includeCurvedFaceRoughing
-      ?''
-      :!faceSelection.length
-        ?'Hohlkehlen-Fläche wählen.'
-        :!roughingOperation
-          ?'Z-Level-Schruppoperation erforderlich.'
-          :curvedRoughing?.valid
-            ?`${curvedRoughing.levels.length} Z-Ebenen · ${curvedRoughingRunCount} Schruppbahnen · Ø ${roughingOperation.tool.diameterMm.toFixed(2)} mm · ${roughingOperation.stepDownMm.toFixed(2)} mm Zustellung`
-            :curvedRoughing?.errors[0]??'Keine sichere Hohlkehlen-Schruppbahn.';
+    const curvedRoughingStatus=!includeCurvedFaceRoughing?'':!faceSelection.length?'Hohlkehlen-Fläche wählen.':!roughingOperation?'Z-Level-Schruppoperation erforderlich.':curvedRoughing?.valid?`${curvedRoughing.levels.length} Z-Ebenen · ${curvedRoughingRunCount} Schruppbahnen · Ø ${roughingOperation.tool.diameterMm.toFixed(2)} mm · ${roughingOperation.stepDownMm.toFixed(2)} mm Zustellung`:curvedRoughing?.errors[0]??'Keine sichere Hohlkehlen-Schruppbahn.';
     const curvedFaceSampleCount=curvedFaceSampleWorld.reduce((sum,line)=>sum+line.length,0);
-    const curvedFaceStatus=!includeCurvedFaceProof
-      ?''
-      :!faceSelection.length
-        ?'Fläche wählen.'
-        :curvedFaceTarget?.valid&&curvedFaceTarget.bounds
-          ?`Z(x,y) gültig · ${curvedFaceTarget.triangles.length} Dreiecke · Z ${curvedFaceTarget.bounds.minZ.toFixed(3)}…${curvedFaceTarget.bounds.maxZ.toFixed(3)} mm · ${curvedFaceSampleCount} Samples`
-          :curvedFaceTarget?.errors[0]??'Gekrümmte Zielfläche ist nicht als Z(x,y) verwendbar.';
-    const modelRoughingRunCount=modelRoughingProof?.toolpath?.runs.length??0;
-    const modelRoughingWarningCount=modelRoughingProof?.warnings.length??0;
-    const modelRoughingErrorCount=modelRoughingProof?.errors.length??0;
-    const modelRoughingStatus=!includeModelToolpath
-      ?''
-      :!roughingOperation
-        ?'Aktive Bearbeitung „Z-Level Schruppen“ wählen.'
-        :wcs.z!=='top'
-          ?'Modell-Schruppen benötigt WCS Z oben.'
-          :modelRoughingProof?.ok
-            ?`${modelRoughingRunCount} kanonische Schnittketten · ${modelRoughingProof.levelCount} Ebenen · ${modelRoughingProof.islandCount} Schruppinseln`
-            :modelRoughingProof?.errors[0]??'Keine sichere Modell-Schruppbahn erzeugt.';
-    const modelValidCount=modelRegions.filter(region=>region.valid).length;
-    const modelInvalidCount=modelRegions.length-modelValidCount;
-    const modelIslandCount=modelRegions.reduce((sum,region)=>sum+(region.valid?region.islands.length:0),0);
-    const modelHoleCount=modelRegions.reduce((sum,region)=>sum+(region.valid?region.islands.reduce((n,island)=>n+island.holes.length,0):0),0);
-    const roughingValidCount=roughingRegions.filter(region=>region.valid).length;
-    const roughingInvalidCount=roughingRegions.length-roughingValidCount;
-    const roughingIslandCount=roughingRegions.reduce((sum,region)=>sum+(region.valid?region.islands.length:0),0);
-    const roughingHoleCount=roughingRegions.reduce((sum,region)=>sum+(region.valid?region.islands.reduce((n,island)=>n+island.holes.length,0):0),0);
+    const curvedFaceStatus=!includeCurvedFaceProof?'':!faceSelection.length?'Fläche wählen.':curvedFaceTarget?.valid&&curvedFaceTarget.bounds?`Z(x,y) gültig · ${curvedFaceTarget.triangles.length} Dreiecke · Z ${curvedFaceTarget.bounds.minZ.toFixed(3)}…${curvedFaceTarget.bounds.maxZ.toFixed(3)} mm · ${curvedFaceSampleCount} Samples`:curvedFaceTarget?.errors[0]??'Gekrümmte Zielfläche ist nicht als Z(x,y) verwendbar.';
+    const modelRoughingRunCount=modelRoughingProof?.toolpath?.runs.length??0,modelRoughingWarningCount=modelRoughingProof?.warnings.length??0,modelRoughingErrorCount=modelRoughingProof?.errors.length??0;
+    const modelRoughingStatus=!includeModelToolpath?'':!roughingOperation?'Aktive Bearbeitung „Z-Level Schruppen“ wählen.':wcs.z!=='top'?'Modell-Schruppen benötigt WCS Z oben.':modelRoughingProof?.ok?`${modelRoughingRunCount} kanonische Schnittketten · ${modelRoughingProof.levelCount} Ebenen · ${modelRoughingProof.islandCount} Schruppinseln`:modelRoughingProof?.errors[0]??'Keine sichere Modell-Schruppbahn erzeugt.';
+    const modelValidCount=modelRegions.filter(region=>region.valid).length,modelInvalidCount=modelRegions.length-modelValidCount,modelIslandCount=modelRegions.reduce((sum,region)=>sum+(region.valid?region.islands.length:0),0),modelHoleCount=modelRegions.reduce((sum,region)=>sum+(region.valid?region.islands.reduce((n,island)=>n+island.holes.length,0):0),0);
+    const roughingValidCount=roughingRegions.filter(region=>region.valid).length,roughingInvalidCount=roughingRegions.length-roughingValidCount,roughingIslandCount=roughingRegions.reduce((sum,region)=>sum+(region.valid?region.islands.length:0),0),roughingHoleCount=roughingRegions.reduce((sum,region)=>sum+(region.valid?region.islands.reduce((n,island)=>n+island.holes.length,0):0),0);
     const e=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
     const targetStatus=!includeZLevels?'':wcs.z!=='top'?'Face-Target-Roughing benötigt WCS Z oben':!faceSelection.length?'Zielfläche wählen':!target?'Nur horizontale, planare Zielflächen':target.levels.length?`Ziel ${target.targetZ.toFixed(2)} mm · Schruppen bis ${target.roughBottomZ.toFixed(2)} mm`:'Kein Material oberhalb der Zielfläche';
     return{triangles,edges,roughRegions,toolPaths,modelRegionPaths,invalidModelPaths,roughingRegionPaths,invalidRoughingPaths,modelRoughingToolPaths,modelRoughingRunCount,modelRoughingWarningCount,modelRoughingErrorCount,modelRoughingStatus,curvedFaceProofPaths,curvedFaceSampleCount,curvedFaceStatus,curvedFaceValid:curvedFaceTarget?.valid??false,curvedRoughingPaths,curvedRoughingRunCount,curvedRoughingStatus,curvedRoughingValid:curvedRoughing?.valid??false,ballnoseContactProof,ballnoseContactStatus,modelSliceCount:modelRegions.length,modelValidCount,modelInvalidCount,modelIslandCount,modelHoleCount,roughingSliceCount:roughingRegions.length,roughingValidCount,roughingInvalidCount,roughingIslandCount,roughingHoleCount,canonicalFaceTargetToolpath:toolpath,sliceCount:target?.levels.length??0,regionCount:roughRegions.length,toolpathCount:toolPaths.length,targetStatus,targetZ:target?.targetZ??null,roughBottomZ:target?.roughBottomZ??null,facePickingAvailable:faceIds.length===Math.floor(part.length/3),plane:path(fpl,true),stock:e.map(([i,j])=>path([fb[i],fb[j]])),axes:[path([fa[0],fa[1]]),path([fa[2],fa[3]]),path([fa[4],fa[5]])],labels:[fa[1],fa[3],fa[5]],wcs:fw};
@@ -295,117 +169,29 @@
 
   function scene2d(activeToolpath:CanonicalToolpath|null,jobToolpaths:CanonicalToolpath[]=[]){
     const renderToolpaths=activeToolpath?[activeToolpath]:jobToolpaths;
-    const previewMode:DxfPreviewMode=jobToolpaths.length
-      ?'job-top'
-      :activeToolpath?.operationKind==='drill'&&drillViewMode==='25d'
-        ?'drill-25d'
-        :'edit-top';
-    const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();
-    if(!flat.length)return null;
+    const previewMode:DxfPreviewMode=jobToolpaths.length?'job-top':drillViewMode==='25d'?'edit-25d':'edit-top';
+    const curves=summary.planarGeometry?.curves??[],ss=curves.map(c=>sample(c).map(rotate2)),flat=ss.flat();if(!flat.length)return null;
     const b=bounds2(flat),noStock=stockMode==='none',p=noStock?{dx:-b.minX,dy:-b.minY}:place(b.minX,b.maxX,b.minY,b.maxY);
     const placed=ss.map(a=>a.map(q=>({x:q.x+p.dx,y:q.y+p.dy}))),partBounds=bounds2(placed.flat());
-    const pivot={
-      x:noStock?(partBounds.minX+partBounds.maxX)/2:(wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2),
-      y:noStock?(partBounds.minY+partBounds.maxY)/2:(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2)
-    };
-    const project=(point:{x:number;y:number;z?:number}):P2=>
-      projectDxfPreviewPoint(
-        point,
-        previewMode,
-        pivot,
-        {yawDeg:drillYawDeg,tiltDeg:drillTiltDeg},
-      );
+    const pivot={x:noStock?(partBounds.minX+partBounds.maxX)/2:(wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2),y:noStock?(partBounds.minY+partBounds.maxY)/2:(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2)};
+    const project=(point:{x:number;y:number;z?:number}):P2=>projectDxfPreviewPoint(point,previewMode,pivot,{yawDeg:drillYawDeg,tiltDeg:drillTiltDeg});
     const projectedPlaced=placed.map(points=>points.map(point=>project({...point,z:0})));
-    const sampleRunPoints=(run:CanonicalToolpath['runs'][number])=>{
-      if(!run.segments?.length)return run.points;
-      const out:{x:number;y:number}[]=[];
-      for(const segment of run.segments){
-        if(segment.kind==='line'){
-          if(!out.length)out.push(segment.start);
-          out.push(segment.end);
-          continue;
-        }
-        const radius=Math.hypot(segment.start.x-segment.center.x,segment.start.y-segment.center.y);
-        if(!(radius>0)){if(!out.length)out.push(segment.start);out.push(segment.end);continue}
-        let a0=Math.atan2(segment.start.y-segment.center.y,segment.start.x-segment.center.x);
-        let a1=Math.atan2(segment.end.y-segment.center.y,segment.end.x-segment.center.x);
-        let delta=a1-a0;
-        if(segment.ccw){while(delta<=0)delta+=Math.PI*2}else{while(delta>=0)delta-=Math.PI*2}
-        const steps=Math.max(12,Math.ceil(Math.abs(delta)/(Math.PI/18)));
-        if(!out.length)out.push(segment.start);
-        for(let i=1;i<=steps;i++){
-          const t=i/steps,a=a0+delta*t;
-          out.push({x:segment.center.x+Math.cos(a)*radius,y:segment.center.y+Math.sin(a)*radius});
-        }
-      }
-      return out;
-    };
-    const canonicalRuns=renderToolpaths.flatMap(toolpath=>toolpath.runs.map(run=>({
-      z:run.z,
-      points:sampleRunPoints(run).map(point=>project({...fromWcs2(point),z:run.z}))
-    })));
-    const canonicalEntries=previewMode==='job-top'?[]:renderToolpaths.flatMap(toolpath=>toolpath.runs.flatMap(run=>(run.entrySegments??[]).flatMap(segment=>{
-      const sampled=sampleMachineMotion(segment);
-      return sampled.slice(1).map((end,index)=>{
-        const start=sampled[index],a=fromWcs2(start),b=fromWcs2(end);
-        return{
-          z:end.z,
-          points:[
-            project({x:a.x,y:a.y,z:start.z}),
-            project({x:b.x,y:b.y,z:end.z})
-          ]
-        };
-      });
-    })));
-    const machinePaths=previewMode==='job-top'?[]:renderToolpaths.flatMap((toolpath,toolpathIndex)=>(toolpath.motions??[]).map((motion,motionIndex)=>{
-      const xyChanged=Math.abs(motion.end.x-motion.start.x)>1e-9||Math.abs(motion.end.y-motion.start.y)>1e-9;
-      const zChanged=Math.abs(motion.end.z-motion.start.z)>1e-9;
-      const points=sampleMachineMotion(motion).map(point=>{const xy=fromWcs2(point);return project({x:xy.x,y:xy.y,z:point.z})});
-      return{points,rapid:motion.kind==='rapid3',traverse:motion.kind==='rapid3'&&xyChanged&&!zChanged,motionIndex:toolpathIndex*100000+motionIndex};
-    })).filter(entry=>entry.points.length>=2);
+    const sampleRunPoints=(run:CanonicalToolpath['runs'][number])=>{if(!run.segments?.length)return run.points;const out:{x:number;y:number}[]=[];for(const segment of run.segments){if(segment.kind==='line'){if(!out.length)out.push(segment.start);out.push(segment.end);continue;}const radius=Math.hypot(segment.start.x-segment.center.x,segment.start.y-segment.center.y);if(!(radius>0)){if(!out.length)out.push(segment.start);out.push(segment.end);continue}let a0=Math.atan2(segment.start.y-segment.center.y,segment.start.x-segment.center.x),a1=Math.atan2(segment.end.y-segment.center.y,segment.end.x-segment.center.x),delta=a1-a0;if(segment.ccw){while(delta<=0)delta+=Math.PI*2}else{while(delta>=0)delta-=Math.PI*2}const steps=Math.max(12,Math.ceil(Math.abs(delta)/(Math.PI/18)));if(!out.length)out.push(segment.start);for(let i=1;i<=steps;i++){const t=i/steps,a=a0+delta*t;out.push({x:segment.center.x+Math.cos(a)*radius,y:segment.center.y+Math.sin(a)*radius});}}return out;};
+    const canonicalRuns=renderToolpaths.flatMap(toolpath=>toolpath.runs.map(run=>({z:run.z,points:sampleRunPoints(run).map(point=>project({...fromWcs2(point),z:run.z}))})));
+    const canonicalEntries=previewMode==='job-top'?[]:renderToolpaths.flatMap(toolpath=>toolpath.runs.flatMap(run=>(run.entrySegments??[]).flatMap(segment=>{const sampled=sampleMachineMotion(segment);return sampled.slice(1).map((end,index)=>{const start=sampled[index],a=fromWcs2(start),b=fromWcs2(end);return{z:end.z,points:[project({x:a.x,y:a.y,z:start.z}),project({x:b.x,y:b.y,z:end.z})]};});})));
+    const machinePaths=previewMode==='job-top'?[]:renderToolpaths.flatMap((toolpath,toolpathIndex)=>(toolpath.motions??[]).map((motion,motionIndex)=>{const xyChanged=Math.abs(motion.end.x-motion.start.x)>1e-9||Math.abs(motion.end.y-motion.start.y)>1e-9;const zChanged=Math.abs(motion.end.z-motion.start.z)>1e-9;const points=sampleMachineMotion(motion).map(point=>{const xy=fromWcs2(point);return project({x:xy.x,y:xy.y,z:point.z})});return{points,rapid:motion.kind==='rapid3',traverse:motion.kind==='rapid3'&&xyChanged&&!zChanged,motionIndex:toolpathIndex*100000+motionIndex};})).filter(entry=>entry.points.length>=2);
     const machineProjected=machinePaths.flatMap(entry=>entry.points);
-
-    const makeResult=(planeWorld:P2[],stockWorld:P2[]|null)=>{
-      const plane=planeWorld.map(point=>project({...point,z:0}));
-      const stockProjected=stockWorld?.map(point=>project({...point,z:0}))??null;
-      const map=fit([...projectedPlaced.flat(),...plane,...(stockProjected??[]),...canonicalRuns.flatMap(run=>run.points),...canonicalEntries.flatMap(entry=>entry.points),...machineProjected]);
-      const wx=noStock?(wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2):(wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2);
-      const wy=noStock?(wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2):(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2);
-      return{
-        paths:projectedPlaced.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),
-        selectedDrillPaths:previewMode==='drill-25d'?selectedDrillCurveIds.flatMap(id=>{
-          const points=projectedPlaced[id],curve=curves[id];
-          if(!points||curve?.kind!=='circle')return[];
-          return[path(points.map(map),true)];
-        }):[],
-        toolPaths:canonicalRuns.map(run=>({d:path(run.points.map(map)),z:run.z})).filter(run=>Boolean(run.d)),
-        entryPaths:canonicalEntries.map(entry=>({d:path(entry.points.map(map)),z:entry.z})).filter(entry=>Boolean(entry.d)),
-        machinePaths:machinePaths.map(entry=>({d:path(entry.points.map(map)),rapid:entry.rapid,traverse:entry.traverse,motionIndex:entry.motionIndex})),
-        plane:path(plane.map(map),true),stock:stockProjected?path(stockProjected.map(map),true):null,wcs:map(project({x:wx,y:wy,z:0})),noStock,previewMode
-      };
-    };
-
-    if(noStock){
-      const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10;
-      return makeResult([{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],null);
-    }
-    const m=Math.max(stock.width,stock.height)*.12+10;
-    return makeResult([{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}]);
+    const makeResult=(planeWorld:P2[],stockWorld:P2[]|null)=>{const plane=planeWorld.map(point=>project({...point,z:0}));const stockProjected=stockWorld?.map(point=>project({...point,z:0}))??null;const map=fit([...projectedPlaced.flat(),...plane,...(stockProjected??[]),...canonicalRuns.flatMap(run=>run.points),...canonicalEntries.flatMap(entry=>entry.points),...machineProjected]);const wx=noStock?(wcs.x==='left'?partBounds.minX:wcs.x==='right'?partBounds.maxX:(partBounds.minX+partBounds.maxX)/2):(wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2);const wy=noStock?(wcs.y==='front'?partBounds.minY:wcs.y==='back'?partBounds.maxY:(partBounds.minY+partBounds.maxY)/2):(wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2);return{paths:projectedPlaced.map((a,i)=>path(a.map(map),curves[i]?.kind==='circle'||(curves[i]?.kind==='polyline'&&curves[i].closed))).filter(Boolean),selectedDrillPaths:previewMode==='edit-25d'?selectedDrillCurveIds.flatMap(id=>{const points=projectedPlaced[id],curve=curves[id];if(!points||curve?.kind!=='circle')return[];return[path(points.map(map),true)];}):[],toolPaths:canonicalRuns.map(run=>({d:path(run.points.map(map)),z:run.z})).filter(run=>Boolean(run.d)),entryPaths:canonicalEntries.map(entry=>({d:path(entry.points.map(map)),z:entry.z})).filter(entry=>Boolean(entry.d)),machinePaths:machinePaths.map(entry=>({d:path(entry.points.map(map)),rapid:entry.rapid,traverse:entry.traverse,motionIndex:entry.motionIndex})),plane:path(plane.map(map),true),stock:stockProjected?path(stockProjected.map(map),true):null,wcs:map(project({x:wx,y:wy,z:0})),noStock,previewMode};};
+    if(noStock){const margin=Math.max(partBounds.maxX-partBounds.minX,partBounds.maxY-partBounds.minY)*.12+10;return makeResult([{x:partBounds.minX-margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.minY-margin},{x:partBounds.maxX+margin,y:partBounds.maxY+margin},{x:partBounds.minX-margin,y:partBounds.maxY+margin}],null);}
+    const m=Math.max(stock.width,stock.height)*.12+10;return makeResult([{x:-m,y:-m},{x:stock.width+m,y:-m},{x:stock.width+m,y:stock.height+m},{x:-m,y:stock.height+m}],[{x:0,y:0},{x:stock.width,y:0},{x:stock.width,y:stock.height},{x:0,y:stock.height}]);
   }
   function currentViewBox(){const w=width/zoom,h=height/zoom;return`${viewX+(width-w)/2} ${viewY+(height-h)/2} ${w} ${h}`}
   function applyViewBox(){if(viewport)viewport.setAttribute('viewBox',currentViewBox())}
   function setZoom(z:number){zoom=Math.max(.25,Math.min(6,z));queueMicrotask(applyViewBox)}
-  function down(e:PointerEvent){
-    if(summary.kind==='step'){dragging=true;dragMoved=false;dragMode=e.shiftKey||e.button===1||e.button===2?'pan':'orbit';lastX=e.clientX;lastY=e.clientY;return;}
-    if(summary.kind==='dxf'&&canonicalToolpath?.operationKind==='drill'&&drillViewMode==='25d'&&e.button===0){dragging=true;dragMoved=false;dragMode='orbit';lastX=e.clientX;lastY=e.clientY;}
-  }
-  function move(e:PointerEvent){
-    if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;if(Math.abs(dx)+Math.abs(dy)>2)dragMoved=true;lastX=e.clientX;lastY=e.clientY;
-    if(summary.kind==='step'){if(dragMode==='orbit'){yaw+=dx*.008;pitch=Math.max(-1.5,Math.min(1.5,pitch-dy*.008))}else{viewX-=dx/zoom;viewY-=dy/zoom;queueMicrotask(applyViewBox)};return;}
-    if(summary.kind==='dxf'&&s2?.previewMode==='drill-25d'){drillYawDeg=Math.max(-35,Math.min(35,drillYawDeg+dx*.22));drillTiltDeg=Math.max(12,Math.min(60,drillTiltDeg+dy*.22));}
-  }
+  function down(e:PointerEvent){if(summary.kind==='step'){dragging=true;dragMoved=false;dragMode=e.shiftKey||e.button===1||e.button===2?'pan':'orbit';lastX=e.clientX;lastY=e.clientY;return;}if(summary.kind==='dxf'&&drillViewMode==='25d'&&e.button===0){dragging=true;dragMoved=false;dragMode='orbit';lastX=e.clientX;lastY=e.clientY;}}
+  function move(e:PointerEvent){if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;if(Math.abs(dx)+Math.abs(dy)>2)dragMoved=true;lastX=e.clientX;lastY=e.clientY;if(summary.kind==='step'){if(dragMode==='orbit'){yaw+=dx*.008;pitch=Math.max(-1.5,Math.min(1.5,pitch-dy*.008))}else{viewX-=dx/zoom;viewY-=dy/zoom;queueMicrotask(applyViewBox)};return;}if(summary.kind==='dxf'&&s2?.previewMode==='edit-25d'){drillYawDeg=Math.max(-35,Math.min(35,drillYawDeg+dx*.22));drillTiltDeg=Math.max(12,Math.min(60,drillTiltDeg+dy*.22));}}
   function up(){dragging=false}
-  function wheel(e:WheelEvent){if(summary.kind==='step'||(summary.kind==='dxf'&&s2?.previewMode==='drill-25d')){e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}}
+  function wheel(e:WheelEvent){if(summary.kind==='step'||(summary.kind==='dxf'&&s2?.previewMode==='edit-25d')){e.preventDefault();setZoom(zoom*Math.exp(-e.deltaY*.002))}}
   function reset(){yaw=-.72;pitch=.48;drillYawDeg=-12;drillTiltDeg=38;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
   function stepFaceSelectable(faceId:number){if(!stepSelectionOperation)return false;if(stepSelectionOperation.kind==='pocket')return !!stepPocketSelection?.candidates.some(c=>c.faceId===faceId);if(stepSelectionOperation.kind==='drill')return stepHoleCandidates.some(h=>h.faceIds.includes(faceId));return false;}
   function stepFaceSelected(faceId:number){if(!stepSelectionOperation)return false;if(stepSelectionOperation.kind==='pocket')return stepSelectionOperation.stepFaceId===faceId;if(stepSelectionOperation.kind==='drill')return stepHoleCandidates.some(h=>h.faceIds.includes(faceId)&&(stepSelectionOperation.stepHoleFeatureIds??[]).includes(h.featureId));return false;}
@@ -417,9 +203,7 @@
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;onSelectedFaceIdsChange([])}
   $: s3=(summary.fileName,preflightFaceTargetToolpaths,preflightStepToolpaths,showModelRegions,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget,showCurvedFaceRoughing,showBallnoseContactProof,scene3d({yaw,pitch},showZLevels&&faceTargetEditing,roughingOperation?.stepDownMm??1,selectedFaceIds,roughingOperation?.finishAllowanceMm??0,roughingOperation?.tool.diameterMm??1,roughingOperation?.stepoverPercent??40,((canonicalToolpath?.operationKind==='z-level-roughing'||canonicalToolpath?.operationKind==='surface-finishing'||canonicalToolpath?.operationKind==='drill')?[canonicalToolpath]:[...preflightFaceTargetToolpaths,...preflightStepToolpaths]),showModelRegions||showRoughingRegions||showModelRoughingToolpath,modelRegionSliceStepMm,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget||showCurvedFaceRoughing||showBallnoseContactProof,showCurvedFaceRoughing,showBallnoseContactProof));
-  $: onFaceTargetChange(s3?.canonicalFaceTargetToolpath&&s3.targetZ!==null&&s3.roughBottomZ!==null
-    ?{toolpath:s3.canonicalFaceTargetToolpath,targetZ:s3.targetZ,roughBottomZ:s3.roughBottomZ}
-    :null);
+  $: onFaceTargetChange(s3?.canonicalFaceTargetToolpath&&s3.targetZ!==null&&s3.roughBottomZ!==null?{toolpath:s3.canonicalFaceTargetToolpath,targetZ:s3.targetZ,roughBottomZ:s3.roughBottomZ}:null);
   $: onDrillViewModeChange(drillViewMode);
   $: if(!faceTargetEditing&&showZLevels)showZLevels=false;
   $: if(faceTargetEditing&&!showZLevels)showZLevels=true;
@@ -427,111 +211,24 @@
 </script>
 
 <div class="geometry-view" bind:this={root}>
-  <svg bind:this={viewport} viewBox="0 0 1000 650" class:interactive={summary.kind==='step'}>
+  <svg bind:this={viewport} viewBox="0 0 1000 650" class:interactive={summary.kind==='step'||(summary.kind==='dxf'&&drillViewMode==='25d')}>
     {#if summary.kind==='dxf'&&s2}
-      <path d={s2.plane} class="setup-plane"/>
-      {#if s2.stock}<path d={s2.stock} class="stock"/>{/if}
-      {#each s2.paths as p}<path d={p} class="dxf"/>{/each}
-      {#each s2.selectedDrillPaths as p}<path d={p} class="projected-drill-selection"/>{/each}
-      {#each s2.entryPaths as p}<path d={p.d} class="toolpath-preview canonical-entry" data-toolpath-z={p.z} data-toolpath-spatial="entry"/>{/each}
-      {#each s2.toolPaths as p}<path d={p.d} class="toolpath-preview" data-toolpath-z={p.z}/>{/each}
-      {#each s2.machinePaths as motion}<path d={motion.d} class="toolpath-preview machine-motion" class:rapid-motion={motion.rapid} class:inter-hole-traverse={motion.traverse}/>{/each}
-      <circle cx={s2.wcs.x} cy={s2.wcs.y} r="9" class="wcs-marker"/>
-      <text x={s2.wcs.x+13} y={s2.wcs.y-10} class="wcs-label">WCS · X0 Y0</text>
+      <path d={s2.plane} class="setup-plane"/>{#if s2.stock}<path d={s2.stock} class="stock"/>{/if}{#each s2.paths as p}<path d={p} class="dxf"/>{/each}{#each s2.selectedDrillPaths as p}<path d={p} class="projected-drill-selection"/>{/each}{#each s2.entryPaths as p}<path d={p.d} class="toolpath-preview canonical-entry" data-toolpath-z={p.z} data-toolpath-spatial="entry"/>{/each}{#each s2.toolPaths as p}<path d={p.d} class="toolpath-preview" data-toolpath-z={p.z}/>{/each}{#each s2.machinePaths as motion}<path d={motion.d} class="toolpath-preview machine-motion" class:rapid-motion={motion.rapid} class:inter-hole-traverse={motion.traverse}/>{/each}<circle cx={s2.wcs.x} cy={s2.wcs.y} r="9" class="wcs-marker"/><text x={s2.wcs.x+13} y={s2.wcs.y-10} class="wcs-label">WCS · X0 Y0</text>
     {:else if s3}
-      <path d={s3.plane} class="setup-plane"/>
-      {#each s3.stock as p}<path d={p} class="stock"/>{/each}
-      {#each s3.triangles as triangle}
-        <path d={path(triangle.points,true)} class="step-face" class:selectable-face={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable} class:selected-face={stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId)} style={`fill:${faceFill(triangle.shade,stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId))}`} role={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable?'button':undefined} tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}><title>Fläche {triangle.faceId+1}{selectedFaceIds.includes(triangle.faceId)?' · ausgewählt':''}</title></path>
-      {/each}
-      {#if showZLevels||preflightFaceTargetToolpaths.length||preflightStepToolpaths.length||canonicalToolpath?.operationKind==='surface-finishing'||canonicalToolpath?.operationKind==='drill'}
-        {#if showZLevels}{#each s3.roughRegions as region}<path d={region} class="roughing-region" fill-rule="evenodd"/>{/each}{/if}
-        {#each s3.toolPaths as tool}<path d={tool} class="toolpath-preview"/>{/each}
-      {/if}
-      {#if showCurvedFaceTarget}
-        {#each s3.curvedFaceProofPaths as line}<path d={line} class="curved-face-proof"/>{/each}
-      {/if}
-      {#if showCurvedFaceRoughing}
-        {#each s3.curvedRoughingPaths as line}<path d={line} class="curved-face-roughing"/>{/each}
-      {/if}
-      {#if showBallnoseContactProof}
-        {#each s3.ballnoseContactProof as contact}
-          <line x1={contact.surface.x} y1={contact.surface.y} x2={contact.normalEnd.x} y2={contact.normalEnd.y} class="ballnose-contact-normal"/>
-          <line x1={contact.surface.x} y1={contact.surface.y} x2={contact.center.x} y2={contact.center.y} class="ballnose-contact-offset"/>
-          <circle cx={contact.surface.x} cy={contact.surface.y} r="2.5" class="ballnose-contact-surface"/>
-          <circle cx={contact.center.x} cy={contact.center.y} r="3" class="ballnose-contact-center"/>
-        {/each}
-      {/if}
-      {#if showRoughingRegions}
-        {#each s3.roughingRegionPaths as region}<path d={region} class="roughing-slice-region"/>{/each}
-        {#each s3.invalidRoughingPaths as invalid}<path d={invalid} class="roughing-slice-invalid"/>{/each}
-      {/if}
-      {#if showModelRoughingToolpath}
-        {#each s3.modelRoughingToolPaths as tool}<path d={tool} class="model-roughing-toolpath"/>{/each}
-      {/if}
-      {#if showModelRegions}
-        {#each s3.modelRegionPaths as region}<path d={region} class="model-slice-region"/>{/each}
-        {#each s3.invalidModelPaths as invalid}<path d={invalid} class="model-slice-invalid"/>{/each}
-      {/if}
+      <path d={s3.plane} class="setup-plane"/>{#each s3.stock as p}<path d={p} class="stock"/>{/each}{#each s3.triangles as triangle}<path d={path(triangle.points,true)} class="step-face" class:selectable-face={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable} class:selected-face={stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId)} style={`fill:${faceFill(triangle.shade,stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId))}`} role={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable?'button':undefined} tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}><title>Fläche {triangle.faceId+1}{selectedFaceIds.includes(triangle.faceId)?' · ausgewählt':''}</title></path>{/each}
+      {#if showZLevels||preflightFaceTargetToolpaths.length||preflightStepToolpaths.length||canonicalToolpath?.operationKind==='surface-finishing'||canonicalToolpath?.operationKind==='drill'}{#if showZLevels}{#each s3.roughRegions as region}<path d={region} class="roughing-region" fill-rule="evenodd"/>{/each}{/if}{#each s3.toolPaths as tool}<path d={tool} class="toolpath-preview"/>{/each}{/if}
+      {#if showCurvedFaceTarget}{#each s3.curvedFaceProofPaths as line}<path d={line} class="curved-face-proof"/>{/each}{/if}{#if showCurvedFaceRoughing}{#each s3.curvedRoughingPaths as line}<path d={line} class="curved-face-roughing"/>{/each}{/if}{#if showBallnoseContactProof}{#each s3.ballnoseContactProof as contact}<line x1={contact.surface.x} y1={contact.surface.y} x2={contact.normalEnd.x} y2={contact.normalEnd.y} class="ballnose-contact-normal"/><line x1={contact.surface.x} y1={contact.surface.y} x2={contact.center.x} y2={contact.center.y} class="ballnose-contact-offset"/><circle cx={contact.surface.x} cy={contact.surface.y} r="2.5" class="ballnose-contact-surface"/><circle cx={contact.center.x} cy={contact.center.y} r="3" class="ballnose-contact-center"/>{/each}{/if}
+      {#if showRoughingRegions}{#each s3.roughingRegionPaths as region}<path d={region} class="roughing-slice-region"/>{/each}{#each s3.invalidRoughingPaths as invalid}<path d={invalid} class="roughing-slice-invalid"/>{/each}{/if}{#if showModelRoughingToolpath}{#each s3.modelRoughingToolPaths as tool}<path d={tool} class="model-roughing-toolpath"/>{/each}{/if}{#if showModelRegions}{#each s3.modelRegionPaths as region}<path d={region} class="model-slice-region"/>{/each}{#each s3.invalidModelPaths as invalid}<path d={invalid} class="model-slice-invalid"/>{/each}{/if}
       {#each s3.edges as edge}<path d={edge.d} class="step-edge" class:selectable-step-edge={stepEdgeSelectable(edge.edgeId)} class:selected-step-edge={stepSelectionOperation?.kind==='contour'&&stepSelectionOperation.stepWireId!=null&&stepFeatureSourceResult?.ok&&[...stepFeatureSourceResult.source.wiresByFace.values()].flat().some(w=>w.wireId===stepSelectionOperation!.stepWireId&&w.edgeIds.includes(edge.edgeId))} role={stepEdgeSelectable(edge.edgeId)?'button':undefined} tabindex="-1" onclick={()=>toggleStepEdge(edge.edgeId)}><title>Kante {edge.edgeId+1}</title></path>{/each}
-      <path d={s3.axes[0]} class="axis x"/><path d={s3.axes[1]} class="axis y"/><path d={s3.axes[2]} class="axis z"/>
-      <text x={s3.labels[0].x+7} y={s3.labels[0].y-5}>X</text><text x={s3.labels[1].x+7} y={s3.labels[1].y-5}>Y</text><text x={s3.labels[2].x+7} y={s3.labels[2].y-5}>Z</text>
-      <circle cx={s3.wcs.x} cy={s3.wcs.y} r="10" class="wcs-marker"/><circle cx={s3.wcs.x} cy={s3.wcs.y} r="3" class="wcs-dot"/>
-      <text x={s3.wcs.x+14} y={s3.wcs.y-12} class="wcs-label">WCS · X0 Y0 Z0</text>
+      <path d={s3.axes[0]} class="axis x"/><path d={s3.axes[1]} class="axis y"/><path d={s3.axes[2]} class="axis z"/><text x={s3.labels[0].x+7} y={s3.labels[0].y-5}>X</text><text x={s3.labels[1].x+7} y={s3.labels[1].y-5}>Y</text><text x={s3.labels[2].x+7} y={s3.labels[2].y-5}>Z</text><circle cx={s3.wcs.x} cy={s3.wcs.y} r="10" class="wcs-marker"/><circle cx={s3.wcs.x} cy={s3.wcs.y} r="3" class="wcs-dot"/><text x={s3.wcs.x+14} y={s3.wcs.y-12} class="wcs-label">WCS · X0 Y0 Z0</text>
     {/if}
   </svg>
   <div class="geometry-caption">
     <strong>{summary.kind==='step'?'BRep · Rohling · WCS':stockMode==='none'?'2D-Geometrie · ohne Rohling · WCS':'2D-Geometrie · Rohling · WCS'}</strong>
     {#if summary.kind==='step'}
-      <span class="help">
-        <button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button>
-        <button class:active-toggle={showCurvedFaceTarget} disabled={!roughingOperation} onclick={()=>showCurvedFaceTarget=!showCurvedFaceTarget}>Gekrümmte Zielfläche</button>
-        {#if showCurvedFaceTarget}
-          <span>003D1b · {s3?.curvedFaceStatus??'Fläche wählen.'}</span>
-        {/if}
-        <button class:active-toggle={showCurvedFaceRoughing} disabled={!roughingOperation} onclick={()=>showCurvedFaceRoughing=!showCurvedFaceRoughing}>Hohlkehle Schruppen</button>
-        {#if showCurvedFaceRoughing}
-          <span>003D2 · {s3?.curvedRoughingStatus??'Fläche wählen.'}</span>
-        {/if}
-        <button class:active-toggle={showBallnoseContactProof} disabled={!roughingOperation} onclick={()=>showBallnoseContactProof=!showBallnoseContactProof}>Ballnose Kontakt</button>
-        {#if showBallnoseContactProof}
-          <span>003D3a2 · {s3?.ballnoseContactStatus??'Fläche wählen.'}</span>
-        {/if}
-        <button class:active-toggle={showModelRegions} onclick={()=>showModelRegions=!showModelRegions}>Modellregionen</button>
-        {#if showModelRegions}
-          <span>003A2 · Slice {modelRegionSliceStepMm.toFixed(1)} mm · {s3?.modelValidCount??0}/{s3?.modelSliceCount??0} Ebenen gültig · {s3?.modelIslandCount??0} Inseln · {s3?.modelHoleCount??0} Öffnungen{(s3?.modelInvalidCount??0)>0?` · ${s3?.modelInvalidCount} ungültig`:''}</span>
-        {/if}
-        <button class:active-toggle={showRoughingRegions} onclick={()=>showRoughingRegions=!showRoughingRegions}>Stock − Model</button>
-        {#if showRoughingRegions}
-          <span>003B2 · Slice {modelRegionSliceStepMm.toFixed(1)} mm · {s3?.roughingValidCount??0}/{s3?.roughingSliceCount??0} Ebenen gültig · {s3?.roughingIslandCount??0} Schruppinseln · {s3?.roughingHoleCount??0} Keep-Bereiche{(s3?.roughingInvalidCount??0)>0?` · ${s3?.roughingInvalidCount} ungültig`:''}</span>
-        {/if}
-        <button class:active-toggle={showModelRoughingToolpath} disabled={!roughingOperation} onclick={()=>showModelRoughingToolpath=!showModelRoughingToolpath}>Modell-Schruppbahn</button>
-        {#if showModelRoughingToolpath}
-          <span>003C2 · Ø {roughingOperation?.tool.diameterMm.toFixed(2)??'—'} mm · Stepover {roughingOperation?.stepoverPercent??'—'}% · {s3?.modelRoughingStatus??''}{(s3?.modelRoughingWarningCount??0)>0?` · ${s3?.modelRoughingWarningCount} Hinweis${s3?.modelRoughingWarningCount===1?'':'e'}`:''}</span>
-        {/if}
-        {#if roughingOperation}
-          <button class="active-toggle" disabled>Z-Level Schruppen</button>
-          <span>Ø {roughingOperation.tool.diameterMm.toFixed(2)} mm · Zustellung {roughingOperation.stepDownMm.toFixed(2)} mm · Stepover {roughingOperation.stepoverPercent}% · Aufmaß {roughingOperation.finishAllowanceMm.toFixed(2)} mm</span>
-          <span>{s3?.sliceCount??0} Ebenen · {s3?.toolpathCount??0} Werkzeugbahnen</span>
-          {#if s3?.targetStatus}<span>{s3.targetStatus}</span>{/if}
-          {#if s3?.facePickingAvailable}<span>{selectedFaceIds.length?`${selectedFaceIds.length} Fläche${selectedFaceIds.length===1?'':'n'} gewählt`:'Zielfläche anklicken'}</span>{#if selectedFaceIds.length}<button onclick={()=>onSelectedFaceIdsChange([])}>Auswahl löschen</button>{/if}{/if}
-        {:else}
-          {#if preflightFaceTargetToolpaths.length||preflightStepToolpaths.length}
-            <span>Gesamtjob · {preflightFaceTargetToolpaths.length+preflightStepToolpaths.length} 3D-Bearbeitung{preflightFaceTargetToolpaths.length+preflightStepToolpaths.length===1?'':'en'} · Werkzeugwege im Prüfen</span>
-          {:else}
-            <span>Für 3D-Bearbeitung „Z-Level Schruppen“ oder „3D Schlichten“ als aktive Operation wählen.</span>
-          {/if}
-        {/if}
-        <span>Drag: drehen · Shift/Mitte: verschieben</span>
-      </span>
-    {:else if canonicalToolpath?.operationKind==='drill'&&s2?.previewMode!=='job-top'}
-      <span class="help">
-        <button class:active-toggle={drillViewMode==='25d'} onclick={()=>drillViewMode='25d'}>2.5D</button>
-        <button class:active-toggle={drillViewMode==='top'} onclick={()=>drillViewMode='top'}>Draufsicht</button>
-        <button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button>
-        <span>{canonicalToolpath.strategy==='helical-bore'?'Helixfräsen':'Bohren'} · {canonicalToolpath.motions?.length??0} Maschinenbewegungen{drillViewMode==='25d'?` · ${Math.round(drillTiltDeg)}°`:''}</span>
-        {#if drillViewMode==='25d'}<span>Drag: Ansicht drehen · Mausrad: zoomen</span>{/if}
-      </span>
+      <span class="help"><button onclick={()=>yaw-=.3}>↺</button><button onclick={()=>yaw+=.3}>↻</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button><button class:active-toggle={showCurvedFaceTarget} disabled={!roughingOperation} onclick={()=>showCurvedFaceTarget=!showCurvedFaceTarget}>Gekrümmte Zielfläche</button>{#if showCurvedFaceTarget}<span>003D1b · {s3?.curvedFaceStatus??'Fläche wählen.'}</span>{/if}<button class:active-toggle={showCurvedFaceRoughing} disabled={!roughingOperation} onclick={()=>showCurvedFaceRoughing=!showCurvedFaceRoughing}>Hohlkehle Schruppen</button>{#if showCurvedFaceRoughing}<span>003D2 · {s3?.curvedRoughingStatus??'Fläche wählen.'}</span>{/if}<button class:active-toggle={showBallnoseContactProof} disabled={!roughingOperation} onclick={()=>showBallnoseContactProof=!showBallnoseContactProof}>Ballnose Kontakt</button>{#if showBallnoseContactProof}<span>003D3a2 · {s3?.ballnoseContactStatus??'Fläche wählen.'}</span>{/if}<button class:active-toggle={showModelRegions} onclick={()=>showModelRegions=!showModelRegions}>Modellregionen</button>{#if showModelRegions}<span>003A2 · Slice {modelRegionSliceStepMm.toFixed(1)} mm · {s3?.modelValidCount??0}/{s3?.modelSliceCount??0} Ebenen gültig · {s3?.modelIslandCount??0} Inseln · {s3?.modelHoleCount??0} Öffnungen{(s3?.modelInvalidCount??0)>0?` · ${s3?.modelInvalidCount} ungültig`:''}</span>{/if}<button class:active-toggle={showRoughingRegions} onclick={()=>showRoughingRegions=!showRoughingRegions}>Stock − Model</button>{#if showRoughingRegions}<span>003B2 · Slice {modelRegionSliceStepMm.toFixed(1)} mm · {s3?.roughingValidCount??0}/{s3?.roughingSliceCount??0} Ebenen gültig · {s3?.roughingIslandCount??0} Schruppinseln · {s3?.roughingHoleCount??0} Keep-Bereiche{(s3?.roughingInvalidCount??0)>0?` · ${s3?.roughingInvalidCount} ungültig`:''}</span>{/if}<button class:active-toggle={showModelRoughingToolpath} disabled={!roughingOperation} onclick={()=>showModelRoughingToolpath=!showModelRoughingToolpath}>Modell-Schruppbahn</button>{#if showModelRoughingToolpath}<span>003C2 · Ø {roughingOperation?.tool.diameterMm.toFixed(2)??'—'} mm · Stepover {roughingOperation?.stepoverPercent??'—'}% · {s3?.modelRoughingStatus??''}{(s3?.modelRoughingWarningCount??0)>0?` · ${s3?.modelRoughingWarningCount} Hinweis${s3?.modelRoughingWarningCount===1?'':'e'}`:''}</span>{/if}{#if roughingOperation}<button class="active-toggle" disabled>Z-Level Schruppen</button><span>Ø {roughingOperation.tool.diameterMm.toFixed(2)} mm · Zustellung {roughingOperation.stepDownMm.toFixed(2)} mm · Stepover {roughingOperation.stepoverPercent}% · Aufmaß {roughingOperation.finishAllowanceMm.toFixed(2)} mm</span><span>{s3?.sliceCount??0} Ebenen · {s3?.toolpathCount??0} Werkzeugbahnen</span>{#if s3?.targetStatus}<span>{s3.targetStatus}</span>{/if}{#if s3?.facePickingAvailable}<span>{selectedFaceIds.length?`${selectedFaceIds.length} Fläche${selectedFaceIds.length===1?'':'n'} gewählt`:'Zielfläche anklicken'}</span>{#if selectedFaceIds.length}<button onclick={()=>onSelectedFaceIdsChange([])}>Auswahl löschen</button>{/if}{/if}{:else}{#if preflightFaceTargetToolpaths.length||preflightStepToolpaths.length}<span>Gesamtjob · {preflightFaceTargetToolpaths.length+preflightStepToolpaths.length} 3D-Bearbeitung{preflightFaceTargetToolpaths.length+preflightStepToolpaths.length===1?'':'en'} · Werkzeugwege im Prüfen</span>{:else}<span>Für 3D-Bearbeitung „Z-Level Schruppen“ oder „3D Schlichten“ als aktive Operation wählen.</span>{/if}{/if}<span>Drag: drehen · Shift/Mitte: verschieben</span></span>
+    {:else if summary.kind==='dxf'&&s2?.previewMode!=='job-top'}
+      <span class="help"><button class:active-toggle={drillViewMode==='25d'} onclick={()=>drillViewMode='25d'}>2.5D</button><button class:active-toggle={drillViewMode==='top'} onclick={()=>drillViewMode='top'}>Draufsicht</button><button onclick={()=>setZoom(zoom*1.25)}>+</button><button onclick={()=>setZoom(zoom/1.25)}>−</button><button onclick={reset}>Reset</button>{#if canonicalToolpath?.operationKind==='drill'}<span>{canonicalToolpath.strategy==='helical-bore'?'Helixfräsen':'Bohren'} · {canonicalToolpath.motions?.length??0} Maschinenbewegungen{drillViewMode==='25d'?` · ${Math.round(drillTiltDeg)}°`:''}</span>{:else}<span>DXF Ansicht · Werkstückrotation Z {orientation.rotationZDeg.toFixed(1)}°{drillViewMode==='25d'?` · Ansicht ${Math.round(drillTiltDeg)}°`:''}</span>{/if}{#if drillViewMode==='25d'}<span>Drag: Ansicht drehen · Mausrad: zoomen · Auswahl in Draufsicht</span>{/if}</span>
     {:else if summary.kind==='dxf'&&preflightCanonicalToolpaths.length}
       <span class="help"><span>Gesamtjob · {preflightCanonicalToolpaths.length} Bearbeitung{preflightCanonicalToolpaths.length===1?'':'en'} · Werkzeugwege im Prüfen</span></span>
     {/if}
@@ -541,48 +238,6 @@
 <style>
   .geometry-view{position:relative;z-index:2;width:min(92%,1100px);margin:auto;pointer-events:auto}.geometry-view>*{pointer-events:auto}
   svg{width:100%;display:block;touch-action:none;user-select:none}svg.interactive{cursor:grab}svg.interactive:active{cursor:grabbing}
-  .setup-plane{fill:rgba(255,255,255,.2);stroke:rgba(70,80,75,.18);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}
-  .stock{fill:none;stroke:rgba(93,105,99,.46);stroke-width:1.35;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}
-  .dxf{fill:none;stroke:#26342e;stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-  .projected-drill-selection{fill:none;stroke:#c45143;stroke-width:2.1;vector-effect:non-scaling-stroke;pointer-events:none}
-  .step-face{stroke:none;outline:none;pointer-events:none}.step-face.selectable-face{pointer-events:visiblePainted;cursor:pointer}.step-face.selected-face{stroke:none}.step-face:focus,.step-face:focus-visible{outline:none}
-  .step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-  .roughing-region{fill:rgba(194,117,40,.12);stroke:rgba(194,117,40,.42);stroke-width:1.05;vector-effect:non-scaling-stroke;pointer-events:none}
-  .toolpath-preview{fill:none;stroke:#327b8d;stroke-width:1.8;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-  .machine-motion{stroke:#327b8d;stroke-width:1.9}.machine-motion.rapid-motion{stroke:rgba(72,94,101,.48);stroke-width:1.35;stroke-dasharray:4 3}
-  .machine-motion.inter-hole-traverse{stroke:rgba(72,94,101,.18);stroke-width:1;stroke-dasharray:2 5}
-  .canonical-entry{stroke-dasharray:3 2;stroke-width:1.65}
-  .axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}.axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}
-  text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}.wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}.wcs-dot{fill:#c27528;pointer-events:none}.wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}
-  .geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}.geometry-caption strong{color:#34423c;font-weight:600}.help{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-  .help button{position:relative;z-index:4;min-width:28px;border:1px solid rgba(52,66,60,.22);border-radius:7px;background:rgba(255,255,255,.72);padding:3px 7px;color:#34423c;cursor:pointer}.help button:hover{background:#fff}.help button.active-toggle{background:#f4eadf;border-color:rgba(194,117,40,.45);color:#8c551d}
-  @media(max-width:800px){.geometry-caption{align-items:flex-start;flex-direction:column;gap:8px}.help{flex-wrap:wrap}}
-
-  .model-slice-region{fill:none;stroke:hsl(196 58% 43%);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-  .model-slice-invalid{fill:none;stroke:hsl(3 66% 52%);stroke-width:2.4;stroke-dasharray:7 5;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-  .roughing-slice-region{fill:none;stroke:hsl(36 72% 48%);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-  .roughing-slice-invalid{fill:none;stroke:hsl(3 66% 52%);stroke-width:2.6;stroke-dasharray:4 4;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-  .model-roughing-toolpath{fill:none;stroke:hsl(188 72% 40%);stroke-width:2.1;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
-  .curved-face-proof{
-    fill:none;
-    stroke:hsl(285 48% 48%);
-    stroke-width:1.35;
-    stroke-opacity:.78;
-    stroke-linejoin:round;
-    stroke-linecap:round;
-    vector-effect:non-scaling-stroke;
-  }
-  .curved-face-roughing{
-    fill:none;
-    stroke:hsl(18 72% 47%);
-    stroke-width:1.7;
-    stroke-opacity:.86;
-    stroke-linejoin:round;
-    stroke-linecap:round;
-    vector-effect:non-scaling-stroke;
-  }
-  .ballnose-contact-normal{stroke:hsl(265 48% 46%);stroke-width:1.15;stroke-opacity:.72;vector-effect:non-scaling-stroke}
-  .ballnose-contact-offset{stroke:hsl(330 58% 48%);stroke-width:1.35;stroke-opacity:.82;vector-effect:non-scaling-stroke}
-  .ballnose-contact-surface{fill:hsl(265 48% 46%);stroke:white;stroke-width:.8;vector-effect:non-scaling-stroke}
-  .ballnose-contact-center{fill:hsl(330 58% 48%);stroke:white;stroke-width:.8;vector-effect:non-scaling-stroke}
+  .setup-plane{fill:rgba(255,255,255,.2);stroke:rgba(70,80,75,.18);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.stock{fill:none;stroke:rgba(93,105,99,.46);stroke-width:1.35;stroke-dasharray:5 4;vector-effect:non-scaling-stroke;pointer-events:none}.dxf{fill:none;stroke:#26342e;stroke-width:2.2;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.projected-drill-selection{fill:none;stroke:#c45143;stroke-width:2.1;vector-effect:non-scaling-stroke;pointer-events:none}.step-face{stroke:none;outline:none;pointer-events:none}.step-face.selectable-face{pointer-events:visiblePainted;cursor:pointer}.step-face.selected-face{stroke:none}.step-face:focus,.step-face:focus-visible{outline:none}.step-edge{fill:none;stroke:rgba(42,55,49,.56);stroke-width:1.15;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.roughing-region{fill:rgba(194,117,40,.12);stroke:rgba(194,117,40,.42);stroke-width:1.05;vector-effect:non-scaling-stroke;pointer-events:none}.toolpath-preview{fill:none;stroke:#327b8d;stroke-width:1.8;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}.machine-motion{stroke:#327b8d;stroke-width:1.9}.machine-motion.rapid-motion{stroke:rgba(72,94,101,.48);stroke-width:1.35;stroke-dasharray:4 3}.machine-motion.inter-hole-traverse{stroke:rgba(72,94,101,.18);stroke-width:1;stroke-dasharray:2 5}.canonical-entry{stroke-dasharray:3 2;stroke-width:1.65}.axis{fill:none;stroke-width:2.2;vector-effect:non-scaling-stroke;pointer-events:none}.axis.x{stroke:#b1453b}.axis.y{stroke:#468058}.axis.z{stroke:#40669f}text{font-size:15px;font-weight:650;fill:#4c5651;pointer-events:none}.wcs-marker{fill:rgba(208,128,43,.12);stroke:#c27528;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}.wcs-dot{fill:#c27528;pointer-events:none}.wcs-label{fill:#9a5c1e;font-size:13px;font-weight:700;pointer-events:none}.geometry-caption{position:relative;z-index:3;display:flex;justify-content:space-between;gap:24px;padding:0 5% 12px;color:#65706b;font-size:12px;align-items:center}.geometry-caption strong{color:#34423c;font-weight:600}.help{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.help button{position:relative;z-index:4;min-width:28px;border:1px solid rgba(52,66,60,.22);border-radius:7px;background:rgba(255,255,255,.72);padding:3px 7px;color:#34423c;cursor:pointer}.help button:hover{background:#fff}.help button.active-toggle{background:#f4eadf;border-color:rgba(194,117,40,.45);color:#8c551d}@media(max-width:800px){.geometry-caption{align-items:flex-start;flex-direction:column;gap:8px}.help{flex-wrap:wrap}}
+  .model-slice-region{fill:none;stroke:hsl(196 58% 43%);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.model-slice-invalid{fill:none;stroke:hsl(3 66% 52%);stroke-width:2.4;stroke-dasharray:7 5;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.roughing-slice-region{fill:none;stroke:hsl(36 72% 48%);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.roughing-slice-invalid{fill:none;stroke:hsl(3 66% 52%);stroke-width:2.6;stroke-dasharray:4 4;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.model-roughing-toolpath{fill:none;stroke:hsl(188 72% 40%);stroke-width:2.1;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.curved-face-proof{fill:none;stroke:hsl(285 48% 48%);stroke-width:1.35;stroke-opacity:.78;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.curved-face-roughing{fill:none;stroke:hsl(18 72% 47%);stroke-width:1.7;stroke-opacity:.86;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}.ballnose-contact-normal{stroke:hsl(265 48% 46%);stroke-width:1.15;stroke-opacity:.72;vector-effect:non-scaling-stroke}.ballnose-contact-offset{stroke:hsl(330 58% 48%);stroke-width:1.35;stroke-opacity:.82;vector-effect:non-scaling-stroke}.ballnose-contact-surface{fill:hsl(265 48% 46%);stroke:white;stroke-width:.8;vector-effect:non-scaling-stroke}.ballnose-contact-center{fill:hsl(330 58% 48%);stroke:white;stroke-width:.8;vector-effect:non-scaling-stroke}
 </style>
