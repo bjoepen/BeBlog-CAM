@@ -49,18 +49,64 @@
   let error = '';
   let faceTargetState:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null=null;
   function receiveFaceTargetState(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null){faceTargetState=state;}
-  function buildOrderedActiveCanonicalToolpath(){
-  if(!importSummary)return null;
-  const previousToolpaths:CanonicalToolpath[]=[];
-  for(const candidate of operationsProject.operations){
-    if(candidate.enabled===false)continue;
-    if(candidate.id===operation.id)return buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths});
-    const toolpath=buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation:candidate,previousToolpaths});
-    if(toolpath)previousToolpaths.push(toolpath);
+  function buildOrderedActiveCanonicalToolpath(
+    summary:ImportSummary|null,
+    currentStock:StockDefinition,
+    currentStockMode:StockMode,
+    currentPlacement:PartPlacement,
+    currentOrientation:PartOrientation,
+    currentWcs:WorkCoordinateSystem,
+    currentOperation:CamOperation,
+    project:OperationsProject
+  ){
+    if(!summary)return null;
+    const previousToolpaths:CanonicalToolpath[]=[];
+    for(const candidate of project.operations){
+      if(candidate.enabled===false)continue;
+      if(candidate.id===currentOperation.id)return buildActiveCanonicalToolpath({
+        summary,
+        stock:currentStock,
+        stockMode:currentStockMode,
+        placement:currentPlacement,
+        orientation:currentOrientation,
+        wcs:currentWcs,
+        operation:currentOperation,
+        previousToolpaths
+      });
+      const toolpath=buildActiveCanonicalToolpath({
+        summary,
+        stock:currentStock,
+        stockMode:currentStockMode,
+        placement:currentPlacement,
+        orientation:currentOrientation,
+        wcs:currentWcs,
+        operation:candidate,
+        previousToolpaths
+      });
+      if(toolpath)previousToolpaths.push(toolpath);
+    }
+    return buildActiveCanonicalToolpath({
+      summary,
+      stock:currentStock,
+      stockMode:currentStockMode,
+      placement:currentPlacement,
+      orientation:currentOrientation,
+      wcs:currentWcs,
+      operation:currentOperation,
+      previousToolpaths
+    });
   }
-  return buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths});
-}
-$: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath();
+
+  $: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath(
+    importSummary,
+    stock,
+    stockMode,
+    placement,
+    orientation,
+    wcs,
+    operation,
+    operationsProject
+  );
   $: activeFaceTargetOperationState=importSummary&&operation.kind==='z-level-roughing'?buildZLevelOperationState({summary:importSummary,stock,placement,orientation,wcs,operation}):null;
   $: preflightFaceTargetStates=importSummary?operationsProject.operations.filter((op):op is ZLevelRoughingOperation=>op.enabled!==false&&op.kind==='z-level-roughing').map(op=>({operationId:op.id,state:buildZLevelOperationState({summary:importSummary!,stock,placement,orientation,wcs,operation:op})})).filter(entry=>entry.state.toolpath!==null&&entry.state.errors.length===0):[];
   $: preflightStepToolpaths=importSummary?.kind==='step'
