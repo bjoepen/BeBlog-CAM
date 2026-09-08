@@ -60,10 +60,20 @@
     }
     return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths});
   }
+  function buildOrderedJobCanonicalToolpaths(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,project:OperationsProject){
+    if(!summary)return[];
+    const toolpaths:CanonicalToolpath[]=[];
+    for(const candidate of project.operations){
+      if(candidate.enabled===false)continue;
+      const toolpath=buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:candidate,previousToolpaths:toolpaths});
+      if(toolpath)toolpaths.push(toolpath);
+    }
+    return toolpaths;
+  }
   $: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject);
   $: activeFaceTargetOperationState=importSummary&&operation.kind==='z-level-roughing'?buildZLevelOperationState({summary:importSummary,stock,placement,orientation,wcs,operation}):null;
   $: preflightFaceTargetStates=importSummary?operationsProject.operations.filter((op):op is ZLevelRoughingOperation=>op.enabled!==false&&op.kind==='z-level-roughing').map(op=>({operationId:op.id,state:buildZLevelOperationState({summary:importSummary!,stock,placement,orientation,wcs,operation:op})})).filter(entry=>entry.state.toolpath!==null&&entry.state.errors.length===0):[];
-  $: preflightStepToolpaths=importSummary?.kind==='step'?operationsProject.operations.filter(op=>op.enabled!==false&&op.kind!=='z-level-roughing').map(op=>buildActiveCanonicalToolpath({summary:importSummary!,stock,stockMode,placement,orientation,wcs,operation:op})).filter((toolpath):toolpath is CanonicalToolpath=>toolpath!==null):[];
+  $: preflightStepToolpaths=importSummary?.kind==='step'?buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter(toolpath=>toolpath.operationKind!=='z-level-roughing'):[];
   $: preflightDxfToolpaths=importSummary?.kind==='dxf'?operationsProject.operations.filter(op=>op.enabled!==false&&op.kind!=='z-level-roughing').map(op=>buildActiveCanonicalToolpath({summary:importSummary!,stock,stockMode,placement,orientation,wcs,operation:op})).filter((toolpath):toolpath is CanonicalToolpath=>toolpath!==null):[];
   $: contourDepthState=operation.kind==='contour'?resolveContourDepth({operation,stock,stockMode,wcs}):null;
 

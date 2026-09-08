@@ -43,6 +43,14 @@ requireText(state,'sampleStockSurfaceZ','STEP contour samples remaining material
 requireText(state,'previousToolpaths?:CanonicalToolpath[]','STEP contour accepts prior canonical operations as rest-stock history');
 requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwards prior toolpaths into STEP contour start resolution');
 requireText(preflight,'previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)','Prüfen resolves STEP contour start from the exact prior canonical job history');
+requireText(app,'function buildOrderedJobCanonicalToolpaths','STEP Prüfen preview owns an ordered canonical job-history builder');
+requireText(app,"previousToolpaths:toolpaths",'STEP Prüfen preview forwards exact earlier canonical paths into each later operation');
+requireText(app,"buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter",'STEP Prüfen visualization consumes the ordered job path instead of isolated reconstruction');
+const tools=read('src/lib/FeedsSpeedsCalculatorCore.svelte');
+requireText(tools,'<b>Auskragung</b>','tool editor exposes 004Q stickout explicitly');
+requireText(tools,"setNumber('stickoutMm',e)",'tool editor persists explicit stickout input');
+requireText(tools,'<b>Halter-Ø</b>','tool editor exposes holder diameter explicitly');
+requireText(tools,"setNumber('holderDiameterMm',e)",'tool editor persists explicit holder diameter input');
 requireText(state,'const cutDepth=startZ-bottomZ','STEP pass count uses actual profile-to-target cutting depth');
 requireText(state,'z=Math.max(bottomZ,startZ-pass*operation.stepDownMm)','STEP passes descend from model profile instead of stock top');
 requireText(state,'sourceOperationId:operation.id','STEP canonical contour preserves operation identity');
