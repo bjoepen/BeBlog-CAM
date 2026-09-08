@@ -34,10 +34,15 @@ requireText(region,"export type RegionPocketStrategy='concentric'|'parallel'",'s
 requireText(region,'distanceToBoundary(p,poly)<=1e-5','region kernel accepts boundary points');
 requireText(region,'konturparallele Cleanup-Schalen','concentric strategy clears corners beyond circular core');
 requireText(region,"strategy==='parallel'?{paths:parallelPaths",'parallel strategy uses shared offset shells');
+requireText(region,'const available=lengths.reduce','ramp uses cumulative path length instead of first segment only');
+requireText(region,'segments.push({kind:\'line3\'','ramp is materialized as explicit canonical XYZ segments');
+requireText(region,"operation.entry==='ramp')return rampEntry",'shared region strategies use the cumulative ramp entry');
 requireText(dxfRegion,'resolvePlanarPartTransform','DXF region uses unified placement transform');
 requireText(stepRegion,'candidate.outer.map(transform)','STEP region consumes BRep face boundary');
 requireText(app,"updatePocket({strategy:'concentric'})",'Bearbeiten exposes circle strategy');
 requireText(app,"updatePocket({strategy:'parallel'})",'Bearbeiten exposes contour-parallel strategy');
+requireText(app,'>Rampenwinkel <input type="number" min="0.1" max="15"','Bearbeiten exposes pocket ramp angle');
+requireText(app,"updateNumber('rampAngleDeg',e)",'pocket ramp angle updates the persisted operation state');
 requireText(active,'buildPocketOperationState','Bearbeiten uses shared pocket state');
 requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwards prior canonical operations');
 requireText(preflight,"import { buildPocketOperationState } from './pocketOperationState'",'Job preflight imports shared pocket state');
@@ -48,4 +53,4 @@ requireText(step,'targetDepth=Math.max(0,-faceMachineZ)','STEP pocket depth rema
 requireText(dxf,'operation.totalDepthMm','DXF pocket depth remains operation-owned');
 requireText(persistence,'operationsProject','004V persistence remains operation-project owned');
 
-console.log('004Y PASS: DXF and STEP share region-based pocket strategies; Bearbeiten and Job use one pocket state with allowances/finishing, exact rest identity and format-correct depth sources.');
+console.log('004Y PASS: DXF and STEP share region-based pocket strategies with cumulative ramp entry; Bearbeiten and Job use one pocket state with allowances/finishing, exact rest identity and format-correct depth sources.');
