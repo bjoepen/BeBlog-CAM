@@ -1,0 +1,33 @@
+name: 004Z viewport self-patch
+
+on:
+  push:
+    branches: [build/004z-step-contour-target-contract]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: build/004z-step-contour-target-contract
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply 004Z viewport patch
+        run: node scripts/apply-004z-step-contour-viewport.mjs
+      - name: Commit patched sources
+        run: |
+          if git diff --quiet -- src/App.svelte src/lib/GeometryView.svelte; then
+            echo "No viewport patch changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.svelte src/lib/GeometryView.svelte
+          git commit -m "feat 004Z: wire STEP open contour viewport selection"
+          git push origin HEAD:build/004z-step-contour-target-contract
