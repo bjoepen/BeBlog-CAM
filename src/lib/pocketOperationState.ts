@@ -49,8 +49,30 @@ export function buildPocketOperationState(args:PocketBuildArgs&{operation:Pocket
   if(radialAllowance>EPS||axialAllowance>EPS)warnings.push(`Schrupp-Aufmaß aktiv: radial ${radialAllowance.toFixed(3)} mm · axial ${axialAllowance.toFixed(3)} mm.`);
   const key=targetKey(summary,operation);toolpath={...toolpath,sourceOperationId:operation.id,targetKey:key??undefined};
   if(operation.stockAwareRoughingEnabled&&operation.restMachiningEnabled)errors.push('Stock-aware Roughing und Restmaterial dürfen nicht gleichzeitig aktiv sein.');
-  if(operation.stockAwareRoughingEnabled&&!errors.length){const adaptive=applyPocketStockAwareRoughing({toolpath,toolDiameterMm:operation.tool.diameterMm,maxRadialEngagementPercent:operation.maxRadialEngagementPercent??35});errors.push(...adaptive.errors);warnings.push(...adaptive.warnings);toolpath=adaptive.toolpath;}
-  if(operation.restMachiningEnabled&&!errors.length){if(!operation.restFromOperationId)errors.push('Restmaterial benötigt eine explizite vorherige Taschenbearbeitung als Quelle.');const previous=(args.previousToolpaths??[]).find(candidate=>candidate.sourceOperationId===operation.restFromOperationId);if(operation.restFromOperationId&&!previous)errors.push('Die gewählte Restmaterialquelle ist im vorherigen kanonischen Jobpfad nicht verfügbar.');else if(previous){if(previous.operationKind!=='pocket')errors.push('Restmaterialquelle muss eine Taschenbearbeitung sein.');if(key&&previous.targetKey!==key)errors.push('Restmaterialquelle und Folgeoperation müssen dasselbe Taschenziel verwenden.');if(previous.tool.diameterMm<=operation.tool.diameterMm)errors.push('Restmaterial benötigt ein kleineres Folgewerkzeug als die vorherige Taschenbearbeitung.');if(!errors.length){const rest=applyPocketRestMachining({current:toolpath,previous,currentToolDiameterMm:operation.tool.diameterMm,previousToolDiameterMm:previous.tool.diameterMm});errors.push(...rest.errors);warnings.push(...rest.warnings);toolpath=rest.toolpath;}}}
+  if(operation.stockAwareRoughingEnabled&&!errors.length){
+    const currentToolpath=toolpath;
+    const adaptive=applyPocketStockAwareRoughing({toolpath:currentToolpath,toolDiameterMm:operation.tool.diameterMm,maxRadialEngagementPercent:operation.maxRadialEngagementPercent??35});
+    errors.push(...adaptive.errors);warnings.push(...adaptive.warnings);
+    if(!adaptive.toolpath)errors.push('Stock-aware Roughing konnte keinen kanonischen Taschenpfad erzeugen.');
+    else toolpath=adaptive.toolpath;
+  }
+  if(operation.restMachiningEnabled&&!errors.length){
+    if(!operation.restFromOperationId)errors.push('Restmaterial benötigt eine explizite vorherige Taschenbearbeitung als Quelle.');
+    const previous=(args.previousToolpaths??[]).find(candidate=>candidate.sourceOperationId===operation.restFromOperationId);
+    if(operation.restFromOperationId&&!previous)errors.push('Die gewählte Restmaterialquelle ist im vorherigen kanonischen Jobpfad nicht verfügbar.');
+    else if(previous){
+      if(previous.operationKind!=='pocket')errors.push('Restmaterialquelle muss eine Taschenbearbeitung sein.');
+      if(key&&previous.targetKey!==key)errors.push('Restmaterialquelle und Folgeoperation müssen dasselbe Taschenziel verwenden.');
+      if(previous.tool.diameterMm<=operation.tool.diameterMm)errors.push('Restmaterial benötigt ein kleineres Folgewerkzeug als die vorherige Taschenbearbeitung.');
+      if(!errors.length){
+        const currentToolpath=toolpath;
+        const rest=applyPocketRestMachining({current:currentToolpath,previous,currentToolDiameterMm:operation.tool.diameterMm,previousToolDiameterMm:previous.tool.diameterMm});
+        errors.push(...rest.errors);warnings.push(...rest.warnings);
+        if(!rest.toolpath)errors.push('Restmaterial konnte keinen kanonischen Taschenpfad erzeugen.');
+        else toolpath=rest.toolpath;
+      }
+    }
+  }
   if(!toolpath||errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};
   if(finishEnabled){const finishOperation:PocketOperation={...nominalOperation,entry:'plunge',stepDownMm:targetDepthMm,totalDepthMm:targetDepthMm},finish=buildBasePocket(args,finishOperation);errors.push(...finish.errors);warnings.push(...finish.warnings);if(!finish.toolpath||errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};const finishRuns=repeatFinishRuns(finish.toolpath,finishCount);toolpath={...toolpath,runs:[...toolpath.runs,...finishRuns],sourceOperationId:operation.id,targetKey:key??undefined};warnings.push(`Schlichten aktiv: ${finishCount} nominale Taschen-Enddurchgang${finishCount===1?'':'e'} auf Z ${(-targetDepthMm).toFixed(3)} mm.`);}
   return{ok:true,toolpath,errors:[],warnings,targetDepthMm};
