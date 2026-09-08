@@ -27,7 +27,37 @@ function concentricPaths(outer:P2[],islands:P2[][],stepover:number){if(islands.l
   let shell=outer,guard=0;while(areaAbs(shell)>EPS&&guard++<512){const radialMax=Math.max(...shell.map(p=>dist(p,c)));if(radialMax<=maxR+stepover*.5)break;const loop=closedLoop(shell);if(loopSafe(loop,outer,[]))paths.push(loop);const next=chooseOffset(shell,stepover,false);if(areaAbs(next)>=areaAbs(shell)-EPS||areaAbs(next)<=EPS)break;shell=next;}
   return{paths,error:null as string|null};}
 
-function entryForPath(operation:PocketOperation,path:ToolpathPoint2[],zStart:number,zEnd:number):{segments?:CanonicalSpatialSegment[];error?:string}{if(operation.entry==='plunge')return{};if(path.length<2)return{error:'Einstieg benötigt eine ausreichend lange Taschenbahn.'};if(operation.entry==='ramp'){const available=dist(path[0],path[1]),required=Math.abs(zEnd-zStart)/Math.tan(operation.rampAngleDeg*Math.PI/180);if(!(available+EPS>=required))return{error:`Rampenwinkel ${operation.rampAngleDeg.toFixed(1)}° benötigt eine längere erste Bahn.`};const t=Math.min(1,required/available),end={x:path[0].x+(path[1].x-path[0].x)*t,y:path[0].y+(path[1].y-path[0].y)*t};return{segments:[{kind:'line3',start:{...path[0],z:zStart},end:{...end,z:zEnd},feedMmMin:operation.plungeMmMin}]};}const center=centroid(path),r=Math.max(.25,Math.min(operation.tool.diameterMm*.35,distanceToBoundary(center,path)*.5));if(!(r>EPS))return{error:'Für die Taschenbahn passt kein sicherer Helix-Einstieg.'};const start={x:center.x+r,y:center.y};return{segments:[{kind:'arc3',start:{...start,z:zStart},end:{...start,z:zEnd},center,ccw:true,feedMmMin:operation.plungeMmMin}]};}
+function rampEntry(operation:PocketOperation,path:ToolpathPoint2[],zStart:number,zEnd:number):{segments?:CanonicalSpatialSegment[];error?:string}{
+  const angle=operation.rampAngleDeg;
+  if(!(angle>0&&angle<=15))return{error:'Rampenwinkel muss größer als 0 und höchstens 15° sein.'};
+  const required=Math.abs(zEnd-zStart)/Math.tan(angle*Math.PI/180);
+  const lengths=path.slice(1).map((point,index)=>dist(path[index],point));
+  const available=lengths.reduce((sum,length)=>sum+length,0);
+  if(!(available+EPS>=required))return{error:`Rampenwinkel ${angle.toFixed(1)}° benötigt ${required.toFixed(3)} mm Rampenlänge; die gewählte Taschenbahn bietet ${available.toFixed(3)} mm.`};
+  const segments:CanonicalSpatialSegment[]=[];
+  let travelled=0;
+  for(let i=1;i<path.length&&travelled<required-EPS;i++){
+    const start=path[i-1],fullEnd=path[i],length=dist(start,fullEnd);
+    if(length<=EPS)continue;
+    const remaining=required-travelled,use=Math.min(length,remaining),t=use/length;
+    const end={x:start.x+(fullEnd.x-start.x)*t,y:start.y+(fullEnd.y-start.y)*t};
+    const z0=zStart+(zEnd-zStart)*(travelled/required),z1=zStart+(zEnd-zStart)*((travelled+use)/required);
+    segments.push({kind:'line3',start:{...start,z:z0},end:{...end,z:z1},feedMmMin:operation.plungeMmMin});
+    travelled+=use;
+  }
+  if(travelled<required-EPS)return{error:'Rampenbahn konnte trotz ausreichender Gesamtlänge nicht vollständig materialisiert werden.'};
+  return{segments};
+}
+
+function entryForPath(operation:PocketOperation,path:ToolpathPoint2[],zStart:number,zEnd:number):{segments?:CanonicalSpatialSegment[];error?:string}{
+  if(operation.entry==='plunge')return{};
+  if(path.length<2)return{error:'Einstieg benötigt eine ausreichend lange Taschenbahn.'};
+  if(operation.entry==='ramp')return rampEntry(operation,path,zStart,zEnd);
+  const center=centroid(path),r=Math.max(.25,Math.min(operation.tool.diameterMm*.35,distanceToBoundary(center,path)*.5));
+  if(!(r>EPS))return{error:'Für die Taschenbahn passt kein sicherer Helix-Einstieg.'};
+  const start={x:center.x+r,y:center.y};
+  return{segments:[{kind:'arc3',start:{...start,z:zStart},end:{...start,z:zEnd},center,ccw:true,feedMmMin:operation.plungeMmMin}]};
+}
 
 export function buildRegionPocketToolpath(args:{outer:P2[];islands?:P2[][];operation:PocketOperation;targetDepthMm:number;strategy:RegionPocketStrategy}):RegionPocketResult{
   const {operation,targetDepthMm,strategy}=args,errors:string[]=[],warnings:string[]=[];if(!(operation.tool.diameterMm>0&&operation.stepoverPercent>0&&operation.stepoverPercent<=100&&operation.stepDownMm>0&&targetDepthMm>0))return{toolpath:null,errors:['Taschenstrategie benötigt gültiges Werkzeug, Stepover, Zustellung und Zieltiefe.'],warnings};
