@@ -21,32 +21,26 @@ function normal(a:P3,b:P3,c:P3){
   return{x:nx/len,y:ny/len,z:nz/len};
 }
 
-/**
- * Camera depth grows away from the viewer. For an outward-wound closed STEP
- * shell a visible/front-facing triangle therefore has an outward normal that
- * points against the camera depth axis.
- */
-export function isFrontFacingTriangle(a:P3,b:P3,c:P3,v:View):boolean{
-  const n=normal(a,b,c),sy=Math.sin(v.yaw),cy=Math.cos(v.yaw),cp=Math.cos(v.pitch),sp=Math.sin(v.pitch);
-  const depthAxis={x:sy*cp,y:cy*cp,z:-sp};
-  return n.x*depthAxis.x+n.y*depthAxis.y+n.z*depthAxis.z<-1e-7;
-}
-
 export function projectPoint(p:P3,v:View):P2{return cameraPoint(p,v)}
 
+/**
+ * STEP display triangulation is a rendering mesh, not a trustworthy source of
+ * consistent outward triangle winding. Keep the complete shell and use opaque
+ * painter ordering for display. Visibility-aware picking is handled separately
+ * from rendering so curved/fillet faces can never disappear because of winding.
+ */
 export function projectTriangles(points:P3[],v:View,map:(p:P2)=>P2,faceIds:number[]=[]):ProjectedTriangle[]{
   const out:ProjectedTriangle[]=[];
   const light={x:-.35,y:-.45,z:.82};
   for(let i=0;i+2<points.length;i+=3){
     const a=points[i],b=points[i+1],c=points[i+2];
-    if(!isFrontFacingTriangle(a,b,c,v))continue;
     const pa=cameraPoint(a,v),pb=cameraPoint(b,v),pc=cameraPoint(c,v);
     const n=normal(a,b,c);
     const diffuse=Math.min(1,Math.abs(n.x*light.x+n.y*light.y+n.z*light.z));
     const triangleIndex=Math.floor(i/3);
     out.push({points:[map(pa),map(pb),map(pc)],depth:(pa.depth+pb.depth+pc.depth)/3,shade:diffuse,faceId:faceIds[triangleIndex]??triangleIndex});
   }
-  // Painter's order: far geometry first, camera-near geometry last. SVG then
-  // presents the same surface visually and interactively on top.
+  // Camera-near geometry has the smaller depth value. SVG paints later nodes
+  // on top, therefore larger/farther depths must be emitted first.
   return out.sort((a,b)=>b.depth-a.depth);
 }
