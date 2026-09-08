@@ -37,7 +37,12 @@ requireText(state,'stepSideFaceContourAfterExclusions(sideResult.target,excluded
 requireText(state,'openContourCorrection(operation.openSide,operation.tool.diameterMm)','STEP open contour consumes shared side correction');
 requireText(state,'offsetOpenPolyline(source,correction)','STEP open contour consumes shared open offset kernel');
 requireText(state,'const profileWorldZ=effective.zMm+t.dz','STEP contour derives vertical start from selected model profile');
-requireText(state,"const bottomZ=depth.mode==='stock-bottom'?depth.bottomZMm:startZ-depth.depthMm",'through-stock keeps stock bottom while manual depth is measured from model profile');
+requireText(state,"const bottomZ=depth.mode==='stock-bottom'?depth.bottomZMm:profileStartZ-depth.depthMm",'through-stock keeps stock bottom while manual depth remains measured from model profile');
+requireText(state,'simulateStockHeightfield','STEP contour automatic start consumes 004P rest-stock simulation');
+requireText(state,'sampleStockSurfaceZ','STEP contour samples remaining material along the corrected cutter path');
+requireText(state,'previousToolpaths?:CanonicalToolpath[]','STEP contour accepts prior canonical operations as rest-stock history');
+requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwards prior toolpaths into STEP contour start resolution');
+requireText(preflight,'previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)','Prüfen resolves STEP contour start from the exact prior canonical job history');
 requireText(state,'const cutDepth=startZ-bottomZ','STEP pass count uses actual profile-to-target cutting depth');
 requireText(state,'z=Math.max(bottomZ,startZ-pass*operation.stepDownMm)','STEP passes descend from model profile instead of stock top');
 requireText(state,'sourceOperationId:operation.id','STEP canonical contour preserves operation identity');
@@ -64,4 +69,4 @@ requireText(zLevel,'const planarFallback=curved.errors.includes','planar face-ta
 requireText(zLevel,'targetKind:\'planar-face\'','top planar faces remain classified as planar');
 requireText(zLevel,'„Stock – Model“ verwenden','stock-top planar face explains the correct Stock−Model workflow');
 
-console.log('004Z PASS: STEP contours use face-first open selection with solid opaque STEP rendering, visibility-aware topmost-face picking, OCCT-trimmed native edge geometry, model-profile Z reference, edge-second refinement, planar Z-level targets stay correctly classified, and one canonical Bearbeiten/Prüfen/NC path remains intact.');
+console.log('004Z PASS: STEP contours use face-first selection, opaque visibility-aware STEP picking, OCCT-trimmed geometry, automatic 004P rest-stock start Z with model-profile depth semantics, edge-second refinement, and one canonical Bearbeiten/Prüfen/NC path.');
