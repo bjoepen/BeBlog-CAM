@@ -57,7 +57,7 @@ function rampEntry(operation:PocketOperation,path:ToolpathPoint2[],zStart:number
 
 function helixEntry(operation:PocketOperation,path:ToolpathPoint2[],zStart:number,zEnd:number,outer:P2[],islands:P2[][]):{segments?:CanonicalSpatialSegment[];runPoints?:ToolpathPoint2[];error?:string}{
   if(path.length<2)return{error:'Helix-Einstieg benötigt eine ausreichend lange Taschenbahn.'};
-  const start=path[0],r=Math.max(.25,operation.tool.diameterMm*.35),centers=[{x:start.x-r,y:start.y},{x:start.x+r,y:start.y},{x:start.x,y-r},{x:start.x,y+r}];
+  const start=path[0],r=Math.max(.25,operation.tool.diameterMm*.35),centers=[{x:start.x-r,y:start.y},{x:start.x+r,y:start.y},{x:start.x,y:start.y-r},{x:start.x,y:start.y+r}];
   const center=centers.find(c=>circle(c,r).every(p=>inRegion(p,outer,islands)));if(!center)return{error:'Am Start der zusammenhängenden Taschenbahn passt kein sicherer Helix-Einstieg.'};
   return{segments:[{kind:'arc3',start:{...start,z:zStart},end:{...start,z:zEnd},center,ccw:true,feedMmMin:operation.plungeMmMin}],runPoints:path.map(p=>({...p}))};
 }
