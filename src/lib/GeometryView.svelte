@@ -134,10 +134,11 @@
     const regionWorld=target?target.levels.map(z=>target.loops.map(loop=>loop.points.map(point=>({x:point.x,y:point.y,z})))):[];
     const activeToolWorld=toolpath?.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z})))??[];
     const jobToolWorld=jobToolpaths.flatMap(path=>path.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z}))));
+    const jobEntryWorld=jobToolpaths.flatMap(toolpath=>toolpath.runs.flatMap(run=>(run.entrySegments??[]).map(segment=>sampleMachineMotion(segment).map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:point.z+wp.z})))));
     const jobMotionWorld=jobToolpaths.flatMap(toolpath=>(toolpath.motions??[]).filter(motion=>motion.kind!=='rapid3').map(motion=>sampleMachineMotion(motion).map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:point.z+wp.z}))));
-    const toolWorld=[...activeToolWorld,...jobToolWorld,...jobMotionWorld];
+    const toolWorld=[...activeToolWorld,...jobToolWorld,...jobEntryWorld,...jobMotionWorld];
     const m=Math.max(stock.width,stock.height)*.12+10;
-    const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height+m,z:0},{x:-m,y:stock.height+m,z:0}];
+    const plane:P3[]=[{x:-m,y:-m,z:0},{x:stock.width+m,y:-m,z:0},{x:stock.width+m,y:stock.height,z:0},{x:-m,y:stock.height,z:0}];
     const box:P3[]=[{x:0,y:0,z:0},{x:stock.width,y:0,z:0},{x:stock.width,y:stock.height,z:0},{x:0,y:stock.height,z:0},{x:0,y:0,z:stock.thickness},{x:stock.width,y:0,z:stock.thickness},{x:stock.width,y:stock.height,z:stock.thickness},{x:0,y:stock.height,z:stock.thickness}];
     const al=Math.max(35,Math.min(stock.width,stock.height)*.55),axes=[wp,{x:wp.x+al,y:wp.y,z:wp.z},wp,{x:wp.x,y:wp.y+al,z:wp.z},wp,{x:wp.x,y:wp.y,z:wp.z+al}];
     const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>({edgeId:edge.edgeId,points:edge.points.map(q=>projectPoint(q,v))})),rr=regionWorld.map(region=>region.map(loop=>loop.map(q=>projectPoint(q,v)))),tp=toolWorld.map(run=>run.map(q=>projectPoint(q,v))),mr=modelRegionWorld.map(loop=>loop.map(q=>projectPoint(q,v))),mi=invalidModelWorld.map(loop=>loop.map(q=>projectPoint(q,v))),rg=roughingRegionWorld.map(loop=>loop.map(q=>projectPoint(q,v))),ri=invalidRoughingWorld.map(loop=>loop.map(q=>projectPoint(q,v))),mt=modelRoughingWorld.map(run=>run.map(q=>projectPoint(q,v))),cf=curvedFaceSampleWorld.map(line=>line.map(q=>projectPoint(q,v))),cr=curvedRoughingWorld.map(line=>line.map(q=>projectPoint(q,v))),bn=ballnoseContactWorld.map(item=>({surface:projectPoint(item.surface,v),center:projectPoint(item.center,v),normalEnd:projectPoint(item.normalEnd,v)})),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
