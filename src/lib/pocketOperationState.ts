@@ -5,6 +5,7 @@ import { applyPocketRestMachining } from './pocketRestMachining';
 import { applyPocketStockAwareRoughing } from './pocketStockAwareRoughing';
 import { buildStepPocketOperationState } from './stepPocketOperation';
 import { buildStepRegionPocket } from './stepRegionPocket';
+import type { RegionPocketStrategy } from './regionPocketToolpath';
 import type { ImportSummary, PartOrientation, PartPlacement, PocketOperation, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
 export type PocketOperationState={ok:boolean;toolpath:CanonicalToolpath|null;errors:string[];warnings:string[];targetDepthMm:number|null};
@@ -16,17 +17,13 @@ const targetKey=(summary:ImportSummary,operation:PocketOperation)=>summary.kind=
 function buildBasePocket(args:PocketBuildArgs,operation:PocketOperation):BasePocketState{
   const {summary,stock,stockMode,placement,orientation,wcs}=args;
   if(summary.kind==='step'){
-    if(operation.strategy==='raster'){
-      const state=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
-      return{toolpath:state.toolpath,errors:[...state.errors],warnings:[...state.warnings],targetDepthMm:state.targetDepthMm};
-    }
     const geometryState=buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation:{...operation,strategy:'raster',entry:'plunge'}});
     if(!geometryState.selected||geometryState.targetDepthMm==null||geometryState.errors.length)return{toolpath:null,errors:[...geometryState.errors],warnings:[...geometryState.warnings],targetDepthMm:geometryState.targetDepthMm};
-    const strategy=operation.strategy==='auto'?(geometryState.selected.islands.length?'parallel':'concentric'):operation.strategy;
+    const strategy:RegionPocketStrategy=operation.strategy==='auto'?(geometryState.selected.islands.length?'parallel':'concentric'):operation.strategy;
     const region=buildStepRegionPocket({summary,stock,placement,orientation,wcs,operation,candidate:geometryState.selected,targetDepthMm:geometryState.targetDepthMm,strategy});
     return{toolpath:region.toolpath,errors:[...region.errors],warnings:[...geometryState.warnings,...region.warnings],targetDepthMm:geometryState.targetDepthMm};
   }
-  if(operation.strategy==='concentric'||operation.strategy==='parallel'){
+  if(operation.strategy!=='auto'){
     const region=buildDxfRegionPocket({summary,stock,stockMode,placement,orientation,wcs,operation,strategy:operation.strategy});
     return{toolpath:region.toolpath,errors:[...region.errors],warnings:[...region.warnings],targetDepthMm:operation.totalDepthMm};
   }
