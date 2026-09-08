@@ -24,6 +24,9 @@ requireText(targets,'export function stepContourTargetAfterExclusions','legacy/o
 requireText(sideFaces,'export function buildStepSideFaceContour','STEP side faces resolve to an open contour target');
 requireText(sideFaces,'isStepContourSideFace','STEP contour face eligibility is explicit');
 requireText(sideFaces,'stepSideFaceContourAfterExclusions','side-face contour keeps edge-second refinement');
+requireText(sideFaces,"decodeStepEdges(summary.brep?.displayEdges)",'face-first contour consumes the same OCCT-trimmed edge geometry as the STEP viewport');
+requireText(sideFaces,'const displayed=displayTopEdge(summary,edge.edgeId,z)','native trimmed display edge wins over analytical arc reconstruction');
+requireText(sideFaces,'while(d>Math.PI)d-=Math.PI*2','analytical fallback cannot silently choose a major circular arc');
 requireText(openMath,'export function offsetOpenPolyline','shared open contour kernel owns polyline offset');
 requireText(openMath,'export function openContourCorrection','shared open contour kernel owns left/right/on-line correction');
 requireText(state,"operation.topology==='closed'",'STEP contour state retains closed topology path');
@@ -46,4 +49,4 @@ requireText(geometryView,'class="step-edge-hit"','edge refinement has a dedicate
 requireText(geometryView,'stroke-width:14','edge refinement uses a generous hit stroke');
 requireText(geometryView,'class:excluded-step-edge={stepEdgeExcluded(edge.edgeId)}','excluded STEP edges remain visually explicit');
 
-console.log('004Z PASS: STEP contours use face-first open selection with edge-second refinement, retain the shared open/closed grammar, and stay canonical through Bearbeiten/Prüfen/NC.');
+console.log('004Z PASS: STEP contours use face-first open selection with OCCT-trimmed native edge geometry, edge-second refinement, shared open/closed grammar, and one canonical Bearbeiten/Prüfen/NC path.');
