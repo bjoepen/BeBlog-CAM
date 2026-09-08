@@ -19,7 +19,7 @@ requireText(targets,"topology:wire.closed?'closed':'open'",'native open STEP wir
 requireText(targets,'edgeIds:segments.map(segment=>segment.edgeId)','STEP target carries native BRep edge identity');
 requireText(targets,'export function stepContourTargetAfterExclusions','STEP contour targets support edge exclusion');
 requireText(targets,"topology:'open'",'excluding STEP edges materializes an open machining target');
-requireText(targets,'if(chains.length!==1)return null','edge exclusions must leave exactly one connected machining chain');
+requireText(targets,'chains.length!==1','edge exclusions must leave exactly one connected machining chain');
 requireText(state,"operation.topology==='open'",'STEP contour state has productive open-topology behavior');
 requireText(state,"operation.openSide==='left'",'STEP open contour supports left correction');
 requireText(state,"operation.openSide==='right'",'STEP open contour supports right correction');
