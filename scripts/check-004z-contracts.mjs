@@ -6,6 +6,7 @@ const rejectText=(text,needle,label)=>{if(text.includes(needle))throw new Error(
 
 const targets=read('src/lib/stepContourTargets.ts');
 const state=read('src/lib/stepContourOperation.ts');
+const openMath=read('src/lib/openContourMath.ts');
 const types=read('src/lib/types.ts');
 const active=read('src/lib/activeCanonicalToolpath.ts');
 const preflight=read('src/lib/jobPreflight.ts');
@@ -20,14 +21,16 @@ requireText(targets,'edgeIds:segments.map(segment=>segment.edgeId)','STEP target
 requireText(targets,'export function stepContourTargetAfterExclusions','STEP contour targets support edge exclusion');
 requireText(targets,"topology:'open'",'excluding STEP edges materializes an open machining target');
 requireText(targets,'chains.length!==1','edge exclusions must leave exactly one connected machining chain');
+requireText(openMath,'export function offsetOpenPolyline','shared open contour kernel owns polyline offset');
+requireText(openMath,'export function openContourCorrection','shared open contour kernel owns left/right/on-line correction');
 requireText(state,"operation.topology==='open'",'STEP contour state has productive open-topology behavior');
-requireText(state,"operation.openSide==='left'",'STEP open contour supports left correction');
-requireText(state,"operation.openSide==='right'",'STEP open contour supports right correction');
+requireText(state,'openContourCorrection(operation.openSide,operation.tool.diameterMm)','STEP open contour consumes shared side correction');
+requireText(state,'offsetOpenPolyline(source,correction)','STEP open contour consumes shared open offset kernel');
 requireText(state,'stepContourTargetAfterExclusions','STEP contour state consumes excluded native BRep edges');
 requireText(state,'sourceOperationId:operation.id','STEP canonical contour preserves operation identity');
-requireText(state,'targetKey:selectedTarget.targetKey','STEP canonical contour preserves manufacturing target identity');
+requireText(state,'targetKey:effective.targetKey','STEP canonical contour preserves effective manufacturing target identity');
 rejectText(state,'004F gibt STEP zunächst nur für geschlossene Konturen frei.','legacy closed-only STEP restriction must not return');
 requireText(active,'buildStepContourOperationState','Bearbeiten continues to consume the canonical STEP contour state');
 requireText(preflight,'buildStepContourOperationState','Prüfen continues to consume the same STEP contour state');
 
-console.log('004Z PASS: STEP contours share the DXF open/closed grammar, retain native edge identity, allow one connected Headstock-style open chain, and stay canonical through Bearbeiten/Prüfen/NC.');
+console.log('004Z PASS: STEP contours share the DXF open/closed grammar, retain native edge identity, use shared open-contour math, allow one connected Headstock-style open chain, and stay canonical through Bearbeiten/Prüfen/NC.');
