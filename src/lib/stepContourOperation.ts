@@ -2,6 +2,7 @@ import type { CanonicalToolpath, CanonicalToolpathSegment } from './canonicalToo
 import { offsetPolygon, validateOffsetSegments, type P2 } from './contourMath';
 import { offsetOpenPolyline, openContourCorrection } from './openContourMath';
 import { buildStepContourTargets, stepContourTargetAfterExclusions, type StepContourTarget } from './stepContourTargets';
+import { buildStepSideFaceContour, stepSideFaceContourAfterExclusions } from './stepSideFaceContour';
 import { resolveContourDepth } from './contourDepth';
 import { applyContourFinishing } from './contourFinishing';
 import { applyContourTabs } from './contourTabs';
@@ -9,8 +10,9 @@ import { applyContourLeads } from './contourLeads';
 import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
 export type StepContourCandidate=StepContourTarget;
-export type StepContourOperationState={ok:boolean;toolpath:CanonicalToolpath|null;errors:string[];warnings:string[];candidates:StepContourCandidate[];selected:StepContourCandidate|null};
+export type StepContourOperationState={ok:boolean;toolpath:CanonicalToolpath|null;errors:string[];warnings:string[];candidates:StepContourCandidate[];selected:StepContourCandidate|null;eligibleSideFaceIds:number[];selectedEdgeIds:number[]};
 type P3={x:number;y:number;z:number};
+type EffectiveTarget={targetKey:string;points:P2[];edgeIds:number[];topology:'closed'|'open'};
 const EPS=1e-6;
 const dist=(a:P2,b:P2)=>Math.hypot(a.x-b.x,a.y-b.y);
 const same=(a:P2,b:P2)=>dist(a,b)<=1e-4;
@@ -32,6 +34,8 @@ function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateS
   return{x:wcs.x==='left'?r.minX:wcs.x==='right'?r.maxX:(r.minX+r.maxX)/2,y:wcs.y==='front'?r.minY:wcs.y==='back'?r.maxY:(r.minY+r.maxY)/2};
 }
 
+const fail=(errors:string[],warnings:string[],candidates:StepContourCandidate[],selected:StepContourCandidate|null,eligibleSideFaceIds:number[],selectedEdgeIds:number[]=[]):StepContourOperationState=>({ok:false,toolpath:null,errors,warnings,candidates,selected,eligibleSideFaceIds,selectedEdgeIds});
+
 export function buildStepContourOperationState(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation;}):StepContourOperationState{
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args,errors:string[]=[],warnings:string[]=[];
   const depth=resolveContourDepth({operation,stock,stockMode,wcs});errors.push(...depth.errors);warnings.push(...depth.warnings);
@@ -42,26 +46,39 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
   if(operation.tool.diameterMm<=0)errors.push('Werkzeugdurchmesser muss größer als 0 sein.');
 
   const targetResult=buildStepContourTargets(summary),all=targetResult.targets;errors.push(...targetResult.errors);
-  if(!all.length)errors.push('Keine horizontale STEP-Kontur als Fertigungsziel erkannt.');
-  if(operation.stepWireId==null)errors.push('Keine STEP-Kontur explizit gewählt. Wähle eine Kontur im Viewport.');
   const chosen=operation.stepWireId==null?null:all.find(candidate=>candidate.wireId===operation.stepWireId)??null;
-  if(operation.stepWireId!=null&&!chosen)errors.push('Gewähltes STEP-Konturziel ist nicht mehr verfügbar.');
-  if(errors.length||!chosen)return{ok:false,toolpath:null,errors,warnings,candidates:all,selected:chosen};
-
+  const sideResult=buildStepSideFaceContour(summary,operation.stepContourFaceIds??[]);
+  const eligibleSideFaceIds=sideResult.eligibleFaceIds;
   const excluded=operation.excludedSegmentIds??[];
-  let effective=chosen;
+  let effective:EffectiveTarget|null=null;
+
   if(operation.topology==='closed'){
-    if(chosen.topology!=='closed')errors.push('Geschlossene STEP-Bearbeitung benötigt ein geschlossenes Konturziel.');
+    if(!all.length)errors.push('Keine horizontale geschlossene STEP-Kontur als Fertigungsziel erkannt.');
+    if(operation.stepWireId==null)errors.push('Keine geschlossene STEP-Kontur explizit gewählt. Wähle eine Kontur im Viewport.');
+    if(operation.stepWireId!=null&&!chosen)errors.push('Gewähltes STEP-Konturziel ist nicht mehr verfügbar.');
+    if(chosen&&chosen.topology!=='closed')errors.push('Geschlossene STEP-Bearbeitung benötigt ein geschlossenes Konturziel.');
     if(excluded.length)errors.push('Bei geschlossener STEP-Kontur dürfen keine Kanten ausgeschlossen sein.');
+    if(chosen)effective=chosen;
+  }else if((operation.stepContourFaceIds?.length??0)>0){
+    errors.push(...sideResult.errors);
+    if(sideResult.target){
+      const refined=stepSideFaceContourAfterExclusions(sideResult.target,excluded);
+      if(!refined)errors.push('Die ausgeschlossenen STEP-Kanten trennen die Seitenflächen-Kontur in mehrere Teilstücke.');
+      else effective=refined;
+    }
   }else{
-    if(chosen.topology==='closed'&&!excluded.length)errors.push('Offene STEP-Bearbeitung aus einer geschlossenen Wire benötigt mindestens eine ausgeschlossene Kante.');
-    const opened=stepContourTargetAfterExclusions(chosen,excluded);
-    if(!opened||opened.topology!=='open')errors.push('Die gewählten STEP-Kanten ergeben keine einzelne zusammenhängende offene Kontur.');else effective=opened;
+    if(operation.stepWireId==null)errors.push('Offene STEP-Kontur: Wähle bevorzugt eine oder mehrere Seitenflächen im Viewport.');
+    if(operation.stepWireId!=null&&!chosen)errors.push('Gewähltes STEP-Konturziel ist nicht mehr verfügbar.');
+    if(chosen){
+      if(chosen.topology==='closed'&&!excluded.length)errors.push('Offene STEP-Bearbeitung aus einer geschlossenen Wire benötigt mindestens eine ausgeschlossene Kante.');
+      const opened=stepContourTargetAfterExclusions(chosen,excluded);
+      if(!opened||opened.topology!=='open')errors.push('Die gewählten STEP-Kanten ergeben keine einzelne zusammenhängende offene Kontur.');else effective=opened;
+    }
   }
-  if(errors.length)return{ok:false,toolpath:null,errors,warnings,candidates:all,selected:chosen};
+  if(errors.length||!effective)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective?.edgeIds??[]);
 
   const t=placementTransform(summary,stock,stockMode,placement,orientation);
-  if(!t)return{ok:false,toolpath:null,errors:['STEP-Bauteil konnte nicht transformiert werden.'],warnings,candidates:all,selected:chosen};
+  if(!t)return fail(['STEP-Bauteil konnte nicht transformiert werden.'],warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);
   const source=effective.points.map(p=>{const q=rotateZ({x:p.x,y:p.y,z:0},orientation.rotationZDeg);return{x:q.x+t.dx-origin.x,y:q.y+t.dy-origin.y};});
   const radius=operation.tool.diameterMm/2;
@@ -70,11 +87,11 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
     const correction=operation.side==='outside'?radius:operation.side==='inside'?-radius:0;
     path=offsetPolygon(source,correction);
     const validation=validateOffsetSegments(source,path,correction,.01);
-    if(!validation.ok)return{ok:false,toolpath:null,errors:[`STEP-Kontur-Radiuskorrektur ist geometrisch nicht freigegeben (max. Abweichung ${validation.maxDeviationMm.toFixed(4)} mm).`],warnings,candidates:all,selected:chosen};
+    if(!validation.ok)return fail([`STEP-Kontur-Radiuskorrektur ist geometrisch nicht freigegeben (max. Abweichung ${validation.maxDeviationMm.toFixed(4)} mm).`],warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   }else{
     const correction=openContourCorrection(operation.openSide,operation.tool.diameterMm);
     path=offsetOpenPolyline(source,correction);
-    if(path.length<2)return{ok:false,toolpath:null,errors:['Offene STEP-Kontur konnte nicht radiuskorrigiert werden.'],warnings,candidates:all,selected:chosen};
+    if(path.length<2)return fail(['Offene STEP-Kontur konnte nicht radiuskorrigiert werden.'],warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   }
   if(operation.direction==='conventional')path=[...path].reverse();
 
@@ -86,9 +103,9 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
     runs.push({kind:'cut',z,points,segments});
   }
   const baseToolpath:CanonicalToolpath={version:1,operationKind:'contour',strategy:'contour',tool:{diameterMm:operation.tool.diameterMm},stepoverPercent:0,runs,sourceOperationId:operation.id,targetKey:effective.targetKey};
-  const finished=applyContourFinishing(baseToolpath,operation,depth.depthMm);errors.push(...finished.errors);warnings.push(...finished.warnings);if(errors.length)return{ok:false,toolpath:null,errors,warnings,candidates:all,selected:chosen};
-  const tabbed=applyContourTabs(finished.toolpath,operation,depth.depthMm);errors.push(...tabbed.errors);warnings.push(...tabbed.warnings);if(errors.length)return{ok:false,toolpath:null,errors,warnings,candidates:all,selected:chosen};
-  const led=applyContourLeads(tabbed.toolpath,operation);errors.push(...led.errors);warnings.push(...led.warnings);if(errors.length)return{ok:false,toolpath:null,errors,warnings,candidates:all,selected:chosen};
+  const finished=applyContourFinishing(baseToolpath,operation,depth.depthMm);errors.push(...finished.errors);warnings.push(...finished.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
+  const tabbed=applyContourTabs(finished.toolpath,operation,depth.depthMm);errors.push(...tabbed.errors);warnings.push(...tabbed.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
+  const led=applyContourLeads(tabbed.toolpath,operation);errors.push(...led.errors);warnings.push(...led.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   if(operation.topology==='open')warnings.push(`Offene STEP-Kontur aktiv · ${effective.edgeIds.length} BRep-Kanten · ${operation.openSide==='left'?'links':operation.openSide==='right'?'rechts':'auf Linie'}.`);
-  return{ok:true,toolpath:led.toolpath,errors:[],warnings,candidates:all,selected:chosen};
+  return{ok:true,toolpath:led.toolpath,errors:[],warnings,candidates:all,selected:chosen,eligibleSideFaceIds,selectedEdgeIds:effective.edgeIds};
 }
