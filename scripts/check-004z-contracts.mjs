@@ -43,7 +43,8 @@ requireText(state,'sampleStockSurfaceZ','STEP contour samples remaining material
 requireText(state,'previousToolpaths?:CanonicalToolpath[]','STEP contour accepts prior canonical operations as rest-stock history');
 requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwards prior toolpaths into STEP contour start resolution');
 requireText(preflight,'previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)','Prüfen resolves STEP contour start from the exact prior canonical job history');
-requireText(app,'$: jobPreflight:JobPreflightResult|null=importSummary?validateJob','App owns one canonical job preflight snapshot for Prüfen and Fräsen');
+requireText(app,'let jobPreflight:JobPreflightResult|null=null','App owns one typed canonical job preflight snapshot');
+requireText(app,'$: jobPreflight=importSummary?validateJob','Prüfen and Fräsen share one reactive canonical job snapshot');
 requireText(app,'<JobPreflightPanel result={jobPreflight}/>','Prüfen renders the shared canonical snapshot');
 requireText(app,'preflight={jobPreflight}','Fräsen receives the exact same canonical snapshot');
 const jobGcode=read('src/lib/jobGcode.ts');

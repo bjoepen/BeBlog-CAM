@@ -48,6 +48,7 @@
   let toolTargetOperationId:string|null=operationsProject.activeOperationId;
   let drillNativeViewMode:'top'|'25d'='top';
   let error = '';
+  let jobPreflight:JobPreflightResult|null=null;
   let faceTargetState:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null=null;
   function receiveFaceTargetState(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null){faceTargetState=state;}
   function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject){
@@ -77,7 +78,7 @@
   $: preflightStepToolpaths=importSummary?.kind==='step'?buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter(toolpath=>toolpath.operationKind!=='z-level-roughing'):[];
   $: preflightDxfToolpaths=importSummary?.kind==='dxf'?operationsProject.operations.filter(op=>op.enabled!==false&&op.kind!=='z-level-roughing').map(op=>buildActiveCanonicalToolpath({summary:importSummary!,stock,stockMode,placement,orientation,wcs,operation:op})).filter((toolpath):toolpath is CanonicalToolpath=>toolpath!==null):[];
   $: contourDepthState=operation.kind==='contour'?resolveContourDepth({operation,stock,stockMode,wcs}):null;
-  $: jobPreflight:JobPreflightResult|null=importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null}):null;
+  $: jobPreflight=importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null}):null;
 
   const operationLabel=(kind:OperationKind)=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
   function setOperation(next:CamOperation){operationsProject=replaceOperation(operationsProject,next);const synced=operationsProject.operations.find(op=>op.id===next.id);operation=cloneOperation(synced??next);}
