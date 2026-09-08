@@ -7,6 +7,7 @@ import { resolveContourDepth } from './contourDepth';
 import { applyContourFinishing } from './contourFinishing';
 import { applyContourTabs } from './contourTabs';
 import { applyContourLeads } from './contourLeads';
+import { simulateStockHeightfield, sampleStockSurfaceZ } from './stockSimulation';
 import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
 export type StepContourCandidate=StepContourTarget;
@@ -34,9 +35,26 @@ function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateS
   return{x:wcs.x==='left'?r.minX:wcs.x==='right'?r.maxX:(r.minX+r.maxX)/2,y:wcs.y==='front'?r.minY:wcs.y==='back'?r.maxY:(r.minY+r.maxY)/2};
 }
 
+function restStockStartZ(args:{stock:StockDefinition;wcs:WorkCoordinateSystem;previousToolpaths:CanonicalToolpath[];path:P2[];toolDiameterMm:number;fallbackZ:number}){
+  const {stock,wcs,previousToolpaths,path,toolDiameterMm,fallbackZ}=args;
+  if(!previousToolpaths.length||!path.length)return{z:fallbackZ,source:'model-profile' as const};
+  const cellSize=Math.max(.25,Math.min(1,toolDiameterMm/4));
+  const simulation=simulateStockHeightfield({stock,wcs,operations:previousToolpaths.map((toolpath,index)=>({operationId:toolpath.sourceOperationId??`previous-${index}`,toolpath})),cellSizeMm:cellSize});
+  if(!simulation.ok)return{z:fallbackZ,source:'model-profile' as const};
+  let highest=-Infinity;
+  const sample=(p:P2)=>{const z=sampleStockSurfaceZ({simulation,stock,wcs,x:p.x,y:p.y});if(z!=null)highest=Math.max(highest,z);};
+  for(let i=0;i<path.length;i++){
+    sample(path[i]);
+    if(i===0)continue;
+    const a=path[i-1],b=path[i],length=dist(a,b),steps=Math.max(1,Math.ceil(length/(simulation.cellSizeMm*.5)));
+    for(let s=1;s<steps;s++){const u=s/steps;sample({x:a.x+(b.x-a.x)*u,y:a.y+(b.y-a.y)*u});}
+  }
+  return Number.isFinite(highest)?{z:Math.max(fallbackZ,highest),source:'rest-stock' as const}:{z:fallbackZ,source:'model-profile' as const};
+}
+
 const fail=(errors:string[],warnings:string[],candidates:StepContourCandidate[],selected:StepContourCandidate|null,eligibleSideFaceIds:number[],selectedEdgeIds:number[]=[]):StepContourOperationState=>({ok:false,toolpath:null,errors,warnings,candidates,selected,eligibleSideFaceIds,selectedEdgeIds});
 
-export function buildStepContourOperationState(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation;}):StepContourOperationState{
+export function buildStepContourOperationState(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation;previousToolpaths?:CanonicalToolpath[]}):StepContourOperationState{
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args,errors:string[]=[],warnings:string[]=[];
   const depth=resolveContourDepth({operation,stock,stockMode,wcs});errors.push(...depth.errors);warnings.push(...depth.warnings);
   if(summary.kind!=='step')errors.push('STEP-Kontur benötigt einen STEP/BRep-Import.');
@@ -95,12 +113,12 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
   }
   if(operation.direction==='conventional')path=[...path].reverse();
 
-  // STEP contours start at the actual selected model profile, not implicitly at stock top.
-  // The BRep target z is model-local; placementTransform maps it into stock/world Z.
   const profileWorldZ=effective.zMm+t.dz;
-  const startZ=stockMode==='none'?profileWorldZ-t.rawBounds.maxZ:profileWorldZ-stock.thickness;
-  const bottomZ=depth.mode==='stock-bottom'?depth.bottomZMm:startZ-depth.depthMm;
-  if(bottomZ>=startZ-EPS)return fail(['STEP-Kontur-Zieltiefe muss unterhalb der gewählten Modell-Profilkante liegen.'],warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
+  const profileStartZ=stockMode==='none'?profileWorldZ-t.rawBounds.maxZ:profileWorldZ-stock.thickness;
+  const autoStart=stockMode==='none'?{z:profileStartZ,source:'model-profile' as const}:restStockStartZ({stock,wcs,previousToolpaths:args.previousToolpaths??[],path,toolDiameterMm:operation.tool.diameterMm,fallbackZ:profileStartZ});
+  const startZ=autoStart.z;
+  const bottomZ=depth.mode==='stock-bottom'?depth.bottomZMm:profileStartZ-depth.depthMm;
+  if(bottomZ>=startZ-EPS)return fail(['STEP-Kontur-Zieltiefe muss unterhalb der ermittelten Startreferenz liegen.'],warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   const cutDepth=startZ-bottomZ;
   const passes=Math.max(1,Math.ceil(cutDepth/operation.stepDownMm)),runs:CanonicalToolpath['runs']=[];
   for(let pass=1;pass<=passes;pass++){
@@ -109,7 +127,8 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
     const segments:CanonicalToolpathSegment[]=[];for(let i=1;i<points.length;i++)segments.push({kind:'line',start:points[i-1],end:points[i]});
     runs.push({kind:'cut',z,points,segments});
   }
-  warnings.push(`STEP-Kontur startet an der Modell-Profilkante Z ${startZ.toFixed(3)} mm und endet bei Z ${bottomZ.toFixed(3)} mm.`);
+  if(autoStart.source==='rest-stock')warnings.push(`STEP-Kontur Start automatisch aus Restmaterial: Z ${startZ.toFixed(3)} mm (Modell-Profilkante Z ${profileStartZ.toFixed(3)} mm), Ende Z ${bottomZ.toFixed(3)} mm.`);
+  else warnings.push(`STEP-Kontur startet an der Modell-Profilkante Z ${startZ.toFixed(3)} mm und endet bei Z ${bottomZ.toFixed(3)} mm.`);
   const baseToolpath:CanonicalToolpath={version:1,operationKind:'contour',strategy:'contour',tool:{diameterMm:operation.tool.diameterMm},stepoverPercent:0,runs,sourceOperationId:operation.id,targetKey:effective.targetKey};
   const finished=applyContourFinishing(baseToolpath,operation,cutDepth);errors.push(...finished.errors);warnings.push(...finished.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   const tabbed=applyContourTabs(finished.toolpath,operation,cutDepth);errors.push(...tabbed.errors);warnings.push(...tabbed.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
