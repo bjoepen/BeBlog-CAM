@@ -13,6 +13,7 @@ const active=read('src/lib/activeCanonicalToolpath.ts');
 const preflight=read('src/lib/jobPreflight.ts');
 const app=read('src/App.svelte');
 const geometryView=read('src/lib/GeometryView.svelte');
+const zLevel=read('src/lib/zLevelOperationState.ts');
 
 requireText(types,"export type ContourTopology='closed'|'open'",'contour grammar keeps open/closed topology shared across DXF and STEP');
 requireText(types,"export type OpenContourSide='left'|'right'|'on-line'",'open contour side grammar stays shared');
@@ -52,5 +53,8 @@ requireText(geometryView,"if(stepSelectionOperation.topology==='open')return ste
 requireText(geometryView,'class="step-edge-hit"','edge refinement has a dedicated invisible hit path');
 requireText(geometryView,'stroke-width:14','edge refinement uses a generous hit stroke');
 requireText(geometryView,'class:excluded-step-edge={stepEdgeExcluded(edge.edgeId)}','excluded STEP edges remain visually explicit');
+requireText(zLevel,'const planarFallback=curved.errors.includes','planar face-target failures no longer masquerade as curved targets');
+requireText(zLevel,'targetKind:\'planar-face\'','top planar faces remain classified as planar');
+requireText(zLevel,'„Stock – Model“ verwenden','stock-top planar face explains the correct Stock−Model workflow');
 
-console.log('004Z PASS: STEP contours use face-first open selection with OCCT-trimmed native edge geometry, model-profile Z reference, edge-second refinement, shared open/closed grammar, and one canonical Bearbeiten/Prüfen/NC path.');
+console.log('004Z PASS: STEP contours use face-first open selection with OCCT-trimmed native edge geometry, model-profile Z reference, edge-second refinement, planar Z-level targets stay correctly classified, and one canonical Bearbeiten/Prüfen/NC path remains intact.');
