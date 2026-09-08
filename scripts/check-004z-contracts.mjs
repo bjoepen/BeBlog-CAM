@@ -10,6 +10,8 @@ const openMath=read('src/lib/openContourMath.ts');
 const types=read('src/lib/types.ts');
 const active=read('src/lib/activeCanonicalToolpath.ts');
 const preflight=read('src/lib/jobPreflight.ts');
+const app=read('src/App.svelte');
+const geometryView=read('src/lib/GeometryView.svelte');
 
 requireText(types,"export type ContourTopology='closed'|'open'",'contour grammar keeps open/closed topology shared across DXF and STEP');
 requireText(types,"export type OpenContourSide='left'|'right'|'on-line'",'open contour side grammar stays shared');
@@ -32,5 +34,16 @@ requireText(state,'targetKey:effective.targetKey','STEP canonical contour preser
 rejectText(state,'004F gibt STEP zunächst nur für geschlossene Konturen frei.','legacy closed-only STEP restriction must not return');
 requireText(active,'buildStepContourOperationState','Bearbeiten continues to consume the canonical STEP contour state');
 requireText(preflight,'buildStepContourOperationState','Prüfen continues to consume the same STEP contour state');
+requireText(app,'onStepContourChange={(patch)=>operation.kind===\'contour\'&&updateContour(patch)}','App forwards complete STEP contour edits');
+requireText(app,'<p class="placement-title">Konturtyp</p>','Bearbeiten exposes contour topology explicitly');
+requireText(app,"updateContour({topology:'closed',excludedSegmentIds:[]})",'switching back to closed clears STEP edge exclusions');
+requireText(app,"updateContour({topology:'open'})",'Bearbeiten exposes open contour topology');
+requireText(app,"updateContour({openSide:'left'})",'Bearbeiten exposes open contour left side');
+requireText(app,"updateContour({openSide:'right'})",'Bearbeiten exposes open contour right side');
+requireText(geometryView,'export let onStepContourChange:(patch:Partial<ContourOperation>)','GeometryView emits complete STEP contour changes');
+requireText(geometryView,'function selectedStepContourTarget()','viewport tracks the selected STEP manufacturing target');
+requireText(geometryView,'function stepEdgeExcluded(edgeId:number)','viewport renders excluded STEP BRep edges explicitly');
+requireText(geometryView,'onStepContourChange({excludedSegmentIds:[...excluded].sort((a,b)=>a-b)})','viewport toggles native STEP edge exclusions');
+requireText(geometryView,'class:excluded-step-edge={stepEdgeExcluded(edge.edgeId)}','excluded STEP edges remain visually explicit');
 
-console.log('004Z PASS: STEP contours share the DXF open/closed grammar, retain native edge identity, use shared open-contour math, allow one connected Headstock-style open chain, and stay canonical through Bearbeiten/Prüfen/NC.');
+console.log('004Z PASS: STEP contours share the DXF open/closed grammar, retain native edge identity, use shared open-contour math, expose Headstock-style edge exclusions in the viewport, and stay canonical through Bearbeiten/Prüfen/NC.');
