@@ -143,7 +143,11 @@
     const al=Math.max(35,Math.min(stock.width,stock.height)*.55),axes=[wp,{x:wp.x+al,y:wp.y,z:wp.z},wp,{x:wp.x,y:wp.y+al,z:wp.z},wp,{x:wp.x,y:wp.y,z:wp.z+al}];
     const pp=part.map(q=>projectPoint(q,v)),ep=edgeWorld.map(edge=>({edgeId:edge.edgeId,points:edge.points.map(q=>projectPoint(q,v))})),rr=regionWorld.map(region=>region.map(loop=>loop.map(q=>projectPoint(q,v)))),tp=toolWorld.map(run=>run.map(q=>projectPoint(q,v))),mr=modelRegionWorld.map(loop=>loop.map(q=>projectPoint(q,v))),mi=invalidModelWorld.map(loop=>loop.map(q=>projectPoint(q,v))),rg=roughingRegionWorld.map(loop=>loop.map(q=>projectPoint(q,v))),ri=invalidRoughingWorld.map(loop=>loop.map(q=>projectPoint(q,v))),mt=modelRoughingWorld.map(run=>run.map(q=>projectPoint(q,v))),cf=curvedFaceSampleWorld.map(line=>line.map(q=>projectPoint(q,v))),cr=curvedRoughingWorld.map(line=>line.map(q=>projectPoint(q,v))),bn=ballnoseContactWorld.map(item=>({surface:projectPoint(item.surface,v),center:projectPoint(item.center,v),normalEnd:projectPoint(item.normalEnd,v)})),pl=plane.map(q=>projectPoint(q,v)),pb=box.map(q=>projectPoint(q,v)),pa=axes.map(q=>projectPoint(q,v)),pw=projectPoint(wp,v);
     const map=fit([...pp,...ep.flatMap(edge=>edge.points),...rr.flat(2),...tp.flat(),...mr.flat(),...mi.flat(),...rg.flat(),...ri.flat(),...mt.flat(),...cf.flat(),...cr.flat(),...bn.flatMap(item=>[item.surface,item.center,item.normalEnd]),...pl,...pb,...pa]),fpl=pl.map(map),fb=pb.map(map),fa=pa.map(map),fw=map(pw);
-    const triangles=projectTriangles(part,v,map,faceIds),edges=ep.map(edge=>({edgeId:edge.edgeId,d:path(edge.points.map(map))})).filter(edge=>Boolean(edge.d));
+    const triangles=projectTriangles(part,v,map,faceIds);
+    const visibleFaceIds=new Set(triangles.map(triangle=>triangle.faceId));
+    const visibleEdgeIds=new Set<number>();
+    if(stepFeatureSourceResult?.ok){for(const faceId of visibleFaceIds)for(const wire of stepFeatureSourceResult.source.wiresByFace.get(faceId)??[])for(const edgeId of wire.edgeIds)visibleEdgeIds.add(edgeId);}
+    const edges=ep.filter(edge=>!stepFeatureSourceResult?.ok||visibleEdgeIds.has(edge.edgeId)).map(edge=>({edgeId:edge.edgeId,d:path(edge.points.map(map))})).filter(edge=>Boolean(edge.d));
     const roughRegions=rr.map(region=>region.map(loop=>path(loop.map(map),true)).join(' ')).filter(Boolean);
     const toolPaths=tp.map(run=>path(run.map(map))).filter(Boolean);
     const modelRegionPaths=mr.map(loop=>path(loop.map(map),true)).filter(Boolean);
