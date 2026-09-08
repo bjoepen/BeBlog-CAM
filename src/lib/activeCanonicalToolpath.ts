@@ -20,7 +20,7 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
   }
   if(operation.kind==='contour'){
     if(summary.kind==='step'){
-      const state=buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
+      const state=buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths});
       return state.ok?state.toolpath:null;
     }
     const generated=generateContourGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
