@@ -18,10 +18,9 @@ const svgTo=`  <svg bind:this={viewport} viewBox="0 0 1000 650" class:interactiv
 if(!text.includes(svgFrom))throw new Error('004Z solid-view svg anchor missing');
 text=text.replace(svgFrom,svgTo);
 
-const faceFrom=`class="step-face" class:selectable-face={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable} class:selected-face={stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId)} style={\`fill:${faceFill(triangle.shade,stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId))}\`} role={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable?'button':undefined} tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}`;
-const faceTo=`class="step-face" class:selectable-face={(stepFaceSelectable(triangle.faceId)||selectableSurfaceEditing&&(surfaceFinishingEditing||showZLevels))&&s3.facePickingAvailable} class:selected-face={stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId)} style={\`fill:${faceFill(triangle.shade,stepFaceSelected(triangle.faceId)||selectedFaceIds.includes(triangle.faceId))}\`}`;
-if(!text.includes(faceFrom))throw new Error('004Z solid-view face anchor missing');
-text=text.replace(faceFrom,faceTo);
+const faceInteraction=' tabindex="-1" onclick={()=>toggleFace(triangle.faceId)} onkeydown={(e)=>faceKey(e,triangle.faceId)}';
+if(!text.includes(faceInteraction))throw new Error('004Z solid-view face interaction anchor missing');
+text=text.replace(faceInteraction,'');
 
 const edgeClickFrom=`onclick={()=>toggleStepEdge(edge.edgeId)}`;
 const edgeClickTo=`onclick={(e)=>{e.stopPropagation();toggleStepEdge(edge.edgeId)}}`;
