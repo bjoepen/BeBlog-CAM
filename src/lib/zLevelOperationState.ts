@@ -88,6 +88,33 @@ export function buildZLevelOperationState(args:{
   }
 
   const curved=buildCurvedFaceRoughingOperationState(args);
+
+  // 004Z: A planar face that cannot produce a Face-Target toolpath must stay
+  // classified as planar. Previously we fell through into the curved-face path,
+  // which produced the contradictory message "planar ... belongs to planar path".
+  // The most common valid reason is a selected top face at stock-top Z: there is
+  // no material above that face to remove with Face Target. Clearing stock around
+  // the part is a Stock−Model operation instead.
+  const planarFallback=curved.errors.includes('Die Zielfläche ist planar und gehört zum planaren Face-Target-Pfad.');
+  if(planarFallback){
+    const targetZ=curved.targetMaxZ;
+    const atStockTop=targetZ!=null&&Math.abs(targetZ-args.stock.thickness)<=1e-4;
+    return{
+      mode,
+      targetKind:'planar-face',
+      toolpath:null,
+      levelCount:0,
+      errors:[atStockTop
+        ?'Die gewählte obere STEP-Fläche liegt auf Rohlingoberkante. Face Target hat dort keinen vertikalen Abtrag; zum Freiräumen des Materials um das Modell „Stock – Model“ verwenden.'
+        :'Die gewählte STEP-Fläche ist planar, konnte aber nicht als zusammenhängendes planares Face Target rekonstruiert werden.'],
+      warnings:curved.warnings,
+      targetZ,
+      roughBottomZ:null,
+      targetMinZ:curved.targetMinZ,
+      targetMaxZ:curved.targetMaxZ,
+    };
+  }
+
   if(curved.ok&&curved.toolpath){
     return{
       mode,
