@@ -18,7 +18,7 @@ import { buildZLevelOperationState, zLevelMode } from './zLevelOperationState';
 import { postFaceTargetCanonicalToolpath } from './faceTargetToolpath';
 import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';
 import { postSurfaceFinishingCanonicalToolpath } from './surfaceFinishingGcode';
-import { validateJob } from './jobPreflight';
+import { validateJob, type JobPreflightResult } from './jobPreflight';
 import { toolIdentityKey } from './toolIdentity.js';
 import type { FixtureVolume } from './fixtureCollision';
 import type { MachineEnvelope, MachineWcsOrigin } from './machineEnvelope';
@@ -27,7 +27,7 @@ import { postCanonicalMachineMotions } from './canonicalMotionGcode';
 import type { SpindleHeadGeometry } from './spindleHeadCollision';
 
 export type JobGcodeResult={ok:boolean;errors:string[];warnings:string[];code:string;lineCount:number;operationCount:number;toolChangeCount:number;};
-type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[];machineEnvelope?:MachineEnvelope|null;machineWcsOrigin?:MachineWcsOrigin|null;spindleHead?:SpindleHeadGeometry|null};
+type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[];machineEnvelope?:MachineEnvelope|null;machineWcsOrigin?:MachineWcsOrigin|null;spindleHead?:SpindleHeadGeometry|null;preflight?:JobPreflightResult};
 type OperationCode={ok:boolean;errors:string[];warnings:string[];code:string};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
 const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':op.kind==='drill'?'Bohren':op.kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
@@ -75,13 +75,24 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
 }
 
 function operationBody(code:string):string[]{const body=code.split(/\r?\n/).filter(line=>{const t=line.trim();if(!t)return false;if(t==='G21'||t==='G90'||t==='G17'||t==='M30')return false;if(/^\( BeBlog CAM /.test(t))return false;return true;});while(body.length){const t=body[body.length-1].trim();if(t==='M5'||/^G0\s+Z[-+]?\d+(?:\.\d+)?$/i.test(t)){body.pop();continue;}break;}return body;}
+function contourMotionParity(operation:CamOperation,toolpath:import('./canonicalToolpath').CanonicalToolpath):string[]{
+  if(operation.kind!=='contour'||!toolpath.runs.length||!toolpath.motions?.length)return[];
+  const key=(z:number)=>Math.round(z*1000000)/1000000;
+  const required=[...new Set(toolpath.runs.map(run=>key(run.z)))];
+  const present=new Set(toolpath.motions.filter(motion=>motion.kind!=='rapid3'&&Math.abs(motion.start.z-motion.end.z)<1e-7).map(motion=>key(motion.end.z)));
+  const missing=required.filter(z=>!present.has(z));
+  return missing.length?[`004Z-A NC-Parität: ${missing.length} Kontur-Z-Ebene${missing.length===1?'':'n'} aus dem geprüften kanonischen Toolpath fehlen in den materialisierten Maschinenbewegungen: ${missing.map(z=>z.toFixed(3)).join(', ')} mm.`]:[];
+}
+
 export function generateJobGcode(args:Args):JobGcodeResult{
-  const enabled=args.operations.filter(op=>op.enabled!==false),preflight=validateJob(args);
+  const enabled=args.operations.filter(op=>op.enabled!==false),preflight=args.preflight??validateJob(args);
   if(preflight.level==='fail')return{ok:false,errors:['Gesamtjob ist durch den Preflight nicht freigegeben.',...preflight.errors],warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
   if(!enabled.length)return{ok:false,errors:['Keine aktive Bearbeitung im Projekt.'],warnings:preflight.warnings,code:'',lineCount:0,operationCount:0,toolChangeCount:0};
-  const prepared=enabled.map(operation=>({operation,preflight:preflight.operations.find(item=>item.id===operation.id)}));
+  const prepared=enabled.map((operation,index)=>({operation,preflight:preflight.operations[index]}));
   const missing=prepared.filter(item=>!item.preflight?.toolpath);
   if(missing.length)return{ok:false,errors:missing.map(item=>`Bearbeitung ${item.operation.name}: 004T liefert keinen materialisierten Werkzeugweg.`),warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
+  const parityErrors=prepared.flatMap(item=>contourMotionParity(item.operation,item.preflight!.toolpath!).map(message=>`${item.operation.name}: ${message}`));
+  if(parityErrors.length)return{ok:false,errors:parityErrors,warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
   const transitions=buildJobSafeTransitions({operations:prepared.map(item=>({id:item.operation.id,safeZMm:item.operation.safeZMm,toolpath:item.preflight!.toolpath!}))});
   if(!transitions.ok)return{ok:false,errors:transitions.errors,warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
   const lines:string[]=['( BeBlog CAM 004T )','( Gesamtjob · Preflight und NC-Ausgabe verwenden dieselbe kanonische Motion-Wahrheit )',`( ${enabled.length} Bearbeitungen )`,'G21','G90','G17'];

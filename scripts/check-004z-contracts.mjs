@@ -43,6 +43,14 @@ requireText(state,'sampleStockSurfaceZ','STEP contour samples remaining material
 requireText(state,'previousToolpaths?:CanonicalToolpath[]','STEP contour accepts prior canonical operations as rest-stock history');
 requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwards prior toolpaths into STEP contour start resolution');
 requireText(preflight,'previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)','Prüfen resolves STEP contour start from the exact prior canonical job history');
+requireText(app,'$: jobPreflight:JobPreflightResult|null=importSummary?validateJob','App owns one canonical job preflight snapshot for Prüfen and Fräsen');
+requireText(app,'<JobPreflightPanel result={jobPreflight}/>','Prüfen renders the shared canonical snapshot');
+requireText(app,'preflight={jobPreflight}','Fräsen receives the exact same canonical snapshot');
+const jobGcode=read('src/lib/jobGcode.ts');
+requireText(jobGcode,'preflight=args.preflight??validateJob(args)','NC generation consumes the shared snapshot when supplied');
+requireText(jobGcode,'preflight:preflight.operations[index]','NC maps operations to preflight by canonical sequence');
+requireText(jobGcode,'function contourMotionParity','NC has an explicit contour run-to-motion parity gate');
+requireText(jobGcode,'004Z-A NC-Parität','NC refuses silent loss of STEP contour Z levels');
 requireText(app,'function buildOrderedJobCanonicalToolpaths','STEP Prüfen preview owns an ordered canonical job-history builder');
 requireText(app,"previousToolpaths:toolpaths",'STEP Prüfen preview forwards exact earlier canonical paths into each later operation');
 requireText(app,"buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter",'STEP Prüfen visualization consumes the ordered job path instead of isolated reconstruction');

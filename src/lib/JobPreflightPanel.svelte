@@ -1,11 +1,6 @@
 <script lang="ts">
-  import type { CamOperation, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
-  import { validateJob } from './jobPreflight';
-  import type { FixtureVolume } from './fixtureCollision';
-  import type { MachineEnvelope, MachineWcsOrigin } from './machineEnvelope';
-  import type { SpindleHeadGeometry } from './spindleHeadCollision';
-  export let summary:ImportSummary;export let stock:StockDefinition;export let stockMode:StockMode;export let placement:PartPlacement;export let orientation:PartOrientation;export let wcs:WorkCoordinateSystem;export let fixtures:FixtureVolume[]=[];export let machineEnvelope:MachineEnvelope|null=null;export let machineWcsOrigin:MachineWcsOrigin|null=null;export let spindleHead:SpindleHeadGeometry|null=null;export let operations:CamOperation[];
-  $: result=validateJob({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures,machineEnvelope,machineWcsOrigin,spindleHead});
+  import type { JobPreflightResult } from './jobPreflight';
+  export let result:JobPreflightResult;
 </script>
 <p class="eyebrow">05 · Prüfen</p><h2>Gesamtjob</h2>
 <div class="overall" class:pass={result.level==='pass'} class:warn={result.level==='warn'} class:fail={result.level==='fail'}><strong>{result.level.toUpperCase()}</strong><span>{result.level==='pass'?'Alle Bearbeitungen besitzen eine freigegebene kanonische Werkzeugbahn.':result.level==='warn'?'Der Gesamtjob ist freigabefähig, enthält aber Hinweise.':'Mindestens eine Bearbeitung oder ihre kanonische Werkzeugbahn ist nicht freigegeben. Der Gesamtjob darf nicht ausgegeben werden.'}</span></div>
