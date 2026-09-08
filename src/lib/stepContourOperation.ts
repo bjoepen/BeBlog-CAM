@@ -12,7 +12,7 @@ import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, S
 export type StepContourCandidate=StepContourTarget;
 export type StepContourOperationState={ok:boolean;toolpath:CanonicalToolpath|null;errors:string[];warnings:string[];candidates:StepContourCandidate[];selected:StepContourCandidate|null;eligibleSideFaceIds:number[];selectedEdgeIds:number[]};
 type P3={x:number;y:number;z:number};
-type EffectiveTarget={targetKey:string;points:P2[];edgeIds:number[];topology:'closed'|'open'};
+type EffectiveTarget={targetKey:string;points:P2[];edgeIds:number[];topology:'closed'|'open';zMm:number};
 const EPS=1e-6;
 const dist=(a:P2,b:P2)=>Math.hypot(a.x-b.x,a.y-b.y);
 const same=(a:P2,b:P2)=>dist(a,b)<=1e-4;
@@ -26,7 +26,7 @@ function placementTransform(summary:ImportSummary,stock:StockDefinition,stockMod
   const b=bounds3(raw),w=b.maxX-b.minX,h=b.maxY-b.minY;
   const tx=stockMode==='none'?0:placement.horizontal==='left'?0:placement.horizontal==='right'?stock.width-w:(stock.width-w)/2;
   const ty=stockMode==='none'?0:placement.vertical==='front'?0:placement.vertical==='back'?stock.height-h:(stock.height-h)/2;
-  return{dx:tx-b.minX+placement.offsetX,dy:ty-b.minY+placement.offsetY,partBounds:{minX:tx+placement.offsetX,maxX:tx+w+placement.offsetX,minY:ty+placement.offsetY,maxY:ty+h+placement.offsetY}};
+  return{dx:tx-b.minX+placement.offsetX,dy:ty-b.minY+placement.offsetY,dz:-b.minZ+placement.offsetZ,rawBounds:b,partBounds:{minX:tx+placement.offsetX,maxX:tx+w+placement.offsetX,minY:ty+placement.offsetY,maxY:ty+h+placement.offsetY}};
 }
 
 function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateSystem,b:{minX:number;maxX:number;minY:number;maxY:number}){
@@ -95,16 +95,24 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
   }
   if(operation.direction==='conventional')path=[...path].reverse();
 
-  const passes=Math.max(1,Math.ceil(depth.depthMm/operation.stepDownMm)),runs:CanonicalToolpath['runs']=[];
+  // STEP contours start at the actual selected model profile, not implicitly at stock top.
+  // The BRep target z is model-local; placementTransform maps it into stock/world Z.
+  const profileWorldZ=effective.zMm+t.dz;
+  const startZ=stockMode==='none'?profileWorldZ-t.rawBounds.maxZ:profileWorldZ-stock.thickness;
+  const bottomZ=depth.mode==='stock-bottom'?depth.bottomZMm:startZ-depth.depthMm;
+  if(bottomZ>=startZ-EPS)return fail(['STEP-Kontur-Zieltiefe muss unterhalb der gewählten Modell-Profilkante liegen.'],warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
+  const cutDepth=startZ-bottomZ;
+  const passes=Math.max(1,Math.ceil(cutDepth/operation.stepDownMm)),runs:CanonicalToolpath['runs']=[];
   for(let pass=1;pass<=passes;pass++){
-    const z=-Math.min(depth.depthMm,pass*operation.stepDownMm),points=path.map(p=>({x:p.x,y:p.y}));
+    const z=Math.max(bottomZ,startZ-pass*operation.stepDownMm),points=path.map(p=>({x:p.x,y:p.y}));
     if(operation.topology==='closed'&&points.length&&!same(points[0],points[points.length-1]))points.push({...points[0]});
     const segments:CanonicalToolpathSegment[]=[];for(let i=1;i<points.length;i++)segments.push({kind:'line',start:points[i-1],end:points[i]});
     runs.push({kind:'cut',z,points,segments});
   }
+  warnings.push(`STEP-Kontur startet an der Modell-Profilkante Z ${startZ.toFixed(3)} mm und endet bei Z ${bottomZ.toFixed(3)} mm.`);
   const baseToolpath:CanonicalToolpath={version:1,operationKind:'contour',strategy:'contour',tool:{diameterMm:operation.tool.diameterMm},stepoverPercent:0,runs,sourceOperationId:operation.id,targetKey:effective.targetKey};
-  const finished=applyContourFinishing(baseToolpath,operation,depth.depthMm);errors.push(...finished.errors);warnings.push(...finished.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
-  const tabbed=applyContourTabs(finished.toolpath,operation,depth.depthMm);errors.push(...tabbed.errors);warnings.push(...tabbed.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
+  const finished=applyContourFinishing(baseToolpath,operation,cutDepth);errors.push(...finished.errors);warnings.push(...finished.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
+  const tabbed=applyContourTabs(finished.toolpath,operation,cutDepth);errors.push(...tabbed.errors);warnings.push(...tabbed.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   const led=applyContourLeads(tabbed.toolpath,operation);errors.push(...led.errors);warnings.push(...led.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   if(operation.topology==='open')warnings.push(`Offene STEP-Kontur aktiv · ${effective.edgeIds.length} BRep-Kanten · ${operation.openSide==='left'?'links':operation.openSide==='right'?'rechts':'auf Linie'}.`);
   return{ok:true,toolpath:led.toolpath,errors:[],warnings,candidates:all,selected:chosen,eligibleSideFaceIds,selectedEdgeIds:effective.edgeIds};
