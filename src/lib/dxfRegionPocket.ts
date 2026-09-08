@@ -1,10 +1,10 @@
 import { buildClosedChains } from './contourMath';
 import { resolvePlanarPartTransform } from './partTransform';
-import { buildRegionPocketToolpath } from './regionPocketToolpath';
+import { buildRegionPocketToolpath, type RegionPocketStrategy } from './regionPocketToolpath';
 import type { CanonicalToolpath } from './canonicalToolpath';
 import type { ImportSummary, PartOrientation, PartPlacement, PocketOperation, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
-export function buildDxfRegionPocket(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:PocketOperation;strategy:'concentric'|'parallel'}):{toolpath:CanonicalToolpath|null;errors:string[];warnings:string[]}{
+export function buildDxfRegionPocket(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:PocketOperation;strategy:RegionPocketStrategy}):{toolpath:CanonicalToolpath|null;errors:string[];warnings:string[]}{
   const {summary,stock,stockMode,placement,orientation,wcs,operation,strategy}=args;
   if(summary.kind!=='dxf')return{toolpath:null,errors:['DXF-Regionstasche benötigt DXF-Geometrie.'],warnings:[]};
   if(operation.contourId==null)return{toolpath:null,errors:['Keine geschlossene DXF-Taschenkontur gewählt.'],warnings:[]};
