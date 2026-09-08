@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+const app='src/App.svelte';let t=fs.readFileSync(app,'utf8');
+const from="  let error = '';";
+const to="  let error = '';\n  let jobPreflight:JobPreflightResult|null=null;";
+if(!t.includes(from))throw new Error('job preflight declaration anchor missing');
+t=t.replace(from,to);
+const old="  $: jobPreflight:JobPreflightResult|null=importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null}):null;";
+const next="  $: jobPreflight=importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null}):null;";
+if(!t.includes(old))throw new Error('typed reactive declaration anchor missing');
+t=t.replace(old,next);fs.writeFileSync(app,t);
+const gate='scripts/check-004z-contracts.mjs';let g=fs.readFileSync(gate,'utf8');g=g.replace("requireText(app,'$: jobPreflight:JobPreflightResult|null=importSummary?validateJob','App owns one canonical job preflight snapshot for Prüfen and Fräsen');","requireText(app,'let jobPreflight:JobPreflightResult|null=null','App owns one typed canonical job preflight snapshot');\nrequireText(app,'$: jobPreflight=importSummary?validateJob','Prüfen and Fräsen share one reactive canonical job snapshot');");fs.writeFileSync(gate,g);
