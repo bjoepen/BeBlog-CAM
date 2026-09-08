@@ -26,8 +26,8 @@ function buildBasePocket(args:PocketBuildArgs,operation:PocketOperation):BasePoc
     const region=buildStepRegionPocket({summary,stock,placement,orientation,wcs,operation,candidate:geometryState.selected,targetDepthMm:geometryState.targetDepthMm,strategy});
     return{toolpath:region.toolpath,errors:[...region.errors],warnings:[...geometryState.warnings,...region.warnings],targetDepthMm:geometryState.targetDepthMm};
   }
-  if(operation.strategy==='concentric'){
-    const region=buildDxfRegionPocket({summary,stock,stockMode,placement,orientation,wcs,operation,strategy:'concentric'});
+  if(operation.strategy==='concentric'||operation.strategy==='parallel'){
+    const region=buildDxfRegionPocket({summary,stock,stockMode,placement,orientation,wcs,operation,strategy:operation.strategy});
     return{toolpath:region.toolpath,errors:[...region.errors],warnings:[...region.warnings],targetDepthMm:operation.totalDepthMm};
   }
   const toolpath=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
