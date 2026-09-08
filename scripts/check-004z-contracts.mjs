@@ -54,13 +54,14 @@ requireText(geometryView,"if(stepSelectionOperation.topology==='open')return ste
 requireText(geometryView,'class="step-edge-hit"','edge refinement has a dedicated invisible hit path');
 requireText(geometryView,'stroke-width:14','edge refinement uses a generous hit stroke');
 requireText(geometryView,'class:excluded-step-edge={stepEdgeExcluded(edge.edgeId)}','excluded STEP edges remain visually explicit');
-requireText(stepView,'export function isFrontFacingTriangle','STEP viewport has explicit front-face visibility');
-requireText(stepView,'return n.x*depthAxis.x+n.y*depthAxis.y+n.z*depthAxis.z<-1e-7','backfaces are culled against the camera depth axis');
-requireText(stepView,'if(!isFrontFacingTriangle(a,b,c,v))continue','only front-facing STEP triangles are rendered and pickable');
-requireText(geometryView,'const visibleFaceIds=new Set(triangles.map(triangle=>triangle.faceId))','visible STEP faces define visible edge ownership');
-requireText(geometryView,'visibleEdgeIds.has(edge.edgeId)','backface-only STEP edges are hidden from the viewport');
+rejectText(stepView,'isFrontFacingTriangle','STEP rendering must not cull OCCT triangles by unreliable winding');
+requireText(stepView,'return out.sort((a,b)=>b.depth-a.depth)','STEP shell stays opaque through far-to-near painter ordering');
+requireText(geometryView,'function pickVisibleFace(e:MouseEvent)','STEP picking is visibility-aware and independent from SVG face events');
+requireText(geometryView,'for(let i=s3.triangles.length-1;i>=0;i--)','visible-face picking walks the rendered shell from near to far');
+requireText(geometryView,'if(!pointInTriangle(p,triangle.points))continue;toggleFace(triangle.faceId);return','only the visually topmost triangle can be selected');
+requireText(geometryView,'const edges=ep.filter(edge=>stepEdgeSelectable(edge.edgeId)||stepEdgeExcluded(edge.edgeId))','generic hidden BRep edges no longer create an X-ray view');
 requireText(zLevel,'const planarFallback=curved.errors.includes','planar face-target failures no longer masquerade as curved targets');
 requireText(zLevel,'targetKind:\'planar-face\'','top planar faces remain classified as planar');
 requireText(zLevel,'„Stock – Model“ verwenden','stock-top planar face explains the correct Stock−Model workflow');
 
-console.log('004Z PASS: STEP contours use face-first open selection with visible-front-face picking, hidden backface edges, OCCT-trimmed native edge geometry, model-profile Z reference, edge-second refinement, planar Z-level targets stay correctly classified, and one canonical Bearbeiten/Prüfen/NC path remains intact.');
+console.log('004Z PASS: STEP contours use face-first open selection with solid opaque STEP rendering, visibility-aware topmost-face picking, OCCT-trimmed native edge geometry, model-profile Z reference, edge-second refinement, planar Z-level targets stay correctly classified, and one canonical Bearbeiten/Prüfen/NC path remains intact.');
