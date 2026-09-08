@@ -9,6 +9,7 @@ const state=read('src/lib/pocketOperationState.ts');
 const region=read('src/lib/regionPocketToolpath.ts');
 const dxfRegion=read('src/lib/dxfRegionPocket.ts');
 const stepRegion=read('src/lib/stepRegionPocket.ts');
+const geometryView=read('src/lib/GeometryView.svelte');
 const active=read('src/lib/activeCanonicalToolpath.ts');
 const preflight=read('src/lib/jobPreflight.ts');
 const step=read('src/lib/stepPocketOperation.ts');
@@ -21,7 +22,8 @@ requireText(canonical,'targetKey?:string','canonical pocket target identity');
 requireText(state,'export function buildPocketOperationState','shared pocket operation state');
 requireText(state,'applyPocketStockAwareRoughing','shared state applies stock-aware roughing');
 requireText(state,'applyPocketRestMachining','shared state applies rest machining');
-requireText(state,'buildDxfRegionPocket','DXF concentric uses shared region strategy');
+requireText(state,"operation.strategy==='concentric'||operation.strategy==='parallel'",'DXF concentric and contour-parallel share region strategy');
+requireText(state,'buildDxfRegionPocket','DXF region strategies use shared region kernel');
 requireText(state,'buildStepRegionPocket','STEP non-raster strategies use shared region strategy');
 requireText(state,"operation.strategy==='auto'?(geometryState.selected.islands.length?'parallel':'concentric'):operation.strategy",'STEP auto resolves to shared region strategy');
 requireText(state,'candidate.sourceOperationId===operation.restFromOperationId','rest source is selected by exact operation identity');
@@ -37,8 +39,11 @@ requireText(region,"strategy==='parallel'?{paths:parallelPaths",'parallel strate
 requireText(region,'const available=lengths.reduce','ramp uses cumulative path length instead of first segment only');
 requireText(region,'segments.push({kind:\'line3\'','ramp is materialized as explicit canonical XYZ segments');
 requireText(region,"operation.entry==='ramp')return rampEntry",'shared region strategies use the cumulative ramp entry');
+requireText(region,"kind:'arc3'",'shared region strategies materialize helix entry as canonical XYZ arc');
 requireText(dxfRegion,'resolvePlanarPartTransform','DXF region uses unified placement transform');
 requireText(stepRegion,'candidate.outer.map(transform)','STEP region consumes BRep face boundary');
+requireText(geometryView,'const jobEntryWorld=jobToolpaths.flatMap','STEP 3D preview consumes canonical spatial pocket entries');
+requireText(geometryView,'...jobEntryWorld,...jobMotionWorld','STEP 3D preview renders entries without mutating machine motions');
 requireText(app,"updatePocket({strategy:'concentric'})",'Bearbeiten exposes circle strategy');
 requireText(app,"updatePocket({strategy:'parallel'})",'Bearbeiten exposes contour-parallel strategy');
 requireText(app,'>Rampenwinkel <input type="number" min="0.1" max="15"','Bearbeiten exposes pocket ramp angle');
@@ -53,4 +58,4 @@ requireText(step,'targetDepth=Math.max(0,-faceMachineZ)','STEP pocket depth rema
 requireText(dxf,'operation.totalDepthMm','DXF pocket depth remains operation-owned');
 requireText(persistence,'operationsProject','004V persistence remains operation-project owned');
 
-console.log('004Y PASS: DXF and STEP share region-based pocket strategies with cumulative ramp entry; Bearbeiten and Job use one pocket state with allowances/finishing, exact rest identity and format-correct depth sources.');
+console.log('004Y PASS: DXF and STEP share region-based pocket strategies and spatial entry primitives; STEP 3D renders those exact entries; Bearbeiten and Job keep one canonical pocket state.');
