@@ -34,6 +34,10 @@ requireText(state,"buildStepSideFaceContour(summary,operation.stepContourFaceIds
 requireText(state,'stepSideFaceContourAfterExclusions(sideResult.target,excluded)','STEP side-face target supports edge refinement');
 requireText(state,'openContourCorrection(operation.openSide,operation.tool.diameterMm)','STEP open contour consumes shared side correction');
 requireText(state,'offsetOpenPolyline(source,correction)','STEP open contour consumes shared open offset kernel');
+requireText(state,'const profileWorldZ=effective.zMm+t.dz','STEP contour derives vertical start from selected model profile');
+requireText(state,"const bottomZ=depth.mode==='stock-bottom'?depth.bottomZMm:startZ-depth.depthMm",'through-stock keeps stock bottom while manual depth is measured from model profile');
+requireText(state,'const cutDepth=startZ-bottomZ','STEP pass count uses actual profile-to-target cutting depth');
+requireText(state,'z=Math.max(bottomZ,startZ-pass*operation.stepDownMm)','STEP passes descend from model profile instead of stock top');
 requireText(state,'sourceOperationId:operation.id','STEP canonical contour preserves operation identity');
 requireText(state,'targetKey:effective.targetKey','STEP canonical contour preserves effective manufacturing target identity');
 rejectText(state,'004F gibt STEP zunächst nur für geschlossene Konturen frei.','legacy closed-only STEP restriction must not return');
@@ -49,4 +53,4 @@ requireText(geometryView,'class="step-edge-hit"','edge refinement has a dedicate
 requireText(geometryView,'stroke-width:14','edge refinement uses a generous hit stroke');
 requireText(geometryView,'class:excluded-step-edge={stepEdgeExcluded(edge.edgeId)}','excluded STEP edges remain visually explicit');
 
-console.log('004Z PASS: STEP contours use face-first open selection with OCCT-trimmed native edge geometry, edge-second refinement, shared open/closed grammar, and one canonical Bearbeiten/Prüfen/NC path.');
+console.log('004Z PASS: STEP contours use face-first open selection with OCCT-trimmed native edge geometry, model-profile Z reference, edge-second refinement, shared open/closed grammar, and one canonical Bearbeiten/Prüfen/NC path.');
