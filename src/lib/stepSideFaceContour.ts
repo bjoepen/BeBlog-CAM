@@ -1,4 +1,5 @@
 import type { P2 } from './contourMath';
+import { decodeStepEdges } from './stepEdgeView';
 import { buildStepManufacturingFeatureSource, type StepManufacturingEdgeSource, type StepManufacturingFaceSource } from './stepManufacturingFeatures';
 import type { ImportSummary } from './types';
 
@@ -24,16 +25,41 @@ export function isStepContourSideFace(face:StepManufacturingFaceSource){
   return false;
 }
 
-function sampleTopEdge(edge:StepManufacturingEdgeSource,z:number):P2[]|null{
+function displayTopEdge(summary:ImportSummary,edgeId:number,z:number):P2[]|null{
+  const display=decodeStepEdges(summary.brep?.displayEdges).find(edge=>edge.edgeId===edgeId);
+  if(!display)return null;
+  const points:P2[]=[];
+  for(let i=0;i+2<display.points.length;i+=3){
+    const x=display.points[i],y=display.points[i+1],pz=display.points[i+2];
+    if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(pz)||Math.abs(pz-z)>1e-3)return null;
+    const point={x,y};
+    if(!points.length||!same2(points.at(-1)!,point))points.push(point);
+  }
+  return points.length>=2&&!same2(points[0],points.at(-1)!)?points:null;
+}
+
+function sampleTopEdge(summary:ImportSummary,edge:StepManufacturingEdgeSource,z:number):P2[]|null{
   if(Math.abs(edge.start[2]-z)>1e-4||Math.abs(edge.end[2]-z)>1e-4||xyLength(edge)<=EPS)return null;
+
+  // 004Z: the OCCT display edge is already the correctly trimmed native BRep edge.
+  // Prefer it over reconstructing a circular trim from start/end/orientation; the
+  // latter can accidentally choose the major arc and create a huge false loop.
+  const displayed=displayTopEdge(summary,edge.edgeId,z);
+  if(displayed)return displayed;
+
   const start={x:edge.start[0],y:edge.start[1]},end={x:edge.end[0],y:edge.end[1]};
   if(edge.kind==='line')return[start,end];
   if(edge.kind!=='circle'||!edge.center||!edge.radiusMm||!edge.axisDirection)return null;
   const center={x:edge.center[0],y:edge.center[1]},r=edge.radiusMm;
   if(edge.closed||same2(start,end))return null;
+
+  // Conservative fallback when no OCCT display polyline exists: use the minor
+  // geometric arc. Traversal direction is irrelevant here because chainSegments
+  // may reverse a segment to connect the selected side-face chain.
   const a0=Math.atan2(start.y-center.y,start.x-center.x),a1=Math.atan2(end.y-center.y,end.x-center.x);
-  let ccw=edge.axisDirection[2]>=0;if(edge.orientation==='reversed')ccw=!ccw;
-  let d=a1-a0;if(ccw){while(d<=0)d+=Math.PI*2}else{while(d>=0)d-=Math.PI*2}
+  let d=a1-a0;
+  while(d>Math.PI)d-=Math.PI*2;
+  while(d<=-Math.PI)d+=Math.PI*2;
   const steps=Math.max(8,Math.ceil(Math.abs(d)/(Math.PI/18)));
   return Array.from({length:steps+1},(_,i)=>{const a=a0+d*i/steps;return{x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r};});
 }
@@ -76,7 +102,7 @@ export function buildStepSideFaceContour(summary:ImportSummary,selectedFaceIds:n
   const edges=edgeIds.map(id=>source.edges[id]).filter(Boolean);
   if(!edges.length)return{target:null,eligibleFaceIds,errors:['Die gewählten STEP-Seitenflächen besitzen keine BRep-Kanten.']};
   const z=Math.max(...edges.flatMap(edge=>[edge.start[2],edge.end[2]]));
-  const segments=edges.flatMap(edge=>{const points=sampleTopEdge(edge,z);return points?[{edgeId:edge.edgeId,points}]:[];});
+  const segments=edges.flatMap(edge=>{const points=sampleTopEdge(summary,edge,z);return points?[{edgeId:edge.edgeId,points}]:[];});
   const chain=chainSegments(segments);
   if(!chain)return{target:null,eligibleFaceIds,errors:['Die gewählten STEP-Seitenflächen ergeben noch keine einzelne zusammenhängende offene Profilkante.']};
   return{target:{targetKey:`step-side-faces:${selected.join(',')}`,faceIds:selected,edgeIds:chain.edgeIds,segments:chain.segments,points:chain.points,zMm:z,topology:'open'},eligibleFaceIds,errors:[]};
