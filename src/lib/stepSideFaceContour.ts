@@ -2,10 +2,12 @@ import type { P2 } from './contourMath';
 import { buildStepManufacturingFeatureSource, type StepManufacturingEdgeSource, type StepManufacturingFaceSource } from './stepManufacturingFeatures';
 import type { ImportSummary } from './types';
 
+export type StepSideFaceContourSegment={edgeId:number;points:P2[]};
 export type StepSideFaceContourTarget={
   targetKey:string;
   faceIds:number[];
   edgeIds:number[];
+  segments:StepSideFaceContourSegment[];
   points:P2[];
   zMm:number;
   topology:'open';
@@ -28,7 +30,7 @@ function sampleTopEdge(edge:StepManufacturingEdgeSource,z:number):P2[]|null{
   if(edge.kind==='line')return[start,end];
   if(edge.kind!=='circle'||!edge.center||!edge.radiusMm||!edge.axisDirection)return null;
   const center={x:edge.center[0],y:edge.center[1]},r=edge.radiusMm;
-  if(edge.closed||same2(start,end))return null; // a full circle is a closed target, not one side-wall segment
+  if(edge.closed||same2(start,end))return null;
   const a0=Math.atan2(start.y-center.y,start.x-center.x),a1=Math.atan2(end.y-center.y,end.x-center.x);
   let ccw=edge.axisDirection[2]>=0;if(edge.orientation==='reversed')ccw=!ccw;
   let d=a1-a0;if(ccw){while(d<=0)d+=Math.PI*2}else{while(d>=0)d-=Math.PI*2}
@@ -36,7 +38,7 @@ function sampleTopEdge(edge:StepManufacturingEdgeSource,z:number):P2[]|null{
   return Array.from({length:steps+1},(_,i)=>{const a=a0+d*i/steps;return{x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r};});
 }
 
-function chainSegments(segments:{edgeId:number;points:P2[]}[]){
+function chainSegments(segments:StepSideFaceContourSegment[]){
   if(!segments.length)return null;
   const remaining=segments.map(segment=>({edgeId:segment.edgeId,points:[...segment.points]}));
   const out=[remaining.shift()!];
@@ -60,7 +62,7 @@ function chainSegments(segments:{edgeId:number;points:P2[]}[]){
   }
   const points=[...out[0].points];for(const segment of out.slice(1))points.push(...segment.points.slice(1));
   if(points.length<2||same2(points[0],points.at(-1)!))return null;
-  return{edgeIds:out.map(segment=>segment.edgeId),points};
+  return{segments:out,edgeIds:out.map(segment=>segment.edgeId),points};
 }
 
 export function buildStepSideFaceContour(summary:ImportSummary,selectedFaceIds:number[]):StepSideFaceContourResult{
@@ -77,5 +79,12 @@ export function buildStepSideFaceContour(summary:ImportSummary,selectedFaceIds:n
   const segments=edges.flatMap(edge=>{const points=sampleTopEdge(edge,z);return points?[{edgeId:edge.edgeId,points}]:[];});
   const chain=chainSegments(segments);
   if(!chain)return{target:null,eligibleFaceIds,errors:['Die gewählten STEP-Seitenflächen ergeben noch keine einzelne zusammenhängende offene Profilkante.']};
-  return{target:{targetKey:`step-side-faces:${selected.join(',')}`,faceIds:selected,edgeIds:chain.edgeIds,points:chain.points,zMm:z,topology:'open'},eligibleFaceIds,errors:[]};
+  return{target:{targetKey:`step-side-faces:${selected.join(',')}`,faceIds:selected,edgeIds:chain.edgeIds,segments:chain.segments,points:chain.points,zMm:z,topology:'open'},eligibleFaceIds,errors:[]};
+}
+
+export function stepSideFaceContourAfterExclusions(target:StepSideFaceContourTarget,excludedEdgeIds:number[]):StepSideFaceContourTarget|null{
+  if(!excludedEdgeIds.length)return target;
+  const excluded=new Set(excludedEdgeIds),kept=target.segments.filter(segment=>!excluded.has(segment.edgeId));
+  const chain=chainSegments(kept);if(!chain)return null;
+  return{...target,targetKey:`${target.targetKey}:edges:${chain.edgeIds.join(',')}`,edgeIds:chain.edgeIds,segments:chain.segments,points:chain.points};
 }
