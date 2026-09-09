@@ -1,8 +1,6 @@
 import type { CanonicalToolpath } from './canonicalToolpath';
 import { buildFacingToolpath } from './facingToolpath';
-import { generateContourGcode } from './gcode';
-import { canonicalContourToolpathFromGcode } from './contourCanonicalToolpath';
-import { applyContourLeads } from './contourLeads';
+import { buildDxfContourCanonicalState } from './gcode';
 import { buildStepContourOperationState } from './stepContourOperation';
 import { buildPocketOperationState } from './pocketOperationState';
 import { buildCarveCanonicalToolpath } from './carveCanonicalToolpath';
@@ -20,15 +18,11 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
   }
   if(operation.kind==='contour'){
     if(summary.kind==='step'){
-      const state=buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
+      const state=buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths});
       return state.ok?state.toolpath:null;
     }
-    const generated=generateContourGcode({summary,stock,stockMode,placement,orientation,wcs,operation});
-    if(!generated.ok)return null;
-    const base=canonicalContourToolpathFromGcode(generated.code,operation.tool.diameterMm);
-    if(!base)return null;
-    const led=applyContourLeads(base,operation);
-    return led.errors.length?null:led.toolpath;
+    const state=buildDxfContourCanonicalState({summary,stock,stockMode,placement,orientation,wcs,operation});
+    return state.ok?state.toolpath:null;
   }
   if(operation.kind==='pocket'){
     const state=buildPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths});

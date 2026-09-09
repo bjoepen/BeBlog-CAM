@@ -19,6 +19,7 @@ const rapid=(start:ToolpathPoint3,end:ToolpathPoint3):CanonicalMachineMotion=>({
 const line=(start:ToolpathPoint3,end:ToolpathPoint3,feedMmMin?:number):CanonicalSpatialSegment=>({kind:'line3',start,end,...(feedMmMin?{feedMmMin}:{})});
 
 function runCutMotions(run:CanonicalToolpathRun):CanonicalMachineMotion[]{
+  if(run.cutSegments3?.length)return run.cutSegments3.map(segment=>({...segment,start:{...segment.start},end:{...segment.end}}));
   if(run.segments?.length){
     return run.segments.map(segment=>segment.kind==='line'
       ?line(p3(segment.start,run.z),p3(segment.end,run.z))

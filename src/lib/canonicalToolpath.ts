@@ -18,6 +18,7 @@ export type CanonicalToolpathRun={
   z:number;
   points:ToolpathPoint2[];
   segments?:CanonicalToolpathSegment[];
+  cutSegments3?:CanonicalSpatialSegment[];
   entrySegments?:CanonicalSpatialSegment[];
   exitSegments?:CanonicalSpatialSegment[];
   retractAfter?:boolean;

@@ -174,6 +174,8 @@
           <section class="field-card"><div class="field-block"><b>Spitzenwinkel</b><span class="input-line"><input class="numeric-input" type="number" min="1" max="179" step="1" value={tool.angleDeg} oninput={e=>setNumber('angleDeg',e)}/><em>°</em></span></div></section>
           <section class="field-card"><div class="field-block"><b>Spitzen-Ø</b><span class="input-line"><input class="numeric-input" type="number" min="0.01" step="0.05" value={tool.tipDiameterMm} oninput={e=>setNumber('tipDiameterMm',e)}/><em>mm</em></span></div></section>
         {/if}
+        <section class="field-card"><div class="field-block"><b>Auskragung</b><span class="input-line"><input class="numeric-input" type="number" min="0.1" step="0.1" value={tool.stickoutMm} oninput={e=>setNumber('stickoutMm',e)}/><em>mm</em></span><small>Werkzeugspitze bis Unterkante Spannzange/Halter; wird von der 004Q-Reichweitenprüfung verwendet.</small></div></section>
+        <section class="field-card"><div class="field-block"><b>Halter-Ø</b><span class="input-line"><input class="numeric-input" type="number" min="0.1" step="0.1" value={tool.holderDiameterMm} oninput={e=>setNumber('holderDiameterMm',e)}/><em>mm</em></span><small>Konservativer Außendurchmesser von Spannzange bzw. Halter für die Kollisionsprüfung.</small></div></section>
       </div>
 
       <section class="recognized"><span>✓</span><div><b>{millingToolLabels[tool.kind]}</b><p>{toolGeometrySummary(tool)} · {tool.flutes} Schneide{tool.flutes===1?'':'n'}</p></div></section>

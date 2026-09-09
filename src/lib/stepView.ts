@@ -23,6 +23,12 @@ function normal(a:P3,b:P3,c:P3){
 
 export function projectPoint(p:P3,v:View):P2{return cameraPoint(p,v)}
 
+/**
+ * STEP display triangulation is a rendering mesh, not a trustworthy source of
+ * consistent outward triangle winding. Keep the complete shell and use opaque
+ * painter ordering for display. Visibility-aware picking is handled separately
+ * from rendering so curved/fillet faces can never disappear because of winding.
+ */
 export function projectTriangles(points:P3[],v:View,map:(p:P2)=>P2,faceIds:number[]=[]):ProjectedTriangle[]{
   const out:ProjectedTriangle[]=[];
   const light={x:-.35,y:-.45,z:.82};
@@ -34,5 +40,7 @@ export function projectTriangles(points:P3[],v:View,map:(p:P2)=>P2,faceIds:numbe
     const triangleIndex=Math.floor(i/3);
     out.push({points:[map(pa),map(pb),map(pc)],depth:(pa.depth+pb.depth+pc.depth)/3,shade:diffuse,faceId:faceIds[triangleIndex]??triangleIndex});
   }
+  // Camera-near geometry has the smaller depth value. SVG paints later nodes
+  // on top, therefore larger/farther depths must be emitted first.
   return out.sort((a,b)=>b.depth-a.depth);
 }

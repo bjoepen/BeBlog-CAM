@@ -16,6 +16,8 @@ export type FaceTargetOperationState={
   targetZ:number;
   roughBottomZ:number;
   levelCount:number;
+  islandMode:'preserve'|'clear';
+  islandLoopCount:number;
 };
 
 function rotate(point:P3,orientation:PartOrientation):P3{
@@ -92,6 +94,7 @@ export function buildFaceTargetOperationState(args:{
     stock.thickness,
     Math.max(.1,operation.stepDownMm),
     Math.max(0,operation.finishAllowanceMm),
+    operation.islandMode??'preserve',
   );
   if(!target)return null;
 
@@ -108,5 +111,7 @@ export function buildFaceTargetOperationState(args:{
     targetZ:target.targetZ,
     roughBottomZ:target.roughBottomZ,
     levelCount:target.levels.length,
+    islandMode:target.islandMode,
+    islandLoopCount:target.islandLoopCount,
   };
 }
