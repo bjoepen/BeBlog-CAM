@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { JobPreflightResult } from './jobPreflight';
   import { buildJobPreviewScene } from './jobPreviewScene';
 
@@ -6,6 +7,8 @@
   export let onClose:()=>void=()=>{};
 
   const width=1200,height=760,pad=70;
+  let viewport:SVGSVGElement;
+  let sceneShell:HTMLDivElement;
   let yaw=-0.72,pitch=0.48,zoom=1,panX=0,panY=0,dragging=false,lastX=0,lastY=0,dragMode:'orbit'|'pan'='orbit';
   $: scene=buildJobPreviewScene(result);
 
@@ -31,9 +34,44 @@
   function path(points:{x:number;y:number}[]){return points.map((point,index)=>{const p=screen(point);return`${index?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`;}).join(' ');}
   function resetView(){yaw=-0.72;pitch=0.48;zoom=1;panX=0;panY=0;}
   function wheel(event:WheelEvent){event.preventDefault();zoom=Math.max(.25,Math.min(8,zoom*(event.deltaY<0?1.12:.89)));}
-  function pointerDown(event:PointerEvent){dragging=true;lastX=event.clientX;lastY=event.clientY;dragMode=event.shiftKey||event.button===1?'pan':'orbit';(event.currentTarget as SVGSVGElement).setPointerCapture(event.pointerId);}
-  function pointerMove(event:PointerEvent){if(!dragging)return;const dx=event.clientX-lastX,dy=event.clientY-lastY;lastX=event.clientX;lastY=event.clientY;if(dragMode==='pan'){panX+=dx;panY+=dy;}else{yaw+=dx*.006;pitch=Math.max(-1.35,Math.min(1.35,pitch-dy*.006));}}
-  function pointerUp(){dragging=false;}
+  function pointerDown(event:PointerEvent){
+    if(event.button!==0&&event.button!==1)return;
+    event.preventDefault();
+    dragging=true;
+    lastX=event.clientX;
+    lastY=event.clientY;
+    dragMode=event.shiftKey||event.button===1?'pan':'orbit';
+    viewport.setPointerCapture?.(event.pointerId);
+  }
+  function pointerMove(event:PointerEvent){
+    if(!dragging)return;
+    const dx=event.clientX-lastX,dy=event.clientY-lastY;
+    lastX=event.clientX;
+    lastY=event.clientY;
+    if(dragMode==='pan'){panX+=dx;panY+=dy;}else{yaw+=dx*.006;pitch=Math.max(-1.35,Math.min(1.35,pitch-dy*.006));}
+  }
+  function pointerUp(event?:PointerEvent){
+    dragging=false;
+    if(event&&viewport?.hasPointerCapture?.(event.pointerId))viewport.releasePointerCapture(event.pointerId);
+  }
+
+  onMount(()=>{
+    const contextMenu=(event:MouseEvent)=>event.preventDefault();
+    viewport.addEventListener('pointerdown',pointerDown);
+    window.addEventListener('pointermove',pointerMove);
+    window.addEventListener('pointerup',pointerUp);
+    window.addEventListener('pointercancel',pointerUp);
+    sceneShell.addEventListener('wheel',wheel,{passive:false});
+    viewport.addEventListener('contextmenu',contextMenu);
+    return()=>{
+      viewport.removeEventListener('pointerdown',pointerDown);
+      window.removeEventListener('pointermove',pointerMove);
+      window.removeEventListener('pointerup',pointerUp);
+      window.removeEventListener('pointercancel',pointerUp);
+      sceneShell.removeEventListener('wheel',wheel);
+      viewport.removeEventListener('contextmenu',contextMenu);
+    };
+  });
 </script>
 
 <div class="backdrop" role="presentation" onclick={(event)=>event.currentTarget===event.target&&onClose()}>
@@ -43,15 +81,15 @@
       <div class="actions"><button onclick={resetView}>Ansicht zurücksetzen</button><button class="close" onclick={onClose}>Schließen</button></div>
     </header>
 
-    <div class="scene-shell">
+    <div class="scene-shell" bind:this={sceneShell}>
       {#if scene.motionCount}
-        <svg viewBox={`0 0 ${width} ${height}`} onwheel={wheel} onpointerdown={pointerDown} onpointermove={pointerMove} onpointerup={pointerUp} onpointercancel={pointerUp}>
+        <svg bind:this={viewport} viewBox={`0 0 ${width} ${height}`}>
           <rect x="0" y="0" width={width} height={height} class="background"/>
           {#each projected as segment}
             <path d={path(segment.points)} class:rapid={segment.kind==='rapid3'} class:cut={segment.kind!=='rapid3'}/>
           {/each}
         </svg>
-        <div class="legend"><span><i class="cut-swatch"></i>Schnittbewegung</span><span><i class="rapid-swatch"></i>Rapid / Sicherheitsbewegung</span><span>Maus: drehen · Shift+Ziehen: verschieben · Rad: zoomen</span></div>
+        <div class="legend"><span><i class="cut-swatch"></i>Schnittbewegung</span><span><i class="rapid-swatch"></i>Rapid / Sicherheitsbewegung</span><span>Maus: ziehen = drehen · Shift+Ziehen = verschieben · Rad = zoomen</span></div>
       {:else}
         <div class="empty"><strong>Keine freigegebenen Maschinenbewegungen vorhanden.</strong><span>Die Preview erfindet keine Ersatzbahn und zeigt deshalb nichts an.</span></div>
       {/if}
@@ -65,5 +103,5 @@
 </div>
 
 <style>
-  .backdrop{position:fixed;inset:0;z-index:1000;background:rgba(24,28,26,.72);display:grid;place-items:center;padding:28px}.dialog{width:min(1320px,calc(100vw - 56px));height:min(900px,calc(100vh - 56px));background:#f5f5f2;border:1px solid #c9ccc7;border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.28);display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}.dialog header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid #d9dbd6}.eyebrow{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:#727873;margin:0 0 5px}.dialog h2{margin:0;color:#2c3530}.subtitle{margin:4px 0 0;color:#6c726e;font-size:.82rem}.actions{display:flex;gap:8px}.actions button{border:1px solid #c9cdc8;background:#fff;border-radius:7px;padding:8px 11px;color:#3d4641;cursor:pointer}.actions .close{background:#2f3933;color:#fff;border-color:#2f3933}.scene-shell{position:relative;min-height:0;background:#eceeea}.scene-shell svg{display:block;width:100%;height:100%;touch-action:none;cursor:grab}.scene-shell svg:active{cursor:grabbing}.background{fill:#eceeea}.scene-shell path{fill:none;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}.scene-shell path.cut{stroke:#315f69;stroke-width:1.6}.scene-shell path.rapid{stroke:#8b7a59;stroke-width:1.05;stroke-dasharray:5 5;opacity:.72}.legend{position:absolute;left:16px;bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:rgba(250,250,247,.9);border:1px solid #d5d8d3;border-radius:8px;padding:8px 10px;font-size:.72rem;color:#626963}.legend span{display:flex;gap:6px;align-items:center}.legend i{width:18px;height:2px;display:inline-block}.cut-swatch{background:#315f69}.rapid-swatch{background:#8b7a59}.empty{height:100%;display:grid;place-content:center;text-align:center;gap:6px;color:#59615c}.empty span{font-size:.82rem;color:#747b76}.dialog footer{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:11px 16px;border-top:1px solid #d9dbd6;background:#f9f9f7}.dialog footer span{font-size:.72rem;padding:5px 7px;border-radius:5px;background:#eceeea;color:#59615c}
+  .backdrop{position:fixed;inset:0;z-index:1000;background:rgba(24,28,26,.72);display:grid;place-items:center;padding:28px}.dialog{width:min(1320px,calc(100vw - 56px));height:min(900px,calc(100vh - 56px));background:#f5f5f2;border:1px solid #c9ccc7;border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.28);display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}.dialog header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid #d9dbd6}.eyebrow{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:#727873;margin:0 0 5px}.dialog h2{margin:0;color:#2c3530}.subtitle{margin:4px 0 0;color:#6c726e;font-size:.82rem}.actions{display:flex;gap:8px}.actions button{border:1px solid #c9cdc8;background:#fff;border-radius:7px;padding:8px 11px;color:#3d4641;cursor:pointer}.actions .close{background:#2f3933;color:#fff;border-color:#2f3933}.scene-shell{position:relative;min-height:0;background:#eceeea}.scene-shell svg{display:block;width:100%;height:100%;touch-action:none;cursor:grab;user-select:none}.scene-shell svg:active{cursor:grabbing}.background{fill:#eceeea}.scene-shell path{fill:none;pointer-events:none;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}.scene-shell path.cut{stroke:#315f69;stroke-width:1.6}.scene-shell path.rapid{stroke:#8b7a59;stroke-width:1.05;stroke-dasharray:5 5;opacity:.72}.legend{position:absolute;left:16px;bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:rgba(250,250,247,.9);border:1px solid #d5d8d3;border-radius:8px;padding:8px 10px;font-size:.72rem;color:#626963;pointer-events:none}.legend span{display:flex;gap:6px;align-items:center}.legend i{width:18px;height:2px;display:inline-block}.cut-swatch{background:#315f69}.rapid-swatch{background:#8b7a59}.empty{height:100%;display:grid;place-content:center;text-align:center;gap:6px;color:#59615c}.empty span{font-size:.82rem;color:#747b76}.dialog footer{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:11px 16px;border-top:1px solid #d9dbd6;background:#f9f9f7}.dialog footer span{font-size:.72rem;padding:5px 7px;border-radius:5px;background:#eceeea;color:#59615c}
 </style>
