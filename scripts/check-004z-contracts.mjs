@@ -117,10 +117,25 @@ requireText(openRamp,'const prefix=rampPrefix(run.points,rampLengthMm)','ramp is
 requireText(openRamp,'const z1=previousZ+(run.z-previousZ)*(b.distanceMm/prefix.lengthMm)','ramp descends continuously from previous material level to target Z');
 requireText(openRamp,'for(let i=prefix.points.length-1;i>0;i--)','ramp prefix is cleaned back to contour start at final depth');
 requireText(openRamp,'copy.exitSegments=undefined','open groove uses no lateral lead-out');
-requireText(state,"operation.topology==='open'?applyOpenContourRampEntry(tabbed.toolpath,operation,startZ)",'STEP open contour consumes the ramp with reststock-aware start Z');
+requireText(state,"operation.topology==='open'?applyOpenContourRampEntry(finished.toolpath,operation,startZ)",'STEP open contour consumes the ramp with reststock-aware start Z before tabs');
 requireText(state,"operation.topology==='closed'?applyContourLeads(entered.toolpath,operation)",'closed STEP contours retain tangential leads');
 requireText(app,'>Rampe</button>','STEP open contour exposes ramp entry');
 requireText(app,'>Rampenlänge <input','STEP open contour exposes ramp length');
 requireText(app,'Am Ende folgt der normale Retract auf Sicherheits-Z.','STEP open UI explains vertical exit semantics');
+const stepTabs=read('src/lib/stepContourTabs.ts');
+const canonical=read('src/lib/canonicalToolpath.ts');
+const safeMotion=read('src/lib/safeMotionChain.ts');
+const contourPost=read('src/lib/contourCanonicalToolpath.ts');
+requireText(canonical,'cutSegments3?:CanonicalSpatialSegment[]','004Z-F can represent tab lifts inside one logical contour run');
+requireText(stepTabs,'export function applyStepContourTabs','004Z-F owns STEP contour tabs explicitly');
+requireText(stepTabs,"operation.topology==='closed'",'004Z-F handles closed and open path metrics explicitly');
+requireText(stepTabs,"path.closed?path.total/count:path.total/(count+1)",'open tabs keep free margins at both contour ends');
+requireText(stepTabs,'const tabZ=finalZ+cfg.heightMm','tab height is resolved from the actual final contour Z, not absolute project zero');
+requireText(stepTabs,'cutSegments3=spatialTabCut','deep passes receive spatial tab cuts');
+requireText(stepTabs,'ohne Zwischen-Retracts','004Z-F reports stay-down tab semantics');
+requireText(safeMotion,'if(run.cutSegments3?.length)return run.cutSegments3.map','004T materializes tab lifts as cutting motions instead of separate safe-Z runs');
+requireText(contourPost,'if(run.cutSegments3?.length)','standalone contour posting emits the same spatial tab truth');
+requireText(state,'const tabbed=applyStepContourTabs(led.toolpath,operation,startZ)','tabs are applied after ramp/leads so logical entry/exit happens only once per passage');
+requireText(app,'STEP auch für offene Konturen','Bearbeiten explains open STEP tab support');
 
-console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B island semantics, 004Z-C safe stay-down links, 004Z-D curved-view caching, and 004Z-E2 keeps open-groove entry on-path with reststock-aware ramps while closed contours retain tangential leads.');
+console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B island semantics, 004Z-C safe stay-down links, 004Z-D curved-view caching, 004Z-E2 keeps open-groove entry on-path with reststock-aware ramps while closed contours retain tangential leads, and 004Z-F keeps STEP tabs inside one canonical XYZ contour passage.');
