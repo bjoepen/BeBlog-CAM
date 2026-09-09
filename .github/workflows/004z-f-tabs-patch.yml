@@ -1,0 +1,25 @@
+name: 004Z-F tabs patch
+on:
+  push:
+    branches: [build/004z-step-contour-target-contract]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: build/004z-step-contour-target-contract
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/apply-004z-f-tabs.mjs
+      - run: node scripts/check-004z-contracts.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.svelte src/lib/canonicalToolpath.ts src/lib/safeMotionChain.ts src/lib/contourCanonicalToolpath.ts src/lib/stepContourOperation.ts src/lib/stepContourTabs.ts scripts/check-004z-contracts.mjs
+          git commit -m "feat 004Z-F: keep STEP tabs in one canonical XYZ passage"
+          git push origin HEAD:build/004z-step-contour-target-contract
