@@ -47,7 +47,7 @@ export function isPlanarRasterPointSafe(loops:PlanarRasterLoop[],point:ToolpathP
   return safeAt(loops,point,toolDiameterMm/2);
 }
 
-function safeConnector(
+function safeSegment(
   loops:PlanarRasterLoop[],
   a:ToolpathPoint2,
   b:ToolpathPoint2,
@@ -62,6 +62,53 @@ function safeConnector(
     if(!safeAt(loops,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},radius))return false;
   }
   return true;
+}
+
+function safePolyline(
+  loops:PlanarRasterLoop[],
+  points:ToolpathPoint2[],
+  radius:number,
+  sampleStep:number,
+){
+  if(points.length<2)return false;
+  for(let i=1;i<points.length;i++)if(!safeSegment(loops,points[i-1],points[i],radius,sampleStep))return false;
+  return true;
+}
+
+/**
+ * 004Z-C stay-down linker.
+ *
+ * A direct diagonal between two neighbouring raster rows can briefly leave the
+ * cutter-centre-safe region on rounded/angled boundaries. That used to split an
+ * otherwise connected raster into many canonical runs, forcing 004T to retract
+ * to Safe-Z after almost every row.
+ *
+ * We first accept the direct connector. If that is unsafe, two orthogonal
+ * doglegs are tried. Every individual segment is sampled with the exact same
+ * cutter-radius clearance test as the raster itself. Therefore a stay-down link
+ * is only emitted when the complete cutter-centre path remains inside the
+ * already approved machining region. Otherwise null is returned and 004T keeps
+ * the conservative Safe-Z retract.
+ */
+export function buildPlanarRasterStayDownConnector(
+  loops:PlanarRasterLoop[],
+  a:ToolpathPoint2,
+  b:ToolpathPoint2,
+  toolDiameterMm:number,
+  sampleStep?:number,
+):ToolpathPoint2[]|null{
+  if(!(toolDiameterMm>0)||!loops.length)return null;
+  const radius=toolDiameterMm/2;
+  const step=sampleStep??Math.max(.15,Math.min(.75,toolDiameterMm/8));
+  const candidates:ToolpathPoint2[][]=[
+    [a,b],
+    [a,{x:b.x,y:a.y},b],
+    [a,{x:a.x,y:b.y},b],
+  ];
+  for(const candidate of candidates){
+    if(safePolyline(loops,candidate,radius,step))return candidate;
+  }
+  return null;
 }
 
 function bounds(loops:PlanarRasterLoop[]){
@@ -122,9 +169,15 @@ export function buildPlanarRasterChains(
       continue;
     }
     const from=current[current.length-1],to=segment.points[0];
-    if(safeConnector(loops,from,to,radius,sampleStep)){
-      if(Math.hypot(to.x-from.x,to.y-from.y)>EPS)current.push(to);
-      current.push(...segment.points.slice(1));
+    const connector=buildPlanarRasterStayDownConnector(loops,from,to,toolDiameterMm,sampleStep);
+    if(connector){
+      for(const point of connector.slice(1)){
+        const previous=current[current.length-1];
+        if(Math.hypot(point.x-previous.x,point.y-previous.y)>EPS)current.push(point);
+      }
+      const final=segment.points.at(-1)!;
+      const previous=current[current.length-1];
+      if(Math.hypot(final.x-previous.x,final.y-previous.y)>EPS)current.push(final);
     }else{
       linked.push({points:current});
       current=[...segment.points];
