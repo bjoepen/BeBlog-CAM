@@ -9,14 +9,14 @@ const line3=(start:ToolpathPoint3,end:ToolpathPoint3,feedMmMin:number):Canonical
 
 export type StepContourTabResolution={enabled:boolean;count:number;widthMm:number;heightMm:number;errors:string[];warnings:string[]};
 
-type PathMetric={points:ToolpathPoint2[];lengths:number[];total:number;closed:boolean};
+type PathMetric={points:ToolpathPoint2[];lengths:number[];vertexDistances:number[];total:number;closed:boolean};
 
 function metric(run:CanonicalToolpathRun,closed:boolean):PathMetric{
   const points=run.points.map(point=>({...point}));
   if(closed&&points.length>1&&dist(points[0],points.at(-1)!)>EPS)points.push({...points[0]});
-  const lengths:number[]=[];let total=0;
-  for(let i=1;i<points.length;i++){const length=dist(points[i-1],points[i]);lengths.push(length);total+=length;}
-  return{points,lengths,total,closed};
+  const lengths:number[]=[],vertexDistances:number[]=[0];let total=0;
+  for(let i=1;i<points.length;i++){const length=dist(points[i-1],points[i]);lengths.push(length);total+=length;vertexDistances.push(total);}
+  return{points,lengths,vertexDistances,total,closed};
 }
 
 function pointAt(path:PathMetric,s:number):ToolpathPoint2{
@@ -42,7 +42,7 @@ function spatialTabCut(run:CanonicalToolpathRun,operation:ContourOperation,tabZ:
   if(path.points.length<2||!(path.total>EPS))return null;
   const intervals=tabIntervals(path,Math.max(1,Math.floor(operation.tabCount??4)),operation.tabWidthMm??6);
   if(!intervals.length)return null;
-  const boundaries=[0,path.total,...intervals.flatMap(interval=>[interval.start,interval.end])].sort((a,b)=>a-b).filter((value,index,all)=>index===0||Math.abs(value-all[index-1])>EPS);
+  const boundaries=[...path.vertexDistances,...intervals.flatMap(interval=>[interval.start,interval.end])].sort((a,b)=>a-b).filter((value,index,all)=>index===0||Math.abs(value-all[index-1])>EPS);
   const inTab=(s:number)=>intervals.some(interval=>s>interval.start-EPS&&s<interval.end+EPS);
   const motions:CanonicalSpatialSegment[]=[];
   let current=p3(pointAt(path,0),run.z);
@@ -78,11 +78,11 @@ export function applyStepContourTabs(toolpath:CanonicalToolpath,operation:Contou
   if(cfg.errors.length)return{toolpath,errors:cfg.errors,warnings:cfg.warnings};
   const tabZ=finalZ+cfg.heightMm;
   let tabbedRuns=0;
-  const runs=toolpath.runs.map((run,index)=>{
+  const runs=toolpath.runs.map(run=>{
     const copy:CanonicalToolpathRun={...run,cutSegments3:undefined};
     if(run.z>=tabZ-EPS)return copy;
     const cutSegments3=spatialTabCut(copy,operation,tabZ);
-    if(!cutSegments3?.length){return copy;}
+    if(!cutSegments3?.length)return copy;
     tabbedRuns++;
     return{...copy,cutSegments3};
   });
