@@ -31,14 +31,21 @@
     };
   }
 
-  // Keep view-state dependencies explicit. Svelte's legacy dependency analysis
-  // does not look through arbitrary function calls or nested function bodies.
+  function renderPath(points:{x:number;y:number}[],viewFit:{scale:number;offsetX:number;offsetY:number}){
+    return points.map((point,index)=>{
+      const x=viewFit.offsetX+point.x*viewFit.scale;
+      const y=viewFit.offsetY-point.y*viewFit.scale;
+      return`${index?'L':'M'}${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(' ');
+  }
+
+  // Keep every view-state dependency explicit. Svelte's legacy dependency
+  // analysis does not look through arbitrary function calls in markup.
   $: projected=scene.segments.map(segment=>({...segment,points:segment.points.map(point=>project(point,yaw,pitch))}));
   $: projectedPoints=projected.flatMap(segment=>segment.points);
   $: fit=computeFit(projectedPoints,zoom,panX,panY);
+  $: rendered=projected.map(segment=>({...segment,d:renderPath(segment.points,fit)}));
 
-  function screen(point:{x:number;y:number}){return{x:fit.offsetX+point.x*fit.scale,y:fit.offsetY-point.y*fit.scale};}
-  function path(points:{x:number;y:number}[]){return points.map((point,index)=>{const p=screen(point);return`${index?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`;}).join(' ');}
   function resetView(){yaw=-0.72;pitch=0.48;zoom=1;panX=0;panY=0;}
   function wheel(event:WheelEvent){event.preventDefault();zoom=Math.max(.25,Math.min(8,zoom*Math.exp(-event.deltaY*.002)));}
   function pointerDown(event:PointerEvent){
@@ -97,8 +104,8 @@
       {#if scene.motionCount}
         <svg viewBox={`0 0 ${width} ${height}`} aria-label="Werkzeugweg des Gesamtjobs">
           <rect x="0" y="0" width={width} height={height} class="background"/>
-          {#each projected as segment}
-            <path d={path(segment.points)} class:rapid={segment.kind==='rapid3'} class:cut={segment.kind!=='rapid3'}/>
+          {#each rendered as segment}
+            <path d={segment.d} class:rapid={segment.kind==='rapid3'} class:cut={segment.kind!=='rapid3'}/>
           {/each}
         </svg>
         <div class="legend"><span><i class="cut-swatch"></i>Schnittbewegung</span><span><i class="rapid-swatch"></i>Rapid / Sicherheitsbewegung</span><span>Maus: ziehen = drehen · Shift+Ziehen = verschieben · Rad = zoomen</span></div>
