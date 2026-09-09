@@ -3,7 +3,7 @@
   import { save } from '@tauri-apps/plugin-dialog';
   import type { CamOperation, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem } from './types';
   import { generateJobGcode } from './jobGcode';
-  import type { JobPreflightResult } from './jobPreflight';
+  import { validateJob, type JobPreflightResult } from './jobPreflight';
   import type { FixtureVolume } from './fixtureCollision';
   import type { MachineEnvelope, MachineWcsOrigin } from './machineEnvelope';
   import type { SpindleHeadGeometry } from './spindleHeadCollision';
@@ -22,14 +22,15 @@
   export let machineEnvelope:MachineEnvelope|null=null;
   export let machineWcsOrigin:MachineWcsOrigin|null=null;
   export let spindleHead:SpindleHeadGeometry|null=null;
-  export let preflight:JobPreflightResult;
+  export let preflight:JobPreflightResult|null=null;
 
   let copied=false;
   let exportMessage='';
   let exportState:''|'saved'|'error'='';
 
   $: enabledOperations=operations.filter(operation=>operation.enabled!==false);
-  $: raw=generateJobGcode({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures,machineEnvelope,machineWcsOrigin,spindleHead,preflight});
+  $: resolvedPreflight=preflight??validateJob({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures,machineEnvelope,machineWcsOrigin,spindleHead});
+  $: raw=generateJobGcode({summary,stock,stockMode,placement,orientation,wcs,operations,fixtures,machineEnvelope,machineWcsOrigin,spindleHead,preflight:resolvedPreflight});
   $: processed=raw.ok?postProcessGcode(raw.code,$postProcessorStore):{ok:false,errors:raw.errors,warnings:raw.warnings,code:''};
   $: displayCode=processed.code;
   $: valid=raw.ok&&processed.ok&&raw.operationCount>0&&!!displayCode;
