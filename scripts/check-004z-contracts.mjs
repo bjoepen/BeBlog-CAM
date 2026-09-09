@@ -108,5 +108,13 @@ requireText(planarRaster,"[a,{x:b.x,y:a.y},b]",'004Z-C can route an orthogonal d
 requireText(planarRaster,"[a,{x:a.x,y:b.y},b]",'004Z-C tries the mirrored orthogonal dogleg before conceding a retract');
 requireText(planarRaster,'const connector=buildPlanarRasterStayDownConnector','raster chaining consumes the 004Z-C safe-link planner');
 requireText(planarRaster,'if(connector)','safe links remain one canonical run; unsafe links stay split for 004T Safe-Z');
+const contourLeads=read('src/lib/contourLeads.ts');
+rejectText(contourLeads,"operation.topology!=='closed'",'004Z-E must not reject open STEP contours');
+requireText(contourLeads,'function applyLeadToRun','004Z-E applies leads per canonical contour passage');
+requireText(contourLeads,'vertical(leadStart,safeZMm,run.z)','004Z-E plunges at the tangent lead start instead of diagonally rapid-plunging');
+requireText(contourLeads,'horizontal(leadStart,first,run.z)','004Z-E enters along the local first tangent');
+requireText(contourLeads,'horizontal(last,leadEnd,run.z)','004Z-E exits along the local last tangent');
+requireText(contourLeads,'vertical(leadEnd,run.z,safeZMm)','004Z-E retracts at the lead end before further rapids');
+requireText(contourLeads,"operation.topology==='open'?'offene':'geschlossene'",'004Z-E reports open and closed lead semantics explicitly');
 
-console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B adds explicit preserve/clear island semantics; 004Z-C reduces raster retracts only through cutter-safe stay-down links.');
+console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B island semantics, 004Z-C safe stay-down links, 004Z-D curved-view caching, and 004Z-E safe tangential leads are gated.');
