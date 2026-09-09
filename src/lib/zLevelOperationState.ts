@@ -79,7 +79,11 @@ export function buildZLevelOperationState(args:{
       toolpath:planar.toolpath,
       levelCount:planar.levelCount,
       errors:[],
-      warnings:[],
+      warnings:planar.islandLoopCount?[
+        planar.islandMode==='clear'
+          ?`004Z-B: ${planar.islandLoopCount} Inneninsel${planar.islandLoopCount===1?'':'n'} wird/werden bis zur Zielfläche mit geschruppt.`
+          :`004Z-B: ${planar.islandLoopCount} Inneninsel${planar.islandLoopCount===1?'':'n'} bleibt/bleiben beim Flächenschruppen stehen.`
+      ]:[],
       targetZ:planar.targetZ,
       roughBottomZ:planar.roughBottomZ,
       targetMinZ:planar.targetZ,

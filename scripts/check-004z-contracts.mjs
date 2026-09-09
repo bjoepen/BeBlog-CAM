@@ -85,5 +85,15 @@ requireText(geometryView,'const edges=ep.filter(edge=>stepEdgeSelectable(edge.ed
 requireText(zLevel,'const planarFallback=curved.errors.includes','planar face-target failures no longer masquerade as curved targets');
 requireText(zLevel,'targetKind:\'planar-face\'','top planar faces remain classified as planar');
 requireText(zLevel,'„Stock – Model“ verwenden','stock-top planar face explains the correct Stock−Model workflow');
+const faceTargetRoughing=read('src/lib/faceTargetRoughing.ts');
+const faceTargetOperation=read('src/lib/faceTargetOperation.ts');
+requireText(types,"export type ZLevelIslandMode='preserve'|'clear'",'004Z-B persists an explicit face-target island decision');
+requireText(types,"islandMode?:ZLevelIslandMode",'Z-level operation stores island semantics');
+requireText(faceTargetRoughing,'function outerBoundaryLoops','004Z-B distinguishes exterior target boundaries from nested islands');
+requireText(faceTargetRoughing,"const loops=islandMode==='clear'?outerLoops:allLoops",'clear mode fills inner target loops while preserve mode keeps them');
+requireText(faceTargetOperation,"operation.islandMode??'preserve'",'canonical face-target operation forwards island semantics');
+requireText(zLevel,'004Z-B:','Prüfen reports whether inner islands were preserved or cleared');
+requireText(app,'>Stehen lassen</button>','Bearbeiten exposes preserve-islands explicitly');
+requireText(app,'>Mit schruppen</button>','Bearbeiten exposes clear-islands explicitly');
 
-console.log('004Z PASS: STEP contours use face-first selection, opaque visibility-aware STEP picking, OCCT-trimmed geometry, automatic 004P rest-stock start Z with model-profile depth semantics, edge-second refinement, and one canonical Bearbeiten/Prüfen/NC path.');
+console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B adds explicit preserve/clear island semantics for Face-Target roughing.');

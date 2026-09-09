@@ -89,7 +89,8 @@ export function operationSummary(operation:CamOperation):string {
   }
   if(operation.kind==='z-level-roughing'){
     const source=(operation.roughingMode??'face-target')==='model'?'Modell':'Face Target';
-    return `${source} · ${operation.stepDownMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Aufmaß · ${tool}`;
+    const islands=(operation.islandMode??'preserve')==='clear'?'Inseln mit schruppen':'Inseln stehen lassen';
+    return `${source} · ${islands} · ${operation.stepDownMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Aufmaß · ${tool}`;
   }
   if(operation.kind==='contour'){
     const side=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');

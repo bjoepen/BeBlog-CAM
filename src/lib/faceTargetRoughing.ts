@@ -7,6 +7,9 @@ export type FaceTargetRoughing = {
   stockTopZ: number;
   levels: number[];
   loops: FaceTargetLoop[];
+  islandMode:'preserve'|'clear';
+  boundaryLoopCount:number;
+  islandLoopCount:number;
 };
 
 const EPS=1e-5;
@@ -44,6 +47,35 @@ function boundaryLoops(points:P3[],faceIds:number[],selected:Set<number>):FaceTa
   return loops;
 }
 
+function pointInLoop(loop:FaceTargetLoop,p:{x:number;y:number}){
+  let inside=false;const poly=loop.points;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const a=poly[i],b=poly[j];
+    const hit=((a.y>p.y)!==(b.y>p.y))&&p.x<((b.x-a.x)*(p.y-a.y))/(b.y-a.y||Number.EPSILON)+a.x;
+    if(hit)inside=!inside;
+  }
+  return inside;
+}
+
+function interiorPoint(loop:FaceTargetLoop){
+  const pts=loop.points;if(!pts.length)return{x:0,y:0};
+  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  const candidates=[
+    {x:pts.reduce((s,p)=>s+p.x,0)/pts.length,y:pts.reduce((s,p)=>s+p.y,0)/pts.length},
+    {x:(minX+maxX)/2,y:(minY+maxY)/2},
+  ];
+  for(const p of candidates)if(pointInLoop(loop,p))return p;
+  for(let iy=1;iy<10;iy++)for(let ix=1;ix<10;ix++){const p={x:minX+(maxX-minX)*ix/10,y:minY+(maxY-minY)*iy/10};if(pointInLoop(loop,p))return p;}
+  return pts[0];
+}
+
+function outerBoundaryLoops(loops:FaceTargetLoop[]){
+  return loops.filter((loop,index)=>{
+    const p=interiorPoint(loop);
+    return !loops.some((other,otherIndex)=>otherIndex!==index&&pointInLoop(other,p));
+  });
+}
+
 function levels(stockTop:number,roughBottom:number,stepDown:number):number[]{
   if(!(stepDown>0)||stockTop<=roughBottom+EPS)return[];
   const result:number[]=[];
@@ -59,6 +91,7 @@ export function buildFaceTargetRoughing(
   stockTopZ:number,
   stepDownMm:number,
   finishAllowanceMm:number,
+  islandMode:'preserve'|'clear'='preserve',
 ):FaceTargetRoughing|null{
   if(!selectedFaceIds.length||faceIds.length!==Math.floor(part.length/3))return null;
   const selected=new Set(selectedFaceIds),vertices:P3[]=[];
@@ -78,7 +111,11 @@ export function buildFaceTargetRoughing(
   if(targetZ>=stockTopZ-EPS||targetZ>partMaxZ+1e-4)return null;
 
   const roughBottomZ=targetZ+Math.max(0,finishAllowanceMm);
-  const loops=boundaryLoops(part,faceIds,selected);
-  if(!loops.length)return null;
-  return{targetZ,roughBottomZ,stockTopZ,levels:levels(stockTopZ,roughBottomZ,stepDownMm),loops};
+  const allLoops=boundaryLoops(part,faceIds,selected);
+  if(!allLoops.length)return null;
+  const outerLoops=outerBoundaryLoops(allLoops);
+  if(!outerLoops.length)return null;
+  const islandLoopCount=Math.max(0,allLoops.length-outerLoops.length);
+  const loops=islandMode==='clear'?outerLoops:allLoops;
+  return{targetZ,roughBottomZ,stockTopZ,levels:levels(stockTopZ,roughBottomZ,stepDownMm),loops,islandMode,boundaryLoopCount:allLoops.length,islandLoopCount};
 }
