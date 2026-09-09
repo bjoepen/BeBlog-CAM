@@ -137,7 +137,15 @@ requireText(safeMotion,'if(run.cutSegments3?.length)return run.cutSegments3.map'
 requireText(contourPost,'if(run.cutSegments3?.length)','standalone contour posting emits the same spatial tab truth');
 requireText(state,'const tabbed=applyStepContourTabs(led.toolpath,operation,startZ)','tabs are applied after ramp/leads so logical entry/exit happens only once per passage');
 requireText(app,'STEP auch für offene Konturen','Bearbeiten explains open STEP tab support');
+const dxfGcode=read('src/lib/gcode.ts');
+requireText(dxfGcode,'export function buildDxfContourCanonicalState','004Z-F1 gives DXF a direct canonical contour state');
+requireText(dxfGcode,'const led=applyContourLeads(finished.toolpath,args.operation)','DXF resolves the logical lead before tabs');
+requireText(dxfGcode,'const tabbed=applyStepContourTabs(led.toolpath,args.operation,0)','DXF reuses the same spatial tab kernel as STEP');
+rejectText(dxfGcode,'applyContourTabs','legacy split-run DXF tab kernel must not return');
+requireText(active,'buildDxfContourCanonicalState','Bearbeiten consumes DXF canonical XYZ tabs directly');
+requireText(preflight,'buildDxfContourCanonicalState','Prüfen consumes DXF canonical XYZ tabs directly');
+rejectText(preflight,'canonicalContourToolpathFromGcode(r.code,operation.tool.diameterMm)','Prüfen must not flatten DXF XYZ tabs by reparsing emitted G-code');
 requireText(geometryView,'run.cutSegments3?.length?run.cutSegments3.map(segment=>sampleMachineMotion(segment)','004Z-F STEP preview renders spatial tab lifts instead of flattening them to run.z');
 requireText(geometryView,'run.cutSegments3?.length?run.cutSegments3.map(segment=>({z:segment.end.z,points:sampleMachineMotion(segment)','004Z-F 2D/2.5D preview also preserves tab Z motion');
 
-console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B island semantics, 004Z-C safe stay-down links, 004Z-D curved-view caching, 004Z-E2 keeps open-groove entry on-path with reststock-aware ramps while closed contours retain tangential leads, and 004Z-F keeps STEP tabs inside one canonical XYZ contour passage.');
+console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B island semantics, 004Z-C safe stay-down links, 004Z-D curved-view caching, 004Z-E2 keeps open-groove entry on-path with reststock-aware ramps while closed contours retain tangential leads, 004Z-F keeps STEP tabs inside one canonical XYZ contour passage, and 004Z-F1 unifies DXF on that same spatial tab contract.');
