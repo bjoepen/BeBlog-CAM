@@ -11,8 +11,9 @@
   import { sliceTrianglesByStep } from './zLevelSlice';
   import { buildModelSliceRegions } from './modelSliceRegion';
   import { buildRoughingRegions } from './roughingRegion';
-  import { buildCurvedFaceTarget, curvedFaceTargetZAt } from './curvedFaceTarget';
+  import { buildCurvedFaceTarget } from './curvedFaceTarget';
   import { buildCurvedFaceRoughing } from './curvedFaceRoughing';
+  import { cachedCurvedViewTarget, cachedCurvedViewSamples, cachedCurvedViewRoughing, curvedViewCacheStats } from './curvedViewCache';
   import { ballnoseContactAt } from './ballnoseSurfaceContact';
   import { buildModelRoughingCanonicalToolpath } from './modelRoughingToolpath';
   import { buildStepManufacturingFeatureSource } from './stepManufacturingFeatures';
@@ -107,13 +108,9 @@
     const b=bounds3(raw),p=place(b.minX,b.maxX,b.minY,b.maxY);
     const place3=(q:P3)=>({x:q.x+p.dx,y:q.y+p.dy,z:q.z-b.minZ+placement.offsetZ});
     const part=raw.map(place3),faceIds=summary.brep?.displayFaceIds??[];
-    const curvedFaceTarget=includeCurvedFaceProof?buildCurvedFaceTarget(part,faceIds,faceSelection):null;
-    const curvedFaceSampleWorld:{x:number;y:number;z:number}[][]=[];
-    if(curvedFaceTarget?.valid&&curvedFaceTarget.bounds){
-      const bounds=curvedFaceTarget.bounds;const nx=24,ny=24;
-      for(let iy=0;iy<=ny;iy++){const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;let row:{x:number;y:number;z:number}[]=[];for(let ix=0;ix<=nx;ix++){const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;const z=curvedFaceTargetZAt(curvedFaceTarget,x,y);if(z===null){if(row.length>=2)curvedFaceSampleWorld.push(row);row=[];}else row.push({x,y,z:z+0.04});}if(row.length>=2)curvedFaceSampleWorld.push(row);}
-      for(let ix=0;ix<=nx;ix++){const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;let column:{x:number;y:number;z:number}[]=[];for(let iy=0;iy<=ny;iy++){const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;const z=curvedFaceTargetZAt(curvedFaceTarget,x,y);if(z===null){if(column.length>=2)curvedFaceSampleWorld.push(column);column=[];}else column.push({x,y,z:z+0.04});}if(column.length>=2)curvedFaceSampleWorld.push(column);}
-    }
+    const curvedCacheContext={fileName:summary.fileName,vertexCount:summary.brep?.displayVertices.length??0,orientation,placement,stock};
+    const curvedFaceTarget=includeCurvedFaceProof?cachedCurvedViewTarget(curvedCacheContext,part,faceIds,faceSelection):null;
+    const curvedFaceSampleWorld=curvedFaceTarget?.valid?cachedCurvedViewSamples(curvedCacheContext,curvedFaceTarget,faceSelection):[];
     const modelSlices=includeModelRegions?sliceTrianglesByStep(part,Math.max(.1,modelSliceStepMm)):[];
     const modelRegions=buildModelSliceRegions(modelSlices);
     const roughingRegions=(includeRoughingRegions||includeModelToolpath)?buildRoughingRegions(modelRegions,{minX:0,minY:0,maxX:stock.width,maxY:stock.height}):[];
@@ -123,7 +120,7 @@
     const invalidRoughingWorld=roughingRegions.flatMap(region=>region.valid?[]:[[{x:0,y:0,z:region.z},{x:stock.width,y:0,z:region.z},{x:stock.width,y:stock.height,z:region.z},{x:0,y:stock.height,z:region.z}]]);
     const ballnoseContactWorld:{surface:{x:number;y:number;z:number};center:{x:number;y:number;z:number};normalEnd:{x:number;y:number;z:number}}[]=[];
     if(includeBallnoseContactProof&&curvedFaceTarget?.valid&&curvedFaceTarget.bounds&&roughingOperation){const bounds=curvedFaceTarget.bounds;const ballRadius=Math.max(.05,roughingOperation.tool.diameterMm/2);const nx=5,ny=4;for(let iy=1;iy<ny;iy++){const y=bounds.minY+(bounds.maxY-bounds.minY)*iy/ny;for(let ix=1;ix<nx;ix++){const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;const result=ballnoseContactAt(curvedFaceTarget,x,y,ballRadius);if(!result.valid||!result.contact)continue;const {surface,center,normal}=result.contact;const normalScale=Math.max(2,Math.min(8,ballRadius*1.5));ballnoseContactWorld.push({surface:{...surface,z:surface.z+0.03},center:{...center,z:center.z+0.03},normalEnd:{x:surface.x+normal.x*normalScale,y:surface.y+normal.y*normalScale,z:surface.z+normal.z*normalScale+0.03}});}}}
-    const curvedRoughing=includeCurvedFaceRoughing&&curvedFaceTarget?.valid&&roughingOperation?buildCurvedFaceRoughing(curvedFaceTarget,stock.thickness,roughingOperation.tool.diameterMm,roughingOperation.stepDownMm,roughingOperation.stepoverPercent,roughingOperation.finishAllowanceMm):null;
+    const curvedRoughing=includeCurvedFaceRoughing&&curvedFaceTarget?.valid&&roughingOperation?cachedCurvedViewRoughing(curvedCacheContext,curvedFaceTarget,faceSelection,roughingOperation):null;
     const curvedRoughingWorld=curvedRoughing?.levels.flatMap(level=>level.chains.map(chain=>chain.points.map(point=>({x:point.x,y:point.y,z:level.z+0.06}))))??[];
     const edgeWorld=decodeStepEdges(summary.brep?.displayEdges).map(edge=>{const points:P3[]=[];for(let i=0;i+2<edge.points.length;i+=3)points.push(place3(rotate3({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]})));return{edgeId:edge.edgeId,points}}).filter(edge=>edge.points.length>=2);
     const wp=wcsPoint();
@@ -160,7 +157,7 @@
     const ballnoseContactProof=bn.map(item=>({surface:map(item.surface),center:map(item.center),normalEnd:map(item.normalEnd)}));
     const ballnoseContactStatus=!includeBallnoseContactProof?'':!roughingOperation?'Z-Level-Schruppoperation als Werkzeugquelle erforderlich.':!curvedFaceTarget?.valid?'Gekrümmte Zielfläche wählen.':ballnoseContactProof.length?`${ballnoseContactProof.length} Kontaktproben · Kugelradius ${(roughingOperation.tool.diameterMm/2).toFixed(3)} mm`:'Keine gültigen Kontaktproben auf der gewählten Fläche.';
     const curvedRoughingRunCount=curvedRoughing?.levels.reduce((sum,level)=>sum+level.chains.length,0)??0;
-    const curvedRoughingStatus=!includeCurvedFaceRoughing?'':!faceSelection.length?'Hohlkehlen-Fläche wählen.':!roughingOperation?'Z-Level-Schruppoperation erforderlich.':curvedRoughing?.valid?`${curvedRoughing.levels.length} Z-Ebenen · ${curvedRoughingRunCount} Schruppbahnen · Ø ${roughingOperation.tool.diameterMm.toFixed(2)} mm · ${roughingOperation.stepDownMm.toFixed(2)} mm Zustellung`:curvedRoughing?.errors[0]??'Keine sichere Hohlkehlen-Schruppbahn.';
+    const curvedRoughingStatus=!includeCurvedFaceRoughing?'':!faceSelection.length?'Hohlkehlen-Fläche wählen.':!roughingOperation?'Z-Level-Schruppoperation erforderlich.':curvedRoughing?.valid?`${curvedRoughing.levels.length} Z-Ebenen · ${curvedRoughingRunCount} Schruppbahnen · Ø ${roughingOperation.tool.diameterMm.toFixed(2)} mm · ${roughingOperation.stepDownMm.toFixed(2)} mm Zustellung · Cache ${curvedViewCacheStats.roughingBuilds}`:curvedRoughing?.errors[0]??'Keine sichere Hohlkehlen-Schruppbahn.';
     const curvedFaceSampleCount=curvedFaceSampleWorld.reduce((sum,line)=>sum+line.length,0);
     const curvedFaceStatus=!includeCurvedFaceProof?'':!faceSelection.length?'Fläche wählen.':curvedFaceTarget?.valid&&curvedFaceTarget.bounds?`Z(x,y) gültig · ${curvedFaceTarget.triangles.length} Dreiecke · Z ${curvedFaceTarget.bounds.minZ.toFixed(3)}…${curvedFaceTarget.bounds.maxZ.toFixed(3)} mm · ${curvedFaceSampleCount} Samples`:curvedFaceTarget?.errors[0]??'Gekrümmte Zielfläche ist nicht als Z(x,y) verwendbar.';
     const modelRoughingRunCount=modelRoughingProof?.toolpath?.runs.length??0,modelRoughingWarningCount=modelRoughingProof?.warnings.length??0,modelRoughingErrorCount=modelRoughingProof?.errors.length??0;

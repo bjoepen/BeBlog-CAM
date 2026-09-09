@@ -95,6 +95,12 @@ requireText(faceTargetOperation,"operation.islandMode??'preserve'",'canonical fa
 requireText(zLevel,'004Z-B:','Prüfen reports whether inner islands were preserved or cleared');
 requireText(app,'>Stehen lassen</button>','Bearbeiten exposes preserve-islands explicitly');
 requireText(app,'>Mit schruppen</button>','Bearbeiten exposes clear-islands explicitly');
+const curvedCache=read('src/lib/curvedViewCache.ts');
+requireText(curvedCache,'export function cachedCurvedViewTarget','004Z-D caches curved targets independently from camera projection');
+requireText(curvedCache,'export function cachedCurvedViewSamples','004Z-D caches curved proof samples');
+requireText(curvedCache,'export function cachedCurvedViewRoughing','004Z-D caches Hohlkehle roughing');
+requireText(geometryView,'cachedCurvedViewRoughing(curvedCacheContext','GeometryView reprojects cached Hohlkehle geometry');
+rejectText(geometryView,'?buildCurvedFaceRoughing(curvedFaceTarget,stock.thickness','camera updates must not directly rebuild Hohlkehle roughing');
 const planarRaster=read('src/lib/planarRasterKernel.ts');
 requireText(planarRaster,'export function buildPlanarRasterStayDownConnector','004Z-C owns an explicit cutter-safe stay-down connector planner');
 requireText(planarRaster,'safePolyline(loops,candidate,radius,step)','004Z-C validates every stay-down candidate with cutter-radius clearance');
