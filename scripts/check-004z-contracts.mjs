@@ -95,5 +95,12 @@ requireText(faceTargetOperation,"operation.islandMode??'preserve'",'canonical fa
 requireText(zLevel,'004Z-B:','Prüfen reports whether inner islands were preserved or cleared');
 requireText(app,'>Stehen lassen</button>','Bearbeiten exposes preserve-islands explicitly');
 requireText(app,'>Mit schruppen</button>','Bearbeiten exposes clear-islands explicitly');
+const planarRaster=read('src/lib/planarRasterKernel.ts');
+requireText(planarRaster,'export function buildPlanarRasterStayDownConnector','004Z-C owns an explicit cutter-safe stay-down connector planner');
+requireText(planarRaster,'safePolyline(loops,candidate,radius,step)','004Z-C validates every stay-down candidate with cutter-radius clearance');
+requireText(planarRaster,"[a,{x:b.x,y:a.y},b]",'004Z-C can route an orthogonal dogleg inside rounded boundaries');
+requireText(planarRaster,"[a,{x:a.x,y:b.y},b]",'004Z-C tries the mirrored orthogonal dogleg before conceding a retract');
+requireText(planarRaster,'const connector=buildPlanarRasterStayDownConnector','raster chaining consumes the 004Z-C safe-link planner');
+requireText(planarRaster,'if(connector)','safe links remain one canonical run; unsafe links stay split for 004T Safe-Z');
 
-console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B adds explicit preserve/clear island semantics for Face-Target roughing.');
+console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B adds explicit preserve/clear island semantics; 004Z-C reduces raster retracts only through cutter-safe stay-down links.');
