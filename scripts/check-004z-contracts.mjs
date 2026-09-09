@@ -109,12 +109,18 @@ requireText(planarRaster,"[a,{x:a.x,y:b.y},b]",'004Z-C tries the mirrored orthog
 requireText(planarRaster,'const connector=buildPlanarRasterStayDownConnector','raster chaining consumes the 004Z-C safe-link planner');
 requireText(planarRaster,'if(connector)','safe links remain one canonical run; unsafe links stay split for 004T Safe-Z');
 const contourLeads=read('src/lib/contourLeads.ts');
-rejectText(contourLeads,"operation.topology!=='closed'",'004Z-E must not reject open STEP contours');
-requireText(contourLeads,'function applyLeadToRun','004Z-E applies leads per canonical contour passage');
-requireText(contourLeads,'vertical(leadStart,safeZMm,run.z)','004Z-E plunges at the tangent lead start instead of diagonally rapid-plunging');
-requireText(contourLeads,'horizontal(leadStart,first,run.z)','004Z-E enters along the local first tangent');
-requireText(contourLeads,'horizontal(last,leadEnd,run.z)','004Z-E exits along the local last tangent');
-requireText(contourLeads,'vertical(leadEnd,run.z,safeZMm)','004Z-E retracts at the lead end before further rapids');
-requireText(contourLeads,"operation.topology==='open'?'offene':'geschlossene'",'004Z-E reports open and closed lead semantics explicitly');
+const openRamp=read('src/lib/openContourRampEntry.ts');
+requireText(contourLeads,"operation.topology!=='closed'",'004Z-E2 restores tangent leads to closed contours only');
+requireText(openRamp,'export function applyOpenContourRampEntry','004Z-E2 owns a dedicated open-groove ramp kernel');
+requireText(openRamp,"operation.topology==='open'&&(operation.leadMode??'none')==='line'",'004Z-E2 interprets open STEP entry mode as ramp');
+requireText(openRamp,'const prefix=rampPrefix(run.points,rampLengthMm)','ramp is derived strictly from the canonical groove path');
+requireText(openRamp,'const z1=previousZ+(run.z-previousZ)*(b.distanceMm/prefix.lengthMm)','ramp descends continuously from previous material level to target Z');
+requireText(openRamp,'for(let i=prefix.points.length-1;i>0;i--)','ramp prefix is cleaned back to contour start at final depth');
+requireText(openRamp,'copy.exitSegments=undefined','open groove uses no lateral lead-out');
+requireText(state,"operation.topology==='open'?applyOpenContourRampEntry(tabbed.toolpath,operation,startZ)",'STEP open contour consumes the ramp with reststock-aware start Z');
+requireText(state,"operation.topology==='closed'?applyContourLeads(entered.toolpath,operation)",'closed STEP contours retain tangential leads');
+requireText(app,'>Rampe</button>','STEP open contour exposes ramp entry');
+requireText(app,'>Rampenlänge <input','STEP open contour exposes ramp length');
+requireText(app,'Am Ende folgt der normale Retract auf Sicherheits-Z.','STEP open UI explains vertical exit semantics');
 
-console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B island semantics, 004Z-C safe stay-down links, 004Z-D curved-view caching, and 004Z-E safe tangential leads are gated.');
+console.log('004Z PASS: STEP contours keep one canonical Bearbeiten/Prüfen/NC path; 004Z-B island semantics, 004Z-C safe stay-down links, 004Z-D curved-view caching, and 004Z-E2 keeps open-groove entry on-path with reststock-aware ramps while closed contours retain tangential leads.');

@@ -7,6 +7,7 @@ import { resolveContourDepth } from './contourDepth';
 import { applyContourFinishing } from './contourFinishing';
 import { applyContourTabs } from './contourTabs';
 import { applyContourLeads } from './contourLeads';
+import { applyOpenContourRampEntry } from './openContourRampEntry';
 import { simulateStockHeightfield, sampleStockSurfaceZ } from './stockSimulation';
 import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
@@ -132,7 +133,8 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
   const baseToolpath:CanonicalToolpath={version:1,operationKind:'contour',strategy:'contour',tool:{diameterMm:operation.tool.diameterMm},stepoverPercent:0,runs,sourceOperationId:operation.id,targetKey:effective.targetKey};
   const finished=applyContourFinishing(baseToolpath,operation,cutDepth);errors.push(...finished.errors);warnings.push(...finished.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   const tabbed=applyContourTabs(finished.toolpath,operation,cutDepth);errors.push(...tabbed.errors);warnings.push(...tabbed.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
-  const led=applyContourLeads(tabbed.toolpath,operation);errors.push(...led.errors);warnings.push(...led.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
+  const entered=operation.topology==='open'?applyOpenContourRampEntry(tabbed.toolpath,operation,startZ):{toolpath:tabbed.toolpath,errors:[] as string[],warnings:[] as string[]};errors.push(...entered.errors);warnings.push(...entered.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
+  const led=operation.topology==='closed'?applyContourLeads(entered.toolpath,operation):{toolpath:entered.toolpath,errors:[] as string[],warnings:[] as string[]};errors.push(...led.errors);warnings.push(...led.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   if(operation.topology==='open')warnings.push(`Offene STEP-Kontur aktiv · ${effective.edgeIds.length} BRep-Kanten · ${operation.openSide==='left'?'links':operation.openSide==='right'?'rechts':'auf Linie'}.`);
   return{ok:true,toolpath:led.toolpath,errors:[],warnings,candidates:all,selected:chosen,eligibleSideFaceIds,selectedEdgeIds:effective.edgeIds};
 }
