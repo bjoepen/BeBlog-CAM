@@ -18,18 +18,24 @@
     return{x:x1,y:y1*cp-point.z*sp};
   }
 
-  // Keep yaw/pitch explicit in the reactive statement. Svelte's legacy
-  // dependency analysis does not look through arbitrary function calls.
-  $: projected=scene.segments.map(segment=>({...segment,points:segment.points.map(point=>project(point,yaw,pitch))}));
-  $: projectedPoints=projected.flatMap(segment=>segment.points);
-  $: fit=(()=>{
-    if(!projectedPoints.length)return{scale:1,offsetX:width/2,offsetY:height/2};
-    const xs=projectedPoints.map(point=>point.x),ys=projectedPoints.map(point=>point.y);
+  function computeFit(points:{x:number;y:number}[],viewZoom:number,viewPanX:number,viewPanY:number){
+    if(!points.length)return{scale:1,offsetX:width/2,offsetY:height/2};
+    const xs=points.map(point=>point.x),ys=points.map(point=>point.y);
     const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
     const spanX=Math.max(maxX-minX,1e-6),spanY=Math.max(maxY-minY,1e-6);
-    const scale=Math.min((width-pad*2)/spanX,(height-pad*2)/spanY)*zoom;
-    return{scale,offsetX:width/2-(minX+maxX)/2*scale+panX,offsetY:height/2+(minY+maxY)/2*scale+panY};
-  })();
+    const scale=Math.min((width-pad*2)/spanX,(height-pad*2)/spanY)*viewZoom;
+    return{
+      scale,
+      offsetX:width/2-(minX+maxX)/2*scale+viewPanX,
+      offsetY:height/2+(minY+maxY)/2*scale+viewPanY
+    };
+  }
+
+  // Keep view-state dependencies explicit. Svelte's legacy dependency analysis
+  // does not look through arbitrary function calls or nested function bodies.
+  $: projected=scene.segments.map(segment=>({...segment,points:segment.points.map(point=>project(point,yaw,pitch))}));
+  $: projectedPoints=projected.flatMap(segment=>segment.points);
+  $: fit=computeFit(projectedPoints,zoom,panX,panY);
 
   function screen(point:{x:number;y:number}){return{x:fit.offsetX+point.x*fit.scale,y:fit.offsetY-point.y*fit.scale};}
   function path(points:{x:number;y:number}[]){return points.map((point,index)=>{const p=screen(point);return`${index?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`;}).join(' ');}
