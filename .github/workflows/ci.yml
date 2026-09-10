@@ -29,6 +29,10 @@ jobs:
         run: pnpm check:004y
       - name: STEP contour completeness contract
         run: pnpm check:004z
+      - name: Safe motion contract
+        run: pnpm check:004t
+      - name: Initial job safe entry contract
+        run: pnpm check:004t-entry
       - name: Job preview contract
         run: pnpm check:005a
       - name: Simple job simulation contract
