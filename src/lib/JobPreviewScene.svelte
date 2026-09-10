@@ -15,25 +15,28 @@
   export let onClose:()=>void=()=>{};
 
   const width=1200,height=760,pad=70;
+  const defaultYaw=()=>summary.kind==='dxf'?(-0.72+Math.PI):-0.72;
   let sceneShell:HTMLDivElement;
-  let yaw=-0.72,pitch=0.48,zoom=1,panX=0,panY=0,dragging=false,lastX=0,lastY=0,dragMode:'orbit'|'pan'='orbit';
+  let yaw=defaultYaw(),pitch=0.48,zoom=1,panX=0,panY=0,dragging=false,lastX=0,lastY=0,dragMode:'orbit'|'pan'='orbit';
   $: scene=buildJobPreviewScene(result);
   $: geometry=buildJobPreviewGeometry({summary,stock,stockMode,placement,orientation,wcs});
 
   function project(point:{x:number;y:number;z:number},viewYaw:number,viewPitch:number){const cy=Math.cos(viewYaw),sy=Math.sin(viewYaw),cp=Math.cos(viewPitch),sp=Math.sin(viewPitch),x1=point.x*cy-point.y*sy,y1=point.x*sy+point.y*cy;return{x:x1,y:y1*cp-point.z*sp};}
   function computeFit(points:{x:number;y:number}[],viewZoom:number,viewPanX:number,viewPanY:number){if(!points.length)return{scale:1,offsetX:width/2,offsetY:height/2};const xs=points.map(point=>point.x),ys=points.map(point=>point.y),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),spanX=Math.max(maxX-minX,1e-6),spanY=Math.max(maxY-minY,1e-6),scale=Math.min((width-pad*2)/spanX,(height-pad*2)/spanY)*viewZoom;return{scale,offsetX:width/2-(minX+maxX)/2*scale+viewPanX,offsetY:height/2+(minY+maxY)/2*scale+viewPanY};}
-  function renderPath(points:{x:number;y:number}[],viewFit:{scale:number;offsetX:number;offsetY:number}){return points.map((point,index)=>{const x=viewFit.offsetX+point.x*viewFit.scale,y=viewFit.offsetY-point.y*viewFit.scale;return`${index?'L':'M'}${x.toFixed(2)},${y.toFixed(2)}`;}).join(' ');}
+  function renderPath(points:{x:number;y:number}[],viewFit:{scale:number;offsetX:number;offsetY:number},closed=false){const d=points.map((point,index)=>{const x=viewFit.offsetX+point.x*viewFit.scale,y=viewFit.offsetY-point.y*viewFit.scale;return`${index?'L':'M'}${x.toFixed(2)},${y.toFixed(2)}`;}).join(' ');return closed?`${d} Z`:d;}
 
   $: projected=scene.segments.map(segment=>({...segment,points:segment.points.map(point=>project(point,yaw,pitch))}));
   $: projectedStock=geometry.stockEdges.map(points=>points.map(point=>project(point,yaw,pitch)));
   $: projectedPart=geometry.partEdges.map(points=>points.map(point=>project(point,yaw,pitch)));
-  $: projectedPoints=[...projected.flatMap(segment=>segment.points),...projectedStock.flat(),...projectedPart.flat()];
+  $: projectedFaces=geometry.partFaces.map(points=>points.map(point=>project(point,yaw,pitch)));
+  $: projectedPoints=[...projected.flatMap(segment=>segment.points),...projectedStock.flat(),...projectedPart.flat(),...projectedFaces.flat()];
   $: fit=computeFit(projectedPoints,zoom,panX,panY);
   $: rendered=projected.map(segment=>({...segment,d:renderPath(segment.points,fit)}));
   $: renderedStock=projectedStock.map(points=>renderPath(points,fit));
   $: renderedPart=projectedPart.map(points=>renderPath(points,fit));
+  $: renderedFaces=projectedFaces.map(points=>renderPath(points,fit,true));
 
-  function resetView(){yaw=-0.72;pitch=0.48;zoom=1;panX=0;panY=0;}
+  function resetView(){yaw=defaultYaw();pitch=0.48;zoom=1;panX=0;panY=0;}
   function wheel(event:WheelEvent){event.preventDefault();zoom=Math.max(.25,Math.min(8,zoom*Math.exp(-event.deltaY*.002)));}
   function pointerDown(event:PointerEvent){if(event.button!==0&&event.button!==1)return;const target=event.target as Element|null;if(target?.closest?.('button'))return;event.preventDefault();dragging=true;lastX=event.clientX;lastY=event.clientY;dragMode=event.shiftKey||event.button===1?'pan':'orbit';}
   function pointerMove(event:PointerEvent){if(!dragging)return;const dx=event.clientX-lastX,dy=event.clientY-lastY;lastX=event.clientX;lastY=event.clientY;if(dragMode==='pan'){panX+=dx;panY+=dy;}else{yaw+=dx*.008;pitch=Math.max(-1.5,Math.min(1.5,pitch-dy*.008));}}
@@ -48,6 +51,7 @@
       {#if scene.motionCount}
         <svg viewBox={`0 0 ${width} ${height}`} aria-label="Rohling, Bauteil und Werkzeugweg des Gesamtjobs"><rect x="0" y="0" width={width} height={height} class="background"/>
           {#each renderedStock as d}<path {d} class="stock"/>{/each}
+          {#each renderedFaces as d}<path {d} class="part-face"/>{/each}
           {#each renderedPart as d}<path {d} class="part"/>{/each}
           {#each rendered as segment}<path d={segment.d} class:rapid={segment.kind==='rapid3'} class:cut={segment.kind!=='rapid3'}/>{/each}
         </svg>
@@ -58,5 +62,5 @@
   </div>
 </div>
 <style>
-  .backdrop{position:fixed;inset:0;z-index:1000;background:rgba(24,28,26,.72);display:grid;place-items:center;padding:28px}.dialog{width:min(1320px,calc(100vw - 56px));height:min(900px,calc(100vh - 56px));background:#f5f5f2;border:1px solid #c9ccc7;border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.28);display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}.dialog header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid #d9dbd6}.eyebrow{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:#727873;margin:0 0 5px}.dialog h2{margin:0;color:#2c3530}.subtitle{margin:4px 0 0;color:#6c726e;font-size:.82rem}.actions{display:flex;gap:8px}.actions button{border:1px solid #c9cdc8;background:#fff;border-radius:7px;padding:8px 11px;color:#3d4641;cursor:pointer}.actions .close{background:#2f3933;color:#fff;border-color:#2f3933}.scene-shell{position:relative;min-height:0;background:#eceeea;touch-action:none;cursor:grab;user-select:none}.scene-shell:active{cursor:grabbing}.scene-shell svg{display:block;width:100%;height:100%;pointer-events:none}.background{fill:#eceeea}.scene-shell path{fill:none;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}.scene-shell path.stock{stroke:#a9aea8;stroke-width:1.15;stroke-dasharray:3 3}.scene-shell path.part{stroke:#6e756f;stroke-width:.75;opacity:.42}.scene-shell path.cut{stroke:#315f69;stroke-width:1.6}.scene-shell path.rapid{stroke:#8b7a59;stroke-width:1.05;stroke-dasharray:5 5;opacity:.72}.legend{position:absolute;left:16px;bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:rgba(250,250,247,.9);border:1px solid #d5d8d3;border-radius:8px;padding:8px 10px;font-size:.72rem;color:#626963;pointer-events:none}.legend span{display:flex;gap:6px;align-items:center}.legend i{width:18px;height:2px;display:inline-block}.stock-swatch{border-top:2px dashed #a9aea8}.part-swatch{background:#6e756f}.cut-swatch{background:#315f69}.rapid-swatch{background:#8b7a59}.empty{height:100%;display:grid;place-content:center;text-align:center;gap:6px;color:#59615c}.empty span{font-size:.82rem;color:#747b76}.dialog footer{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:11px 16px;border-top:1px solid #d9dbd6;background:#f9f9f7}.dialog footer span{font-size:.72rem;padding:5px 7px;border-radius:5px;background:#eceeea;color:#59615c}
+  .backdrop{position:fixed;inset:0;z-index:1000;background:rgba(24,28,26,.72);display:grid;place-items:center;padding:28px}.dialog{width:min(1320px,calc(100vw - 56px));height:min(900px,calc(100vh - 56px));background:#f5f5f2;border:1px solid #c9ccc7;border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.28);display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}.dialog header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid #d9dbd6}.eyebrow{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:#727873;margin:0 0 5px}.dialog h2{margin:0;color:#2c3530}.subtitle{margin:4px 0 0;color:#6c726e;font-size:.82rem}.actions{display:flex;gap:8px}.actions button{border:1px solid #c9cdc8;background:#fff;border-radius:7px;padding:8px 11px;color:#3d4641;cursor:pointer}.actions .close{background:#2f3933;color:#fff;border-color:#2f3933}.scene-shell{position:relative;min-height:0;background:#eceeea;touch-action:none;cursor:grab;user-select:none}.scene-shell:active{cursor:grabbing}.scene-shell svg{display:block;width:100%;height:100%;pointer-events:none}.background{fill:#eceeea}.scene-shell path{vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}.scene-shell path.stock{fill:none;stroke:#a9aea8;stroke-width:1.15;stroke-dasharray:3 3}.scene-shell path.part-face{fill:#d8dcd8;stroke:none}.scene-shell path.part{fill:none;stroke:#6e756f;stroke-width:.8;opacity:.62}.scene-shell path.cut{fill:none;stroke:#315f69;stroke-width:1.6}.scene-shell path.rapid{fill:none;stroke:#8b7a59;stroke-width:1.05;stroke-dasharray:5 5;opacity:.72}.legend{position:absolute;left:16px;bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:rgba(250,250,247,.9);border:1px solid #d5d8d3;border-radius:8px;padding:8px 10px;font-size:.72rem;color:#626963;pointer-events:none}.legend span{display:flex;gap:6px;align-items:center}.legend i{width:18px;height:2px;display:inline-block}.stock-swatch{border-top:2px dashed #a9aea8}.part-swatch{background:#6e756f}.cut-swatch{background:#315f69}.rapid-swatch{background:#8b7a59}.empty{height:100%;display:grid;place-content:center;text-align:center;gap:6px;color:#59615c}.empty span{font-size:.82rem;color:#747b76}.dialog footer{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:11px 16px;border-top:1px solid #d9dbd6;background:#f9f9f7}.dialog footer span{font-size:.72rem;padding:5px 7px;border-radius:5px;background:#eceeea;color:#59615c}
 </style>
