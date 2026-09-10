@@ -1,7 +1,8 @@
 import type { Curve2, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
+import { decodeStepEdges } from './stepEdgeView';
 
 export type JobPreviewPoint3={x:number;y:number;z:number};
-export type JobPreviewGeometry={stockEdges:JobPreviewPoint3[][];partEdges:JobPreviewPoint3[][]};
+export type JobPreviewGeometry={stockEdges:JobPreviewPoint3[][];partEdges:JobPreviewPoint3[][];partFaces:JobPreviewPoint3[][]};
 
 const boxEdges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]] as const;
 
@@ -45,21 +46,27 @@ export function buildJobPreviewGeometry(args:{summary:ImportSummary;stock:StockD
   if(summary.kind==='step'){
     const values=summary.brep?.displayVertices??[],raw:JobPreviewPoint3[]=[];
     for(let i=0;i+2<values.length;i+=3)raw.push(rotate({x:values[i],y:values[i+1],z:values[i+2]},orientation));
-    if(!raw.length)return{stockEdges,partEdges:[]};
+    if(!raw.length)return{stockEdges,partEdges:[],partFaces:[]};
     const xs=raw.map(p=>p.x),ys=raw.map(p=>p.y),zs=raw.map(p=>p.z),minZ=Math.min(...zs);
     const offset=placementOffset(Math.min(...xs),Math.max(...xs),Math.min(...ys),Math.max(...ys),stock,placement);
-    const placed=raw.map(point=>toWcs({x:point.x+offset.dx,y:point.y+offset.dy,z:point.z-minZ+placement.offsetZ},stock,wcs));
-    const partEdges:JobPreviewPoint3[][]=[];
-    for(let i=0;i+2<placed.length;i+=3){partEdges.push([placed[i],placed[i+1]],[placed[i+1],placed[i+2]],[placed[i+2],placed[i]]);}
-    return{stockEdges,partEdges};
+    const placePoint=(point:JobPreviewPoint3)=>toWcs({x:point.x+offset.dx,y:point.y+offset.dy,z:point.z-minZ+placement.offsetZ},stock,wcs);
+    const placed=raw.map(placePoint);
+    const partFaces:JobPreviewPoint3[][]=[];
+    for(let i=0;i+2<placed.length;i+=3)partFaces.push([placed[i],placed[i+1],placed[i+2]]);
+    const partEdges=decodeStepEdges(summary.brep?.displayEdges).map(edge=>{
+      const points:JobPreviewPoint3[]=[];
+      for(let i=0;i+2<edge.points.length;i+=3)points.push(placePoint(rotate({x:edge.points[i],y:edge.points[i+1],z:edge.points[i+2]},orientation)));
+      return points;
+    }).filter(points=>points.length>=2);
+    return{stockEdges,partEdges,partFaces};
   }
 
   const curves=summary.planarGeometry?.curves??[];
   const rotated=curves.map(curve=>curvePoints(curve).map(point=>rotate({...point,z:0},orientation)));
   const flat=rotated.flat();
-  if(!flat.length)return{stockEdges,partEdges:[]};
+  if(!flat.length)return{stockEdges,partEdges:[],partFaces:[]};
   const xs=flat.map(p=>p.x),ys=flat.map(p=>p.y);
   const offset=stockMode==='none'?{dx:-Math.min(...xs)+placement.offsetX,dy:-Math.min(...ys)+placement.offsetY}:placementOffset(Math.min(...xs),Math.max(...xs),Math.min(...ys),Math.max(...ys),stock,placement);
   const partEdges=rotated.map(points=>points.map(point=>toWcs({x:point.x+offset.dx,y:point.y+offset.dy,z:placement.offsetZ},stock,wcs)));
-  return{stockEdges,partEdges};
+  return{stockEdges,partEdges,partFaces:[]};
 }
