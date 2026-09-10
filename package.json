@@ -35,6 +35,7 @@
     "check:004y": "node scripts/check-004y-contracts.mjs",
     "check:004z": "node scripts/check-004z-contracts.mjs",
     "check:005a": "node scripts/check-005a-contracts.mjs",
+    "check:005b": "node scripts/check-005b-contracts.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
     "native:dev": "bash scripts/dev-macos-native.sh",
