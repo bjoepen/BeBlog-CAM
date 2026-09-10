@@ -20,6 +20,15 @@ export type JobPreviewSimulationFrame={
   progress:number;
 };
 
+export type JobPreviewOperationStop={
+  operationId:string;
+  operationIndex:number;
+  operationLabel:string;
+  startDistance:number;
+  endDistance:number;
+  motionCount:number;
+};
+
 function distance3(a:ToolpathPoint3,b:ToolpathPoint3){
   return Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z);
 }
@@ -56,6 +65,27 @@ export function buildJobPreviewSimulationTimeline(scene:JobPreviewScene):JobPrev
     cursor=endDistance;
   }
   return{steps,totalDistance:cursor};
+}
+
+export function buildJobPreviewOperationStops(timeline:JobPreviewSimulationTimeline):JobPreviewOperationStop[]{
+  const stops:JobPreviewOperationStop[]=[];
+  for(const step of timeline.steps){
+    const previous=stops.at(-1);
+    if(previous&&previous.operationId===step.segment.operationId){
+      previous.endDistance=step.endDistance;
+      previous.motionCount+=1;
+      continue;
+    }
+    stops.push({
+      operationId:step.segment.operationId,
+      operationIndex:step.segment.operationIndex,
+      operationLabel:step.segment.operationLabel,
+      startDistance:step.startDistance,
+      endDistance:step.endDistance,
+      motionCount:1
+    });
+  }
+  return stops;
 }
 
 export function sampleJobPreviewSimulation(timeline:JobPreviewSimulationTimeline,distance:number):JobPreviewSimulationFrame{
