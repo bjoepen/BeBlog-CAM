@@ -33,6 +33,8 @@ jobs:
         run: pnpm check:004t
       - name: Initial job safe entry contract
         run: pnpm check:004t-entry
+      - name: Initial job safe entry sequence
+        run: pnpm check:004t-entry-fixture
       - name: Job preview contract
         run: pnpm check:005a
       - name: Simple job simulation contract
