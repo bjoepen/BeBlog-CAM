@@ -71,7 +71,7 @@
     <span>{raw.operationCount} Bearbeitung{raw.operationCount===1?'':'en'} · {raw.toolChangeCount} Werkzeugwechsel · {raw.lineCount} Maschinenprogramm-Zeilen</span>
   </div>
 
-  <p class="boundary"><strong>Gesamtjob freigegeben:</strong> Derselbe Preflight-Vertrag aus „Prüfen“ hat keinen FAIL geliefert. Alle aktivierten Bearbeitungen werden anschließend in ihrer Projekt-Reihenfolge zu einem gemeinsamen Maschinenprogramm verbunden. Zwischen Operationen wird auf den größeren Sicherheits-Z-Wert gefahren; Werkzeugwechsel werden explizit mit M5/M0 ausgegeben.</p>
+  <p class="boundary"><strong>Gesamtjob freigegeben:</strong> Derselbe Preflight-Vertrag aus „Prüfen“ hat keinen FAIL geliefert. Alle aktivierten Bearbeitungen werden anschließend in ihrer Projekt-Reihenfolge zu einem gemeinsamen Maschinenprogramm verbunden. Zwischen Operationen wird auf den größeren Sicherheits-Z-Wert gefahren. Der Gesamtjob beschreibt Werkzeugwechsel controller-neutral; der gewählte Postprozessor übersetzt sie in den passenden Steuerungsdialog. Estlcam erhält einen echten M6-Werkzeugwechsel, die manuellen Referenzpfade behalten M0.</p>
 
   <div class="operation-list">
     {#each enabledOperations as operation,index}
