@@ -32,28 +32,48 @@ export function postProcessGrbl(source:string):PostProcessResult{
 }
 
 /**
- * Estlcam controller dialect according to the official CNC-program requirements:
- * - only G0/G1/G2/G3 motions
- * - absolute XYZ coordinates (BeBlog CAM already emits absolute coordinates)
- * - arcs in XY with relative I/J (BeBlog CAM already emits relative I/J)
- * - no full circles (BeBlog CAM splits circles into semicircles)
- * - no canned cycles / coordinate-system changes
- * - M0/M1/M3/M5/M6/M8/M9/M10/M11 supported
- * - comments in parentheses
+ * Estlcam controller dialect.
  *
- * The postprocessor intentionally stays conservative and does not reinterpret
- * geometry. It only removes unsupported modal setup/end codes and normalizes
- * supported commands into an Estlcam-safe line structure.
+ * Contract:
+ * - only G0/G1/G2/G3 reach the controller
+ * - XYZ remain absolute and arcs remain XY/IJ as produced by BeBlog CAM
+ * - modal setup/end G-codes are removed because Estlcam ignores unsupported G-codes
+ * - one M-command per line
+ * - spindle speed and M3 are split into separate lines
+ * - BeBlog's controller-neutral manual tool-change marker is translated to M6
+ * - M6 is emitted without T or other parameters
+ * - no canned cycles or coordinate-system changes are introduced
+ *
+ * Geometry and machine motions are never reconstructed here. The postprocessor
+ * only translates controller syntax around the already approved NC motion truth.
  */
 export function postProcessEstlcam(source:string):PostProcessResult{
   const errors:string[]=[],warnings:string[]=[],out:string[]=[];
-  let removedLines=0,transformedLines=0;
+  let removedLines=0,transformedLines=0,pendingToolChange=false;
   const lines=source.split(/\r?\n/);
 
   for(const raw of lines){
     const line=raw.trim();
     if(!line)continue;
-    if(isComment(line)){out.push(line);continue;}
+
+    if(isComment(line)){
+      out.push(line);
+      if(/^\(\s*Werkzeugwechsel\b/i.test(line))pendingToolChange=true;
+      continue;
+    }
+
+    if(pendingToolChange){
+      const manual=line.match(/^M0?0(?:\s+(\(.*\)))?$/i);
+      if(manual){
+        if(manual[1])out.push(manual[1]);
+        out.push('M6');
+        transformedLines++;
+        pendingToolChange=false;
+        continue;
+      }
+      errors.push(`Estlcam-Werkzeugwechselmarker ohne folgende manuelle M0-Pause: ${line}`);
+      pendingToolChange=false;
+    }
 
     if(/^(G17|G20|G21|G40|G49|G54|G55|G56|G57|G58|G59|G80|G90|G91)\b/i.test(line)){
       if(/^G91\b/i.test(line))errors.push('Inkrementelle Koordinaten (G91) sind für Estlcam nicht zulässig.');
@@ -67,21 +87,29 @@ export function postProcessEstlcam(source:string):PostProcessResult{
 
     let m=line.match(/^S([^\s]+)\s+M0?3$/i);
     if(m){out.push(`S${m[1]}`,'M3');transformedLines++;continue;}
+    m=line.match(/^M0?3\s+S([^\s]+)$/i);
+    if(m){out.push(`S${m[1]}`,'M3');transformedLines++;continue;}
 
     if(/^S[-+]?\d+(?:[.,]\d+)?$/i.test(line)){out.push(line.toUpperCase());continue;}
     if(/^F[-+]?\d+(?:[.,]\d+)?$/i.test(line)){out.push(line.toUpperCase());continue;}
 
-    m=line.match(/^M0?(0|1|3|5|6|8|9|10|11)(?:\s+(.*))?$/i);
-    if(m){const n=Number(m[1]);const normalized=`M${n}${m[2]?` ${m[2]}`:''}`;out.push(normalized);if(normalized!==line)transformedLines++;continue;}
+    if(/^M0?6\b/i.test(line)){
+      if(!/^M0?6$/i.test(line)){
+        errors.push(`Estlcam M6 wird ohne T- oder Zusatzparameter ausgegeben: ${line}`);
+        continue;
+      }
+      const normalized='M6';out.push(normalized);if(normalized!==line)transformedLines++;continue;
+    }
 
-    m=line.match(/^M0?0\s+(\(.*\))$/i);
-    if(m){out.push(`M0 ${m[1]}`);if(line!==`M0 ${m[1]}`)transformedLines++;continue;}
+    m=line.match(/^M0?(0|1|3|5|8|9|10|11)(?:\s+(.*))?$/i);
+    if(m){const n=Number(m[1]);const normalized=`M${n}${m[2]?` ${m[2]}`:''}`;out.push(normalized);if(normalized!==line)transformedLines++;continue;}
 
     if(/^[GMT]\d+/i.test(line))errors.push(`Nicht unterstützter Estlcam-Befehl: ${line}`);
     else warnings.push(`Unbekannte Zeile wurde unverändert übernommen: ${line}`);
     if(!/^[GMT]\d+/i.test(line))out.push(line);
   }
 
+  if(pendingToolChange)errors.push('Estlcam-Werkzeugwechselmarker am Programmende ohne folgende M0-Pause.');
   if(out[out.length-1]?.trim()!=='M5')out.push('M5');
   const code=out.join('\n')+'\n';
   return{ok:errors.length===0,code,errors,warnings,removedLines,transformedLines};
