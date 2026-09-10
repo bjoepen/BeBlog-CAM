@@ -93,9 +93,16 @@ export function generateJobGcode(args:Args):JobGcodeResult{
   if(missing.length)return{ok:false,errors:missing.map(item=>`Bearbeitung ${item.operation.name}: 004T liefert keinen materialisierten Werkzeugweg.`),warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
   const parityErrors=prepared.flatMap(item=>contourMotionParity(item.operation,item.preflight!.toolpath!).map(message=>`${item.operation.name}: ${message}`));
   if(parityErrors.length)return{ok:false,errors:parityErrors,warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
+  const firstToolpath=prepared[0].preflight!.toolpath!;
+  const firstMotion=firstToolpath.motions?.[0];
+  if(!firstMotion)return{ok:false,errors:['004T Initial Entry: erste Operation besitzt keine materialisierte Startbewegung.'],warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
+  const firstStart=firstMotion.start;
+  if(Math.abs(firstStart.z-prepared[0].operation.safeZMm)>1e-9)return{ok:false,errors:[`004T Initial Entry: erster Startanker liegt bei Z${f3(firstStart.z)} statt auf Safe-Z ${f3(prepared[0].operation.safeZMm)}.`],warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
   const transitions=buildJobSafeTransitions({operations:prepared.map(item=>({id:item.operation.id,safeZMm:item.operation.safeZMm,toolpath:item.preflight!.toolpath!}))});
   if(!transitions.ok)return{ok:false,errors:transitions.errors,warnings:preflight.warnings,code:'',lineCount:0,operationCount:enabled.length,toolChangeCount:preflight.toolChanges};
-  const lines:string[]=['( BeBlog CAM 004T )','( Gesamtjob · Preflight und NC-Ausgabe verwenden dieselbe kanonische Motion-Wahrheit )',`( ${enabled.length} Bearbeitungen )`,'G21','G90','G17'];
+  const lines:string[]=['( BeBlog CAM 004T )','( Gesamtjob · Preflight und NC-Ausgabe verwenden dieselbe kanonische Motion-Wahrheit )',`( ${enabled.length} Bearbeitungen )`,'G21','G90','G17','( 004T-A Initial Safe Entry · unbekannte Maschinen-XY-Position )'];
+  lines.push(`G0 Z${f3(firstStart.z)}`);
+  lines.push(`G0 X${f3(firstStart.x)} Y${f3(firstStart.y)}`);
   let toolChangeCount=0;
   prepared.forEach((item,index)=>{
     const operation=item.operation,toolpath=item.preflight!.toolpath!;

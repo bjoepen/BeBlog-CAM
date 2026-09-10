@@ -1,0 +1,8 @@
+(expected prefix shape)
+G21
+G90
+G17
+G0 Z<safe-z>
+G0 X<start-x> Y<start-y>
+M3 S<rpm>
+(first materialized operation motion follows)
