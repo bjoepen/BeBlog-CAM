@@ -45,7 +45,7 @@ requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwar
 requireText(preflight,'previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)','Prüfen resolves STEP contour start from the exact prior canonical job history');
 requireText(app,'let jobPreflight:JobPreflightResult|null=null','App owns one typed canonical job preflight snapshot');
 requireText(app,'$: jobPreflight=importSummary?validateJob','Prüfen and Fräsen share one reactive canonical job snapshot');
-requireText(app,'<JobPreflightPanel result={jobPreflight}/>','Prüfen renders the shared canonical snapshot');
+requireText(app,'<JobPreflightPanel result={jobPreflight} summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs}/>','Prüfen renders the shared canonical snapshot and forwards render-only setup geometry');
 requireText(app,'preflight={jobPreflight}','Fräsen receives the exact same canonical snapshot');
 const jobGcode=read('src/lib/jobGcode.ts');
 requireText(jobGcode,'preflight=args.preflight??validateJob(args)','NC generation consumes the shared snapshot when supplied');
