@@ -1,0 +1,311 @@
+name: Apply 006B DXF Multi Target
+
+on:
+  push:
+    branches: [build/006b-dxf-multi-target]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: build/006b-dxf-multi-target
+      - name: Apply 006B implementation
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def patch(path, old, new):
+              p=Path(path); text=p.read_text()
+              if old not in text:
+                  raise SystemExit(f'pattern not found in {path}: {old[:120]!r}')
+              if text.count(old)!=1:
+                  raise SystemExit(f'pattern not unique in {path}: {old[:120]!r}')
+              p.write_text(text.replace(old,new))
+
+          # Types: preserve singular contourId as backward-compatible primary target.
+          p=Path('src/lib/types.ts'); t=p.read_text()
+          t=t.replace("contourId:number|null;stepWireId", "contourId:number|null;contourIds?:number[];stepWireId")
+          t=t.replace("contourId:number|null;stepFaceId", "contourId:number|null;contourIds?:number[];stepFaceId")
+          t=t.replace("contourId:null,stepWireId:null", "contourId:null,contourIds:[],stepWireId:null")
+          t=t.replace("contourId:null,stepFaceId:null", "contourId:null,contourIds:[],stepFaceId:null")
+          p.write_text(t)
+
+          Path('src/lib/dxfMultiTargetSelection.ts').write_text('''export type DxfTargetSelection={contourId:number|null;contourIds?:number[]};
+
+export function normalizeDxfTargetIds(selection:DxfTargetSelection):number[]{
+  const source=selection.contourIds?.length?selection.contourIds:(selection.contourId==null?[]:[selection.contourId]);
+  return [...new Set(source.filter(id=>Number.isInteger(id)&&id>=0))].sort((a,b)=>a-b);
+}
+
+export function toggleDxfTargetId(selection:DxfTargetSelection,id:number):number[]{
+  const ids=new Set(normalizeDxfTargetIds(selection));
+  ids.has(id)?ids.delete(id):ids.add(id);
+  return [...ids].sort((a,b)=>a-b);
+}
+
+export function dxfMultiTargetKey(ids:number[]):string{
+  return `dxf-contours:${[...new Set(ids)].sort((a,b)=>a-b).join(',')}`;
+}
+''')
+
+          Path('src/lib/dxfMultiTargetToolpath.ts').write_text('''import type { CanonicalToolpath } from './canonicalToolpath';
+import { buildDxfContourCanonicalState } from './gcode';
+import { buildPocketOperationState } from './pocketOperationState';
+import { dxfMultiTargetKey, normalizeDxfTargetIds } from './dxfMultiTargetSelection';
+import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, PocketOperation, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
+
+type CommonArgs={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem};
+export type DxfMultiTargetState={ok:boolean;toolpath:CanonicalToolpath|null;errors:string[];warnings:string[];targetDepthMm:number|null};
+
+function aggregate(operationId:string,ids:number[],toolpaths:CanonicalToolpath[],warnings:string[]):CanonicalToolpath|null{
+  if(!toolpaths.length)return null;
+  if(toolpaths.length===1)return toolpaths[0];
+  const first=toolpaths[0];
+  if(toolpaths.some(path=>path.operationKind!==first.operationKind||Math.abs(path.tool.diameterMm-first.tool.diameterMm)>1e-9))return null;
+  const strategies=[...new Set(toolpaths.map(path=>path.strategy))];
+  if(strategies.length>1)warnings.push(`Mehrfachauswahl verwendet ${strategies.length} intern aufgelöste Strategien; die kanonischen Runs bleiben zielweise unverändert.`);
+  return{
+    ...first,
+    runs:toolpaths.flatMap(path=>path.runs),
+    motions:undefined,
+    sourceOperationId:operationId,
+    targetKey:dxfMultiTargetKey(ids)
+  };
+}
+
+export function buildDxfMultiTargetContourState(args:CommonArgs&{operation:ContourOperation}):DxfMultiTargetState{
+  const {operation}=args;
+  if(operation.topology!=='closed'){
+    const state=buildDxfContourCanonicalState(args);
+    return{ok:state.ok,toolpath:state.toolpath,errors:[...state.errors],warnings:[...state.warnings],targetDepthMm:operation.totalDepthMm};
+  }
+  const ids=normalizeDxfTargetIds(operation);
+  if(!ids.length)return{ok:false,toolpath:null,errors:['Keine geschlossene DXF-Kontur gewählt.'],warnings:[],targetDepthMm:operation.totalDepthMm};
+  if(ids.length===1){
+    const single={...operation,contourId:ids[0],contourIds:[ids[0]]};
+    const state=buildDxfContourCanonicalState({...args,operation:single});
+    return{ok:state.ok,toolpath:state.toolpath,errors:[...state.errors],warnings:[...state.warnings],targetDepthMm:operation.totalDepthMm};
+  }
+  if((operation.excludedSegmentIds??[]).length)return{ok:false,toolpath:null,errors:['Aufgebrochene Konturen sind mit DXF-Mehrfachauswahl in Build 006B nicht freigegeben.'],warnings:[],targetDepthMm:operation.totalDepthMm};
+  const paths:CanonicalToolpath[]=[],errors:string[]=[],warnings:string[]=[];
+  for(const id of ids){
+    const single={...operation,contourId:id,contourIds:[id],excludedSegmentIds:[]};
+    const state=buildDxfContourCanonicalState({...args,operation:single});
+    errors.push(...state.errors.map(message=>`Kontur ${id+1}: ${message}`));
+    warnings.push(...state.warnings.map(message=>`Kontur ${id+1}: ${message}`));
+    if(state.toolpath)paths.push(state.toolpath);
+  }
+  if(errors.length||paths.length!==ids.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm:operation.totalDepthMm};
+  const toolpath=aggregate(operation.id,ids,paths,warnings);
+  if(!toolpath)return{ok:false,toolpath:null,errors:['DXF-Mehrfachauswahl konnte nicht zu einem kanonischen Konturpfad zusammengeführt werden.'],warnings,targetDepthMm:operation.totalDepthMm};
+  return{ok:true,toolpath,errors:[],warnings,targetDepthMm:operation.totalDepthMm};
+}
+
+export function buildDxfMultiTargetPocketState(args:CommonArgs&{operation:PocketOperation;previousToolpaths?:CanonicalToolpath[]}):DxfMultiTargetState{
+  const {operation}=args,ids=normalizeDxfTargetIds(operation);
+  if(!ids.length)return{ok:false,toolpath:null,errors:['Keine geschlossene DXF-Taschenkontur gewählt.'],warnings:[],targetDepthMm:operation.totalDepthMm};
+  if(ids.length===1){
+    const single={...operation,contourId:ids[0],contourIds:[ids[0]]};
+    return buildPocketOperationState({...args,operation:single});
+  }
+  if(operation.restMachiningEnabled)return{ok:false,toolpath:null,errors:['Restmaterial mit DXF-Mehrfachauswahl ist in Build 006B noch nicht freigegeben.'],warnings:[],targetDepthMm:operation.totalDepthMm};
+  const paths:CanonicalToolpath[]=[],errors:string[]=[],warnings:string[]=[];
+  for(const id of ids){
+    const single={...operation,contourId:id,contourIds:[id],restMachiningEnabled:false,restFromOperationId:null};
+    const state=buildPocketOperationState({...args,operation:single});
+    errors.push(...state.errors.map(message=>`Tasche ${id+1}: ${message}`));
+    warnings.push(...state.warnings.map(message=>`Tasche ${id+1}: ${message}`));
+    if(state.toolpath)paths.push(state.toolpath);
+  }
+  if(errors.length||paths.length!==ids.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm:operation.totalDepthMm};
+  const toolpath=aggregate(operation.id,ids,paths,warnings);
+  if(!toolpath)return{ok:false,toolpath:null,errors:['DXF-Mehrfachauswahl konnte nicht zu einem kanonischen Taschenpfad zusammengeführt werden.'],warnings,targetDepthMm:operation.totalDepthMm};
+  return{ok:true,toolpath,errors:[],warnings,targetDepthMm:operation.totalDepthMm};
+}
+''')
+
+          # Operation cloning/summaries.
+          patch('src/lib/operationsProject.ts',
+                "import type { CamOperation, OperationKind, OperationsProject } from './types';",
+                "import type { CamOperation, ContourOperation, OperationKind, OperationsProject, PocketOperation } from './types';\nimport { normalizeDxfTargetIds } from './dxfMultiTargetSelection';")
+          patch('src/lib/operationsProject.ts',
+                "...((operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')?{faceIds:[...operation.faceIds]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...(operation.excludedSegmentIds??[])]}:{})",
+                "...((operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')?{faceIds:[...operation.faceIds]}:{}),...((operation.kind==='contour'||operation.kind==='pocket')?{contourIds:[...normalizeDxfTargetIds(operation)]}:{}),...(operation.kind==='contour'?{excludedSegmentIds:[...(operation.excludedSegmentIds??[])]}:{})")
+          patch('src/lib/operationsProject.ts',
+                "if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:operationName(kind,serial),excludedSegmentIds:[],tool:{...defaultContourOperation.tool}};",
+                "if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:operationName(kind,serial),contourIds:[],excludedSegmentIds:[],tool:{...defaultContourOperation.tool}};")
+          patch('src/lib/operationsProject.ts',
+                "if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:operationName(kind,serial),tool:{...defaultPocketOperation.tool}};",
+                "if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:operationName(kind,serial),contourIds:[],tool:{...defaultPocketOperation.tool}};")
+          patch('src/lib/operationsProject.ts',
+                "export function operationSummary(operation:CamOperation):string {",
+                "export function dxfTargetIds(operation:ContourOperation|PocketOperation):number[]{return normalizeDxfTargetIds(operation);}\n\nexport function operationSummary(operation:CamOperation):string {")
+          patch('src/lib/operationsProject.ts',
+                "return `${operation.contourId===null?'Keine Kontur':`${operation.topology==='open'?'Offene':'Kontur'} ${operation.contourId+1}`} · ${side}${broken} · ${tool}`;",
+                "const targets=operation.topology==='closed'?dxfTargetIds(operation):[];const target=operation.topology==='closed'?(targets.length?`${targets.length} Kontur${targets.length===1?'':'en'}`:'Keine Kontur'):(operation.contourId===null?'Keine Kontur':`Offene ${operation.contourId+1}`);return `${target} · ${side}${broken} · ${tool}`;")
+          patch('src/lib/operationsProject.ts',
+                "return `${operation.contourId===null?'Keine Kontur':`Kontur ${operation.contourId+1}`} · ${strategy} · ${entry} · ${operation.stepoverPercent}% Zustellung · ${tool}`;",
+                "const targets=dxfTargetIds(operation);return `${targets.length?`${targets.length} Taschenziel${targets.length===1?'':'e'}`:'Keine Kontur'} · ${strategy} · ${entry} · ${operation.stepoverPercent}% Zustellung · ${tool}`;")
+
+          # Canonical routing: STEP stays untouched, DXF aggregates before 004T.
+          patch('src/lib/activeCanonicalToolpath.ts',
+                "import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';",
+                "import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';\nimport { buildDxfMultiTargetContourState, buildDxfMultiTargetPocketState } from './dxfMultiTargetToolpath';")
+          patch('src/lib/activeCanonicalToolpath.ts',
+                "const state=buildDxfContourCanonicalState({summary,stock,stockMode,placement,orientation,wcs,operation});",
+                "const state=buildDxfMultiTargetContourState({summary,stock,stockMode,placement,orientation,wcs,operation});")
+          patch('src/lib/activeCanonicalToolpath.ts',
+                "const state=buildPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths});\n    return state.ok?state.toolpath:null;",
+                "const state=summary.kind==='dxf'?buildDxfMultiTargetPocketState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths}):buildPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths});\n    return state.ok?state.toolpath:null;")
+
+          # Job preflight uses the same aggregated canonical truth.
+          patch('src/lib/jobPreflight.ts',
+                "import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';",
+                "import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';\nimport { buildDxfMultiTargetContourState, buildDxfMultiTargetPocketState } from './dxfMultiTargetToolpath';\nimport { normalizeDxfTargetIds } from './dxfMultiTargetSelection';")
+          patch('src/lib/jobPreflight.ts',
+                "const state=buildPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)});",
+                "const state=summary.kind==='dxf'?buildDxfMultiTargetPocketState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)}):buildPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)});")
+          patch('src/lib/jobPreflight.ts',
+                ":`DXF Tasche · Kontur${operation.contourId!=null?` ${operation.contourId+1}`:''} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;",
+                ":`DXF Tasche · ${normalizeDxfTargetIds(operation).length} Ziel${normalizeDxfTargetIds(operation).length===1?'':'e'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;")
+          patch('src/lib/jobPreflight.ts',
+                "else{const state=buildDxfContourCanonicalState({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...state.errors];opWarnings=[...state.warnings];",
+                "else{const state=buildDxfMultiTargetContourState({summary,stock,stockMode,placement,orientation,wcs,operation});opErrors=[...state.errors];opWarnings=[...state.warnings];")
+
+          # App: toggle DXF targets while retaining singular primary id for legacy code.
+          patch('src/App.svelte',
+                "import { activeOperation, addOperation, cloneOperation, operationSummary, removeOperation, replaceOperation, selectOperation } from './lib/operationsProject';",
+                "import { activeOperation, addOperation, cloneOperation, dxfTargetIds, operationSummary, removeOperation, replaceOperation, selectOperation } from './lib/operationsProject';\n  import { toggleDxfTargetId } from './lib/dxfMultiTargetSelection';")
+          patch('src/App.svelte',
+                "function selectContour(id:number){if(operation.kind==='contour'||operation.kind==='pocket')setOperation({...operation,contourId:id});}",
+                "function selectContour(id:number){if(operation.kind!=='contour'&&operation.kind!=='pocket')return;if(importSummary?.kind!=='dxf'||(operation.kind==='contour'&&operation.topology==='open')){setOperation({...operation,contourId:id,contourIds:[id]});return;}const contourIds=toggleDxfTargetId(operation,id);setOperation({...operation,contourId:contourIds[0]??null,contourIds});}")
+          patch('src/App.svelte',
+                "const contourId=(operation.kind==='facing'||operation.kind==='carve'||operation.kind==='drill'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')?null:operation.contourId;if(kind==='facing')setOperation({...defaultFacingOperation,...common,tool:{...defaultFacingOperation.tool}});else if(kind==='contour')setOperation({...defaultContourOperation,...common,contourId});else if(kind==='pocket')setOperation({...defaultPocketOperation,...common,contourId});",
+                "const contourId=(operation.kind==='facing'||operation.kind==='carve'||operation.kind==='drill'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')?null:operation.contourId;const contourIds=(operation.kind==='contour'||operation.kind==='pocket')?dxfTargetIds(operation):[];if(kind==='facing')setOperation({...defaultFacingOperation,...common,tool:{...defaultFacingOperation.tool}});else if(kind==='contour')setOperation({...defaultContourOperation,...common,contourId,contourIds});else if(kind==='pocket')setOperation({...defaultPocketOperation,...common,contourId,contourIds});")
+          patch('src/App.svelte',
+                "(importSummary?.kind==='step'?op.stepFaceId===pocket.stepFaceId:op.contourId===pocket.contourId)",
+                "(importSummary?.kind==='step'?op.stepFaceId===pocket.stepFaceId:dxfTargetIds(op).join(',')===dxfTargetIds(pocket).join(','))")
+          patch('src/App.svelte',
+                "{:else if operation.kind==='contour'||operation.kind==='pocket'}<p>{importSummary.kind==='dxf'?'Klicke im Viewport auf eine geschlossene Kontur.':operation.kind==='contour'?'Offene Kontur: Klicke die Seitenfläche(n), deren obere Profilkante gefräst werden soll. Geschlossene Kontur: Wähle weiterhin eine eindeutige Randkante.':'Klicke die planare STEP-Face, die als Taschenboden bearbeitet werden soll.'}</p>{#if importSummary.kind==='dxf'}<p class=\"note\"><strong>Ziel:</strong> {operation.contourId===null?'Noch keine geschlossene Kontur gewählt.':`Kontur ${operation.contourId+1} gewählt.`}</p>",
+                "{:else if operation.kind==='contour'||operation.kind==='pocket'}<p>{importSummary.kind==='dxf'?((operation.kind==='contour'&&operation.topology==='open')?'Klicke im Viewport auf eine offene Kontur.':'Klicke geschlossene Konturen an, um sie dieser Bearbeitung hinzuzufügen oder wieder zu entfernen.'):operation.kind==='contour'?'Offene Kontur: Klicke die Seitenfläche(n), deren obere Profilkante gefräst werden soll. Geschlossene Kontur: Wähle weiterhin eine eindeutige Randkante.':'Klicke die planare STEP-Face, die als Taschenboden bearbeitet werden soll.'}</p>{#if importSummary.kind==='dxf'}<p class=\"note\"><strong>Auswahl:</strong> {(operation.kind==='contour'&&operation.topology==='open')?(operation.contourId===null?'Noch keine offene Kontur gewählt.':`Offene Kontur ${operation.contourId+1} gewählt.`):(dxfTargetIds(operation).length?`${dxfTargetIds(operation).length} geschlossene Kontur${dxfTargetIds(operation).length===1?'':'en'} gewählt.`:'Noch keine geschlossene Kontur gewählt.')}</p>")
+
+          # Overlay: show every selected DXF target, while primary target remains available for editing.
+          patch('src/lib/ContourOverlay.svelte',
+                "import { buildPocketCanonicalToolpath, samplePocketSpatialSegment } from './pocketCanonicalToolpath';",
+                "import { buildPocketCanonicalToolpath, samplePocketSpatialSegment } from './pocketCanonicalToolpath';\n  import { normalizeDxfTargetIds } from './dxfMultiTargetSelection';")
+          patch('src/lib/ContourOverlay.svelte',
+                "const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;",
+                "const selectedIds=new Set(normalizeDxfTargetIds(operation));const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;")
+          patch('src/lib/ContourOverlay.svelte',
+                "return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,toolRuns,entryRuns,spatialEntry:entryRuns.length>0,entryKind:operation.entry};",
+                "return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map),selected:selectedIds.has(c.id)})),selected:selected?selected.points.map(map):null,toolRuns,entryRuns,spatialEntry:entryRuns.length>0,entryKind:operation.entry};")
+          patch('src/lib/ContourOverlay.svelte',
+                "return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0,nativeBreakSelection:!!selectedSemantic?.segments.length};",
+                "const selectedIds=new Set(operation.topology==='closed'?normalizeDxfTargetIds(operation):[]);return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map),selected:selectedIds.has(c.id)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0,nativeBreakSelection:!!selectedSemantic?.segments.length};")
+          patch('src/lib/ContourOverlay.svelte',
+                "operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'?operation.kind:(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):operation.contourId,",
+                "operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'?operation.kind:(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):(operation.kind==='contour'||operation.kind==='pocket')?normalizeDxfTargetIds(operation).join(','):operation.kind,")
+          patch('src/lib/ContourOverlay.svelte',
+                "<path d={path(chain.screen,true)} class=\"candidate\" />\n        <path d={path(chain.screen,true)} class=\"pick\" onclick={()=>onSelectContour(chain.id,'closed')}><title>Geschlossene Taschenkontur {chain.id+1} auswählen</title></path>",
+                "<path d={path(chain.screen,true)} class=\"candidate\" class:selected={chain.selected} />\n        <path d={path(chain.screen,true)} class=\"pick\" onclick={()=>onSelectContour(chain.id,'closed')}><title>{chain.selected?'Taschenkontur aus Auswahl entfernen':`Geschlossene Taschenkontur ${chain.id+1} hinzufügen`}</title></path>")
+          patch('src/lib/ContourOverlay.svelte',
+                "<path d={path(chain.screen,true)} class=\"candidate\" />\n        <path d={path(chain.screen,true)} class=\"pick\" onclick={()=>chooseClosed(chain.id)}><title>Geschlossene Kontur {chain.id+1} auswählen</title></path>",
+                "<path d={path(chain.screen,true)} class=\"candidate\" class:selected={chain.selected} />\n        <path d={path(chain.screen,true)} class=\"pick\" onclick={()=>chooseClosed(chain.id)}><title>{chain.selected?'Kontur aus Auswahl entfernen':`Geschlossene Kontur ${chain.id+1} hinzufügen`}</title></path>")
+
+          Path('scripts/check-006b-multi-target-contracts.mjs').write_text('''import fs from 'node:fs';
+import ts from 'typescript';
+const fail=m=>{throw new Error(`006B contract FAIL: ${m}`)};
+const source=fs.readFileSync('src/lib/dxfMultiTargetSelection.ts','utf8');
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const mod=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+const normalized=mod.normalizeDxfTargetIds({contourId:4,contourIds:[7,2,7,4]});
+if(normalized.join(',')!=='2,4,7')fail('target ids must be unique and stable');
+if(mod.normalizeDxfTargetIds({contourId:5}).join(',')!=='5')fail('legacy singular contourId must remain supported');
+if(mod.toggleDxfTargetId({contourId:2,contourIds:[2,4]},4).join(',')!=='2')fail('toggle must remove an existing target');
+if(mod.toggleDxfTargetId({contourId:2,contourIds:[2]},6).join(',')!=='2,6')fail('toggle must add a target');
+if(mod.dxfMultiTargetKey([6,2,6])!=='dxf-contours:2,6')fail('multi target key must be deterministic');
+const aggregate=fs.readFileSync('src/lib/dxfMultiTargetToolpath.ts','utf8');
+if(!aggregate.includes('runs:toolpaths.flatMap(path=>path.runs)'))fail('canonical target runs must be aggregated before safe motion');
+if(!aggregate.includes('motions:undefined'))fail('aggregate must not concatenate already-materialized machine motions');
+if(!aggregate.includes('Restmaterial mit DXF-Mehrfachauswahl'))fail('multi-target rest machining must fail closed in 006B');
+const active=fs.readFileSync('src/lib/activeCanonicalToolpath.ts','utf8');
+if(!active.includes('buildDxfMultiTargetContourState')||!active.includes('buildDxfMultiTargetPocketState'))fail('Bearbeiten must consume multi-target canonical truth');
+const preflight=fs.readFileSync('src/lib/jobPreflight.ts','utf8');
+if(!preflight.includes('buildDxfMultiTargetContourState')||!preflight.includes('buildDxfMultiTargetPocketState'))fail('Prüfen must consume the same multi-target canonical truth');
+const app=fs.readFileSync('src/App.svelte','utf8');
+if(!app.includes('toggleDxfTargetId(operation,id)'))fail('DXF viewport selection must toggle targets');
+if(!app.includes("importSummary?.kind!=='dxf'||(operation.kind==='contour'&&operation.topology==='open')"))fail('STEP/open contour selection must retain single-target semantics');
+console.log('006B contract PASS: DXF contour/pocket multi-target selection aggregates at Canonical Toolpath level; STEP remains unchanged; 004T materializes transitions afterwards.');
+''')
+
+          Path('docs/BUILD-006B.md').write_text('''# Build 006B — DXF Multi-Target Operations
+
+## Ziel
+
+Eine einzelne DXF-Bearbeitung kann mehrere geschlossene Geometrieziele besitzen. Werkzeug- und Schnittparameter gelten gemeinsam für alle gewählten Ziele.
+
+## Scope
+
+- DXF Kontur: mehrere geschlossene Konturen pro Operation
+- DXF Tasche: mehrere geschlossene Taschenkonturen pro Operation
+- Klick im Viewport toggelt ein Ziel in/aus der Auswahl
+- bestehendes `contourId` bleibt als rückwärtskompatibles Primärziel erhalten
+- `contourIds[]` ist die explizite Mehrfachauswahl
+- alte Projektdateien mit ausschließlich `contourId` bleiben gültig
+
+STEP-Auswahl bleibt in 006B unverändert.
+
+## Motion-Truth
+
+Die einzelnen Ziele werden mit den bereits freigegebenen Single-Target-Builders erzeugt und anschließend **vor** 004T zu einem operationseigenen Canonical Toolpath zusammengeführt.
+
+Damit gilt weiterhin:
+
+> Inspector Motion Truth = Simulation Motion Truth = Preview Motion Truth = Preflight Motion Truth = NC Motion Truth.
+
+Der Postprozessor kennt keine Multi-Target-Sonderlogik. 004T materialisiert erst nach der Aggregation die sicheren XYZ-Übergänge zwischen den Runs.
+
+## Fail-closed Grenzen
+
+- Ein fehlerhaftes Ziel sperrt die gesamte Operation; es gibt keinen partiellen NC-Export.
+- Aufgebrochene DXF-Konturen plus Mehrfachauswahl sind in 006B nicht freigegeben.
+- Restmaterialbearbeitung plus DXF-Taschen-Mehrfachauswahl ist in 006B nicht freigegeben. Single-Target-Restmaterial bleibt unverändert.
+- STEP bleibt unverändert.
+
+## Akzeptanz
+
+1. Zwei oder mehr geschlossene DXF-Konturen lassen sich in einer Konturoperation an- und abwählen.
+2. Zwei oder mehr geschlossene DXF-Konturen lassen sich in einer Taschenoperation an- und abwählen.
+3. Bearbeiten/Preview zeigt alle gewählten Ziele.
+4. Prüfen rekonstruiert denselben aggregierten Canonical Toolpath.
+5. 004T erzeugt sichere Übergänge zwischen den Ziel-Runs.
+6. NC enthält alle Ziele genau einmal innerhalb derselben Operation.
+7. Speichern/Öffnen erhält `contourIds[]`; alte Projekte mit nur `contourId` bleiben gültig.
+8. Ein Ziel verhält sich wie vor 006B.
+''')
+
+          patch('package.json',
+                '    "check:006a": "node scripts/check-006a-estlcam-contracts.mjs",',
+                '    "check:006a": "node scripts/check-006a-estlcam-contracts.mjs",\n    "check:006b": "node scripts/check-006b-multi-target-contracts.mjs",')
+          patch('.github/workflows/ci.yml',
+                '      - name: Estlcam production contract\n        run: pnpm check:006a\n',
+                '      - name: Estlcam production contract\n        run: pnpm check:006a\n      - name: DXF multi-target contract\n        run: pnpm check:006b\n')
+
+          # The applying workflow is transient; the final branch tree stays clean.
+          Path('.github/workflows/006b-apply.yml').unlink()
+          PY
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "build 006b: add DXF multi-target operations"
+          git push origin HEAD:build/006b-dxf-multi-target
