@@ -74,11 +74,16 @@ export function postDrillCanonicalToolpath(toolpath:CanonicalToolpath,options:Dr
   if(toolpath.operationKind!=='drill')throw new Error('Canonical toolpath is not a drill toolpath.');
   const motions=toolpath.motions??[];
   if(!motions.length)throw new Error('Canonical drill toolpath contains no machine motions.');
+  const firstStart=motions[0].start;
   const lines:string[]=[
     '( BeBlog CAM 001Z-A )',
     `( Operation: Bohren · ${toolpath.strategy==='helical-bore'?'Helixfräsen':'Axial bohren'} · canonical toolpath )`,
     '( Sichtbare Werkzeugbahn und Maschinenbahn verwenden dieselbe kanonische Bewegungsgeometrie )',
-    'G21','G90','G17',`S${Math.round(options.spindleRpm)} M3`,
+    'G21','G90','G17',
+    '( Initial Safe Entry · unbekannte Maschinen-XY-Position )',
+    `G0 Z${f3(firstStart.z)}`,
+    `G0 X${f3(firstStart.x)} Y${f3(firstStart.y)}`,
+    `S${Math.round(options.spindleRpm)} M3`,
   ];
   for(const motion of motions){
     if(motion.kind==='rapid3'){
