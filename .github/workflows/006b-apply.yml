@@ -16,7 +16,9 @@ jobs:
         with:
           ref: build/006b-dxf-multi-target
       - name: Apply 006B patch
-        run: python3 scripts/apply-006b.py
+        run: |
+          python3 scripts/apply-006b.py
+          git restore HEAD -- .github/workflows/ci.yml .github/workflows/006b-apply.yml
       - name: Commit implementation
         run: |
           git config user.name "github-actions[bot]"
