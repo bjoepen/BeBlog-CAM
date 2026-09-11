@@ -6,6 +6,7 @@ const job=fs.readFileSync(new URL('../src/lib/jobGcode.ts',import.meta.url),'utf
 const panel=fs.readFileSync(new URL('../src/lib/JobGCodePanel.svelte',import.meta.url),'utf8');
 const architecture=fs.readFileSync(new URL('../docs/ARCHITECTURE.md',import.meta.url),'utf8');
 const drillParser=fs.readFileSync(new URL('../src/lib/drillMotionParser.ts',import.meta.url),'utf8');
+const drillCanonical=fs.readFileSync(new URL('../src/lib/drillCanonicalToolpath.ts',import.meta.url),'utf8');
 const safeMotion=fs.readFileSync(new URL('../src/lib/safeMotionChain.ts',import.meta.url),'utf8');
 
 function assert(condition,message){
@@ -45,6 +46,8 @@ assert(architecture.includes('Probing und Antasten gehören zur Maschinensteueru
 assert(architecture.includes('Estlcam ist das erste praktische Produktionsziel'),'Architecture must identify Estlcam as the first practical production target.');
 assert(drillParser.includes('const state:AxisState={x:null,y:null,z:null}'),'DXF drill parsing must keep unknown axes unknown.');
 assert(!drillParser.includes('const state:State={x:0,y:0,z:0}'),'DXF drill parsing must never invent WCS origin as the initial machine position.');
+assert(drillCanonical.includes('( Initial Safe Entry · unbekannte Maschinen-XY-Position )'),'Standalone drill posting must preserve an explicit safe entry after removing the invented origin.');
+assert(drillCanonical.includes('`G0 Z${f3(firstStart.z)}`')&&drillCanonical.includes('`G0 X${f3(firstStart.x)} Y${f3(firstStart.y)}`'),'Standalone drill safe entry must move Z first and XY second.');
 
 // Execute the real TypeScript postprocessor against a representative two-tool job.
 const {postProcessEstlcam}=await importTsSource(post);
