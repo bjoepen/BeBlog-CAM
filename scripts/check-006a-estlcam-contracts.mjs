@@ -5,12 +5,22 @@ const post=fs.readFileSync(new URL('../src/lib/postprocessors.ts',import.meta.ur
 const job=fs.readFileSync(new URL('../src/lib/jobGcode.ts',import.meta.url),'utf8');
 const panel=fs.readFileSync(new URL('../src/lib/JobGCodePanel.svelte',import.meta.url),'utf8');
 const architecture=fs.readFileSync(new URL('../docs/ARCHITECTURE.md',import.meta.url),'utf8');
+const drillParser=fs.readFileSync(new URL('../src/lib/drillMotionParser.ts',import.meta.url),'utf8');
+const safeMotion=fs.readFileSync(new URL('../src/lib/safeMotionChain.ts',import.meta.url),'utf8');
 
 function assert(condition,message){
   if(!condition){
     console.error(`006A contract FAIL: ${message}`);
     process.exit(1);
   }
+}
+
+function importTsSource(source){
+  const transpiled=ts.transpileModule(source,{
+    compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}
+  }).outputText;
+  const moduleUrl=`data:text/javascript;base64,${Buffer.from(transpiled).toString('base64')}`;
+  return import(moduleUrl);
 }
 
 // Architectural/static boundary checks.
@@ -33,13 +43,11 @@ assert(job.includes('spindleRunning=false;')&&job.includes('activeSpindleRpm=nul
 assert(panel.includes('Estlcam erhält einen echten M6-Werkzeugwechsel'),'UI must describe Estlcam-specific M6 behavior.');
 assert(architecture.includes('Probing und Antasten gehören zur Maschinensteuerung'),'Architecture must keep probing in the controller boundary.');
 assert(architecture.includes('Estlcam ist das erste praktische Produktionsziel'),'Architecture must identify Estlcam as the first practical production target.');
+assert(drillParser.includes('const state:AxisState={x:null,y:null,z:null}'),'DXF drill parsing must keep unknown axes unknown.');
+assert(!drillParser.includes('const state:State={x:0,y:0,z:0}'),'DXF drill parsing must never invent WCS origin as the initial machine position.');
 
 // Execute the real TypeScript postprocessor against a representative two-tool job.
-const transpiled=ts.transpileModule(post,{
-  compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}
-}).outputText;
-const moduleUrl=`data:text/javascript;base64,${Buffer.from(transpiled).toString('base64')}`;
-const {postProcessEstlcam}=await import(moduleUrl);
+const {postProcessEstlcam}=await importTsSource(post);
 
 const fixture=`( BeBlog CAM 004T )
 G21
@@ -76,4 +84,40 @@ assert(lines.filter(line=>/^G/i.test(line)).every(line=>/^G[0-3]\b/i.test(line))
 const invalidTool=postProcessEstlcam('M6 T2\n');
 assert(!invalidTool.ok,'M6 with T parameter must fail closed.');
 
-console.log('006A contract PASS: Estlcam output is dialect-safe; overall-job spindle state is preserved across same-tool operations and reset only for tool changes.');
+// 006A-F02 regression: generated drill G-code establishes Safe-Z before XY.
+// The canonical parser must not turn the unknown modal axes into X0/Y0/Z0.
+const {parseCanonicalMachineMotions}=await importTsSource(drillParser);
+const drillFixture=`G21
+G90
+G17
+S10000 M3
+G0 Z5.000
+G0 X26.860 Y48.410
+G1 Z-4.000 F120
+G0 Z5.000
+M5
+M30
+`;
+const drillMotions=parseCanonicalMachineMotions(drillFixture);
+assert(drillMotions.length===2,'F02 drill fixture must materialize only the known plunge and retract motions.');
+assert(drillMotions[0].start.x===26.86&&drillMotions[0].start.y===48.41&&drillMotions[0].start.z===5,'F02 first canonical drill anchor must be hole XY at Safe-Z.');
+assert(drillMotions[0].end.z===-4,'F02 first canonical drill motion must plunge from Safe-Z to target depth.');
+assert(!drillMotions.some(motion=>[motion.start,motion.end].some(point=>point.x===0&&point.y===0&&point.z===0)),'F02 must not invent WCS origin as a machine-motion point.');
+assert(!drillMotions.some(motion=>motion.kind==='rapid3'&&motion.end.z===0),'F02 must not create an unexplained rapid to Z0.');
+
+// The unchanged 004T linker must now receive the corrected first safe anchor.
+const {materializeSafeMotionChain,buildJobSafeTransitions}=await importTsSource(safeMotion);
+const drillToolpath={version:1,operationKind:'drill',strategy:'drill',tool:{diameterMm:3},stepoverPercent:0,runs:[],motions:drillMotions};
+const drillSafe=materializeSafeMotionChain({toolpath:drillToolpath,safeZMm:5});
+assert(drillSafe.ok,'F02 corrected drill motions must pass 004T materialization.');
+assert(drillSafe.startSafePoint?.x===26.86&&drillSafe.startSafePoint?.y===48.41&&drillSafe.startSafePoint?.z===5,'004T must expose the corrected drill Safe-Z start anchor.');
+assert(!drillSafe.warnings.some(message=>message.includes('beginnen nicht auf Sicherheits-Z')),'F02 must remove the prior 004T unsafe-start warning.');
+
+const previousToolpath={version:1,operationKind:'contour',strategy:'contour',tool:{diameterMm:3},stepoverPercent:0,runs:[],motions:[{kind:'rapid3',start:{x:30,y:30,z:5},end:{x:30,y:30,z:5}}]};
+const linked=buildJobSafeTransitions({operations:[{id:'before',safeZMm:5,toolpath:previousToolpath},{id:'drill',safeZMm:5,toolpath:drillToolpath}]});
+assert(linked.ok,'F02 tool-change-to-drill safe transition must remain valid.');
+const linkedMotions=linked.transitions[0]?.motions??[];
+assert(linkedMotions.every(motion=>motion.start.z>=5&&motion.end.z>=5),'F02 inter-operation transition must stay at Safe-Z and never descend to Z0.');
+assert(linkedMotions.at(-1)?.end.x===26.86&&linkedMotions.at(-1)?.end.y===48.41&&linkedMotions.at(-1)?.end.z===5,'F02 transition must end at the real drill Safe-Z anchor.');
+
+console.log('006A contract PASS: Estlcam output is dialect-safe; spindle state is preserved; F02 drill canonicalization never invents WCS origin and 004T stays on Safe-Z across tool-change transitions.');
