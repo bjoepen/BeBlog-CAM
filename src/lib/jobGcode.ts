@@ -104,20 +104,34 @@ export function generateJobGcode(args:Args):JobGcodeResult{
   lines.push(`G0 Z${f3(firstStart.z)}`);
   lines.push(`G0 X${f3(firstStart.x)} Y${f3(firstStart.y)}`);
   let toolChangeCount=0;
+  let spindleRunning=false;
+  let activeSpindleRpm:number|null=null;
   prepared.forEach((item,index)=>{
     const operation=item.operation,toolpath=item.preflight!.toolpath!;
-    lines.push(`( Bearbeitung ${index+1}/${enabled.length} · ${label(operation)} · ${operationDisplayName(operation,index)} )`,`M3 S${Math.round(operation.spindleRpm)}`);
+    const spindleRpm=Math.round(operation.spindleRpm);
+    lines.push(`( Bearbeitung ${index+1}/${enabled.length} · ${label(operation)} · ${operationDisplayName(operation,index)} )`);
+    if(!spindleRunning){
+      lines.push(`M3 S${spindleRpm}`);
+      spindleRunning=true;
+      activeSpindleRpm=spindleRpm;
+    }else if(activeSpindleRpm!==spindleRpm){
+      lines.push(`S${spindleRpm}`);
+      activeSpindleRpm=spindleRpm;
+    }
     lines.push(...postCanonicalMachineMotions({motions:toolpath.motions??[],operation}));
     const next=prepared[index+1]?.operation;
     if(!next)return;
     if(toolKey(operation)!==toolKey(next)){
       toolChangeCount++;
       lines.push('M5',`( Werkzeugwechsel ${toolChangeCount} )`,`M0 ( Werkzeug ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm einsetzen und bestaetigen )`);
+      spindleRunning=false;
+      activeSpindleRpm=null;
     }else lines.push(`( Gleiches Werkzeug · ${next.tool.name} · Ø${f3(next.tool.diameterMm)} mm )`);
     const transition=transitions.transitions.find(t=>t.fromOperationId===operation.id&&t.toOperationId===next.id);
     if(transition?.motions.length)lines.push(...postCanonicalMachineMotions({motions:transition.motions,operation:next}));
   });
-  lines.push('M5','M30');
+  if(spindleRunning)lines.push('M5');
+  lines.push('M30');
   const code=lines.join('\n')+'\n';
   return{ok:true,errors:[],warnings:[...new Set(preflight.warnings)],code,lineCount:lines.length,operationCount:enabled.length,toolChangeCount};
 }

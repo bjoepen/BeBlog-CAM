@@ -13,7 +13,8 @@ BeBlog CAM is split into independent layers. No CAM strategy may depend on the d
 │ CAM core     │ Machine setup │
 ├──────────────┼───────────────┤
 │ Geometry     │ Postprocess   │
-│ STEP / DXF   │ LinuxCNC      │
+│ STEP / DXF   │ Estlcam       │
+│              │ LinuxCNC      │
 ├──────────────┴───────────────┤
 │ Project model / persistence  │
 └──────────────────────────────┘
@@ -99,31 +100,27 @@ DXF ──→ DXF parser ──┘
 
 Tessellation is a derived representation for rendering, selected CAM algorithms and simulation; it is not the canonical STEP part representation.
 
-## 5. Probing model
+## 5. Machine setup and controller boundary
 
-The first probing workflow targets rectangular stock.
+BeBlog CAM defines the machining geometry, the stock relationship and the work-coordinate assumptions required to produce a controller-neutral machine path. It does **not** take over the machine controller's setup procedures.
 
-### XY stock alignment
-- Probe point A on a selected stock edge.
-- Probe point B on the same edge, with useful separation.
-- Compute stock rotation in XY.
-- Probe point C on the orthogonal stock edge.
-- Resolve stock origin and XY transform.
+**Probing und Antasten gehören zur Maschinensteuerung.**
 
-### Z zero
-A configurable touch plate is placed on stock top. Configuration includes:
+For the 0.1 product direction this means:
 
-- plate thickness
-- coarse probe feed
-- fine probe feed
-- retract distance
-- maximum search travel
-- safety clearance
-- input polarity / normally-open state
+- BeBlog CAM does not implement its own automatic XY stock probing cycle.
+- BeBlog CAM does not implement its own touch-plate or tool-length probing cycle.
+- Establishing and measuring the real machine work coordinate system remains a controller responsibility.
+- Controller-specific probing, tool-length measurement and machine setup may be triggered or supported by the selected controller's own facilities where appropriate.
+- CAM geometry, canonical toolpaths and approved machine motions remain independent of the controller's probing implementation.
 
-The intended cycle is coarse touch → retract → fine touch → retract → set Z0 corrected by plate thickness.
+The hard transform model remains:
 
-Probing results belong to machine/WCS setup, never to CAD geometry.
+```text
+Part → Stock → WCS → Machine
+```
+
+The controller is responsible for establishing the real machine-side WCS that matches the CAM assumptions before machining starts.
 
 ## 6. CAM operations
 
@@ -157,25 +154,39 @@ FreeCAD CAM is useful as an architectural and behavioural reference because it a
 
 ## 8. Simulation
 
-Simulation must use the same operation/tool definitions as toolpath generation. Initial implementation may use a heightfield/voxel representation for 3-axis stock removal. Exact BRep reconstruction of machined stock is not required for 0.1.
+Simulation must use the same approved operation/tool definitions and machine-motion truth as toolpath generation and NC export. The current 005A–005C path provides a read-only overall-job preview, playback and inspector without reconstructing CAM geometry.
 
-Initial checks:
+A later stock-removal simulation may use a heightfield/voxel representation for 3-axis material removal. Exact BRep reconstruction of machined stock is not required for 0.1 and is not a prerequisite for the current production gate.
+
+Possible later checks include:
 
 - tool cutting portion vs stock/part
 - rapid move through remaining stock
 - travel below configured safe height where inappropriate
 
-Holder/fixture collision checking is a later extension but the data model must permit holder geometry and fixtures.
+Holder/fixture collision checking remains a later extension where it adds practical value.
 
 ## 9. Postprocessing
 
-Initial postprocessor:
+**Estlcam ist das erste praktische Produktionsziel.** LinuxCNC remains an important supported/reference controller path, but it is not the first machine-side acceptance target.
 
-- LinuxCNC
+Postprocessors consume the already approved controller-neutral machine path. They must not recompute geometry, toolpaths or safe-motion chains.
 
-Postprocessors consume controller-neutral toolpaths and machine configuration. They must not recompute toolpaths.
+The controller-neutral job may express manual interaction generically. A controller-specific postprocessor may translate that interaction into the controller's native semantics without changing the approved geometric motion truth.
 
-An Estlcam-oriented output path can be investigated separately; BeBlog CAM must not assume Estlcam and LinuxCNC use identical controller semantics.
+For Estlcam the production contract is deliberately conservative:
+
+- G0/G1/G2/G3 are the only motion G-codes emitted to the controller.
+- Coordinates remain absolute; XY arcs use relative I/J as provided by the canonical NC path.
+- Unsupported modal setup/end G-codes are removed rather than relied upon.
+- Spindle speed and M3 are emitted as separate lines.
+- A real tool change is emitted as standalone `M6`, without `T` or other parameters.
+- The controller-neutral manual tool-change pause is translated to `M6` only in the Estlcam postprocessor.
+- Probing and tool-length measurement remain controller behavior; BeBlog CAM does not synthesize probing geometry into the canonical path.
+
+This preserves the central invariant:
+
+> **Postprocessing changes controller syntax, not machining truth.**
 
 ## 10. Reference part acceptance test
 
@@ -188,4 +199,4 @@ The initial end-to-end 3D reference is a CBG headstock containing:
 
 A second 2.5D acceptance fixture must be supplied as DXF to verify profiles, circles/arcs and closed contours independently of STEP.
 
-Build 0.1 is useful when both formats can be imported cleanly and the CBG headstock can be programmed without another CAM application, with generated LinuxCNC output inspected/simulated safely.
+Build 0.1 is useful when both formats can be imported cleanly, the CBG headstock can be programmed without another CAM application, the complete approved job can be previewed/inspected in BeBlog CAM, and the generated Estlcam NC output passes a real controller-side acceptance including a multi-tool job and tool change. LinuxCNC remains a secondary compatibility/reference path.

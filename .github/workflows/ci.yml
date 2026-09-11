@@ -41,6 +41,8 @@ jobs:
         run: pnpm check:005b
       - name: Job simulation inspector contract
         run: pnpm check:005c
+      - name: Estlcam production contract
+        run: pnpm check:006a
       - name: Frontend build
         run: pnpm build
       - name: Rust check
