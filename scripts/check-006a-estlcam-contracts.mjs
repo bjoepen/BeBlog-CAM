@@ -24,6 +24,12 @@ assert(post.includes("const motion=normalizeMotion(line)"),'Estlcam must preserv
 assert(job.includes("`( Werkzeugwechsel ${toolChangeCount} )`"),'Raw job must retain its controller-neutral tool-change marker.');
 assert(job.includes("`M0 ( Werkzeug ${next.tool.name}"),'Raw job must retain the manual neutral pause; M6 belongs to the postprocessor.');
 assert(!job.includes("'M6'"),'Job motion generator must not become Estlcam-specific.');
+assert(job.includes('let spindleRunning=false'),'Overall job must track spindle running state across operation boundaries.');
+assert(job.includes('let activeSpindleRpm:number|null=null'),'Overall job must track active spindle RPM.');
+assert(job.includes('if(!spindleRunning){'),'Spindle must only be started when it is not already running.');
+assert(job.includes('}else if(activeSpindleRpm!==spindleRpm){'),'Same-tool RPM changes must update speed without a redundant spindle restart.');
+assert(job.includes("lines.push(`S${spindleRpm}`)"),'RPM-only change must emit S without M3.');
+assert(job.includes('spindleRunning=false;')&&job.includes('activeSpindleRpm=null;'),'Tool change must reset spindle state after M5.');
 assert(panel.includes('Estlcam erhält einen echten M6-Werkzeugwechsel'),'UI must describe Estlcam-specific M6 behavior.');
 assert(architecture.includes('Probing und Antasten gehören zur Maschinensteuerung'),'Architecture must keep probing in the controller boundary.');
 assert(architecture.includes('Estlcam ist das erste praktische Produktionsziel'),'Architecture must identify Estlcam as the first practical production target.');
@@ -70,4 +76,4 @@ assert(lines.filter(line=>/^G/i.test(line)).every(line=>/^G[0-3]\b/i.test(line))
 const invalidTool=postProcessEstlcam('M6 T2\n');
 assert(!invalidTool.ok,'M6 with T parameter must fail closed.');
 
-console.log('006A contract PASS: Estlcam output is a dialect translation of approved motions; two-tool fixture emits standalone M6 and Estlcam-safe syntax.');
+console.log('006A contract PASS: Estlcam output is dialect-safe; overall-job spindle state is preserved across same-tool operations and reset only for tool changes.');
