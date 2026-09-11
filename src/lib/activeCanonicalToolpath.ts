@@ -8,6 +8,7 @@ import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
 import { buildStepDrillOperationState } from './stepDrillOperation';
 import { buildZLevelOperationState } from './zLevelOperationState';
 import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';
+import { buildDxfMultiTargetContourState, buildDxfMultiTargetPocketState } from './dxfMultiTargetToolpath';
 import type { CamOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
 export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:CamOperation;previousToolpaths?:CanonicalToolpath[]}):CanonicalToolpath|null{
@@ -21,11 +22,11 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
       const state=buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths});
       return state.ok?state.toolpath:null;
     }
-    const state=buildDxfContourCanonicalState({summary,stock,stockMode,placement,orientation,wcs,operation});
+    const state=buildDxfMultiTargetContourState({summary,stock,stockMode,placement,orientation,wcs,operation});
     return state.ok?state.toolpath:null;
   }
   if(operation.kind==='pocket'){
-    const state=buildPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths});
+    const state=summary.kind==='dxf'?buildDxfMultiTargetPocketState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths}):buildPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:args.previousToolpaths});
     return state.ok?state.toolpath:null;
   }
   if(operation.kind==='carve')return buildCarveCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});

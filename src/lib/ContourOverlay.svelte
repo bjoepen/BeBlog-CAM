@@ -5,6 +5,7 @@
   import { buildBrokenContourPath } from './brokenContour';
   import { buildBrokenSemanticContour, sampleSemanticRun, sampleSemanticSegment } from './brokenSemanticContour';
   import { buildPocketCanonicalToolpath, samplePocketSpatialSegment } from './pocketCanonicalToolpath';
+  import { normalizeDxfTargetIds } from './dxfMultiTargetSelection';
 
   export let summary: ImportSummary;
   export let stock: StockDefinition;
@@ -86,14 +87,14 @@
     }
 
     if(operation.kind==='pocket'){
-      const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
+      const selectedIds=new Set(normalizeDxfTargetIds(operation));const selected=operation.contourId==null?null:cs.find(c=>c.id===operation.contourId)??null;
       const canonical=buildPocketCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs:previewWcs,operation});
       const toolRuns=(canonical?.runs??[]).map(run=>({z:run.z,points:run.points.map(map)}));
       const entryRuns=(canonical?.runs??[]).flatMap(run=>(run.entrySegments??[]).flatMap(segment=>{
         const sampled=samplePocketSpatialSegment(segment);
         return sampled.slice(1).map((point,index)=>({z:point.z,points:[map({x:sampled[index].x,y:sampled[index].y}),map({x:point.x,y:point.y})]}));
       }));
-      return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map)})),selected:selected?selected.points.map(map):null,toolRuns,entryRuns,spatialEntry:entryRuns.length>0,entryKind:operation.entry};
+      return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map),selected:selectedIds.has(c.id)})),selected:selected?selected.points.map(map):null,toolRuns,entryRuns,spatialEntry:entryRuns.length>0,entryKind:operation.entry};
     }
 
     const selectedClosed=operation.topology==='closed'&&operation.contourId!=null?cs.find(c=>c.id===operation.contourId)??null:null;
@@ -120,13 +121,13 @@
     }
     if(selectedOpen){toolRuns=[{points:offsetOpenChain(selectedOpen.points,radius,operation.openSide,.003).points.map(map),closed:false}];}
     const open=os.map(c=>({...c,screen:c.points.map(map),left:offsetOpenChain(c.points,radius,'left',.003).points.map(map),right:offsetOpenChain(c.points,radius,'right',.003).points.map(map)}));
-    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0,nativeBreakSelection:!!selectedSemantic?.segments.length};
+    const selectedIds=new Set(operation.topology==='closed'?normalizeDxfTargetIds(operation):[]);return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map),selected:selectedIds.has(c.id)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0,nativeBreakSelection:!!selectedSemantic?.segments.length};
   }
 
   $: scene=buildScene(
     summary.fileName,
     operation.kind,
-    operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'?operation.kind:(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):operation.contourId,
+    operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'?operation.kind:(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):(operation.kind==='contour'||operation.kind==='pocket')?normalizeDxfTargetIds(operation).join(','):operation.kind,
     operation.kind==='contour'?operation.topology:operation.kind,
     operation.kind==='contour'?operation.openSide:operation.kind,
     operation.kind==='contour'?(operation.excludedSegmentIds??[]).join(','):operation.kind,
@@ -165,16 +166,16 @@
       {/each}
     {:else if scene.kind==='pocket'}
       {#each scene.chains as chain}
-        <path d={path(chain.screen,true)} class="candidate" />
-        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id,'closed')}><title>Geschlossene Taschenkontur {chain.id+1} auswählen</title></path>
+        <path d={path(chain.screen,true)} class="candidate" class:selected={chain.selected} />
+        <path d={path(chain.screen,true)} class="pick" onclick={()=>onSelectContour(chain.id,'closed')}><title>{chain.selected?'Taschenkontur aus Auswahl entfernen':`Geschlossene Taschenkontur ${chain.id+1} hinzufügen`}</title></path>
       {/each}
       {#if scene.selected}<path d={path(scene.selected,true)} class="selected"/>{/if}
       {#each scene.entryRuns as entry}<path d={path(entry.points,false)} class="toolpath pocket-entry-toolpath toolpath-preview" data-toolpath-z={entry.z} data-toolpath-spatial="entry"/>{/each}
       {#each scene.toolRuns as tool}<path d={path(tool.points,false)} class="toolpath pocket-toolpath toolpath-preview" data-toolpath-z={tool.z}/>{/each}
     {:else}
       {#each scene.closed as chain}
-        <path d={path(chain.screen,true)} class="candidate" />
-        <path d={path(chain.screen,true)} class="pick" onclick={()=>chooseClosed(chain.id)}><title>Geschlossene Kontur {chain.id+1} auswählen</title></path>
+        <path d={path(chain.screen,true)} class="candidate" class:selected={chain.selected} />
+        <path d={path(chain.screen,true)} class="pick" onclick={()=>chooseClosed(chain.id)}><title>{chain.selected?'Kontur aus Auswahl entfernen':`Geschlossene Kontur ${chain.id+1} hinzufügen`}</title></path>
       {/each}
       {#each scene.open as chain}
         <path d={path(chain.screen,false)} class="open-candidate" />
