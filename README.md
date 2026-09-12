@@ -14,31 +14,32 @@ BeBlog CAM keeps the workpiece at the center and follows one stable workflow:
 
 The interface stays calm while the CAM underneath is allowed to become technically capable.
 
-## What already works
+## Current capability
 
-BeBlog CAM is no longer just an architecture experiment. The current alpha already contains a practical 2D/2.5D and emerging 3D workflow, including:
+BeBlog CAM has reached a broad practical 3-axis maker-CAM scope. The current system includes:
 
-- DXF import for 2D geometry
+- DXF import for planar geometry
 - native STEP/BRep import through Open CASCADE Technology (OCCT)
-- model orientation and work-coordinate handling
+- model orientation, stock placement and work-coordinate handling
 - stock definition from dimensions or part geometry
 - material profiles and tool-library integration
 - facing
 - contour machining with **outside / inside / on-line** tool placement
-- deliberately **opened contours**: individual segments of an otherwise closed contour can be excluded from machining
-- pockets
+- deliberately **opened contours** and spatial tabs
+- pockets, including multi-target and through-cut allowance workflows
 - carve operations
-- drilling
-- helical bore milling
-- STEP face selection
-- Z-level roughing groundwork for 3D parts
-- roughing allowance for a later finishing pass
-- visual toolpath previews
-- bounded **2.5D inspection** for checking real cutting depths without turning the 2D canvas into a full 3D viewer
-- unified checks in **Prüfen**
-- G-code generation for practical CNC workflows
+- drilling and helical bore milling
+- STEP contour, pocket and drilling workflows
+- Z-Level roughing for STEP/BRep models
+- roughing/finishing allowances and stock-aware machining support
+- 3D surface finishing
+- visual Job Preview
+- machine-motion Simulation and Inspector
+- unified Job Preflight in **Prüfen**
+- G-code generation
+- explicit Estlcam, GRBL and LinuxCNC postprocessor dialects
 
-Development is driven against real maker parts, including the CBG headstock reference workpiece, rather than synthetic demo geometry alone.
+Development is driven against real maker parts and real generated NC rather than synthetic demo geometry alone.
 
 ## Product DNA
 
@@ -61,17 +62,21 @@ Or, more compactly:
 
 The full product contract lives in [docs/PRODUCT-DNA.md](docs/PRODUCT-DNA.md).
 
-## No blind toolpaths
+## Prüfen is a production gate
 
 A CAM application should not ask the user to trust a calculation they cannot see.
 
-BeBlog CAM is therefore moving toward a canonical toolpath pipeline in which the geometry shown in the viewport is the same machining geometry consumed by later checks and G-code generation.
+BeBlog CAM therefore uses a canonical machine-motion pipeline. Preview, Simulation, Inspector, Preflight and NC are not intended to become separate interpretations of the job.
 
-Current previews use a visually distinct toolpath language and can expose multiple cutting depths through the 2.5D inspection view. This makes questions such as “Are there really three stepdowns?” or “Did that excluded contour segment come back?” answerable **before** G-code leaves the application.
+The binding direction is:
 
-The goal is straightforward:
+> **Inspector Motion Truth = Simulation Motion Truth = Preview Motion Truth = Preflight Motion Truth = NC Motion Truth.**
 
-**Operation → canonical toolpath → visual verification → Prüfen → G-code**
+`Prüfen` validates the actual job before machine output. Depending on the configured job it can include canonical-toolpath validation, 004T safe-motion materialization, rest-stock/tool-assembly checks, fixture collision checks, machine-envelope checks and spindle-head collision checks.
+
+The production path is:
+
+**Operation → Canonical Toolpath → 004T Safe Motion → Preview / Simulation → Prüfen → NC**
 
 No surprise egg at the machine.
 
@@ -89,7 +94,7 @@ The resulting mental and technical model is:
 
 **Part → Stock → WCS → Machine**
 
-This separation also leaves room for later probing workflows in which a slightly rotated real workpiece can be measured instead of requiring perfect manual alignment.
+Machine-side probing and tool-length handling remain controller responsibilities rather than hidden CAM behavior.
 
 ## Technical foundation
 
@@ -106,20 +111,30 @@ Geometry, CAM strategies, visualisation, validation and postprocessing are kept 
 
 ## Development
 
-For the frontend gates:
+Frontend/static gates:
 
 ```bash
 pnpm check
 pnpm build
 ```
 
-For the native macOS development application:
+Native macOS development application:
 
 ```bash
 pnpm native:dev
 ```
 
-The native path is required when testing functionality that depends on the OCCT bridge, particularly STEP/BRep workflows.
+The native path is mandatory when testing STEP/BRep and 3D workflows.
+
+### Native production build
+
+A production macOS application/DMG must be built through:
+
+```bash
+pnpm native:build
+```
+
+This build path enables the `occt-native` feature and bundles the native STEP/BRep implementation. A plain `pnpm tauri build` is **not considered a valid production build**, because it may omit the native OCCT bridge and therefore lose STEP-derived 3D functionality.
 
 ## Scope
 
@@ -127,12 +142,27 @@ BeBlog CAM is focused on **3-axis maker CNC machining**.
 
 The project deliberately does not try to become an industrial manufacturing suite. 4/5-axis machining, turning, production planning, cloud services and enterprise workflow management are outside the present product direction.
 
+Surface Carve was explored experimentally and rejected after real-world acceptance. Its research code does not form part of the production feature set.
+
 The aim is narrower and harder to fake: make common CNC work understandable, inspectable and pleasant without sacrificing the geometry and machining correctness underneath.
+
+## Road to production readiness
+
+Feature expansion is no longer the primary development goal. Build 008 focuses on proving and hardening the existing system:
+
+- **008A — Production Acceptance Suite:** reproducible reference jobs and NC regression gates
+- **008B — Project & Failure Hardening:** deterministic persistence and fail-closed recovery paths
+- **008C — Estlcam Production Qualification:** qualify the real Estlcam 11 / 3-axis workflow
+- **008D — Release Candidate:** reproducible native macOS build, DMG, installation and end-to-end acceptance
+
+See [Build 008 — Production Readiness Roadmap](docs/ROADMAP-008-PRODUCTION-READINESS.md).
 
 ## Status
 
-**Early alpha — under active development.**
+**Production-hardening alpha.**
 
-The repository evolves in small, auditable increments against real machining workflows. Features are expected to pass both technical gates and visual/real-world checks before they are treated as established behaviour.
+The intended maker-CAM feature scope is substantially present. Current development prioritizes reproducible acceptance, failure safety, controller qualification and release packaging over additional machining strategies.
+
+Features are established only after technical gates and real-world acceptance agree.
 
 And yes, there is a CAM flea. Its job is to find problems before the router does. 🐜
