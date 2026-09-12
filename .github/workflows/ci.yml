@@ -63,3 +63,25 @@ jobs:
         run: pnpm build
       - name: Rust check
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+
+  native-step:
+    name: Native STEP acceptance
+    needs: macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Cache OCCT 8 installation
+        uses: actions/cache@v4
+        with:
+          path: .cache/occt/install
+          key: occt-v8-0-1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-occt-macos.sh') }}
+      - name: STEP master native production acceptance
+        run: pnpm check:008a3
