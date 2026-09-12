@@ -2,6 +2,7 @@ import type { PartOrientation, PartPlacement, StockDefinition, ZLevelRoughingOpe
 import type { P3 } from './stepView';
 import { buildCurvedFaceTarget, curvedFaceTargetZAt } from './curvedFaceTarget';
 import { buildCurvedFaceRoughing } from './curvedFaceRoughing';
+import { buildSurfaceCarveViewProof } from './surfaceCarveViewProof';
 
 type Target=ReturnType<typeof buildCurvedFaceTarget>;
 type Roughing=ReturnType<typeof buildCurvedFaceRoughing>;
@@ -44,7 +45,7 @@ export function cachedCurvedViewTarget(ctx:Context,part:P3[],displayFaceIds:numb
 }
 
 export function cachedCurvedViewSamples(ctx:Context,target:Target,selectedFaceIds:number[]){
-  const key=baseKey(ctx,selectedFaceIds)+'|samples24';
+  const key=baseKey(ctx,selectedFaceIds)+'|samples24|surface-carve-view-proof';
   if(key===sampleKey)return sampleValue;
   const out:P3[][]=[];
   if(target?.valid&&target.bounds){
@@ -65,6 +66,8 @@ export function cachedCurvedViewSamples(ctx:Context,target:Target,selectedFaceId
       }
       if(column.length>=2)out.push(column);
     }
+    const proof=buildSurfaceCarveViewProof(target);
+    if(proof.ok)out.push(...proof.paths);
   }
   sampleKey=key;sampleValue=out;curvedViewCacheStats.sampleBuilds++;
   return out;
