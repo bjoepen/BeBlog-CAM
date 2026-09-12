@@ -36,10 +36,17 @@ function syncMaterialSelector() {
   }
 }
 
+function syncRetiredExperimentalControls() {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.geometry-caption .help button')) {
+    if (button.textContent?.trim() === 'Gekrümmte Zielfläche') button.remove();
+  }
+}
+
 function syncUiExtensions() {
   syncMaterialSelector();
   syncToolpath25dControl();
   syncDxfNoStockDrillGuard();
+  syncRetiredExperimentalControls();
 }
 
 requestAnimationFrame(() => {
