@@ -1,0 +1,17 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');
+const types=read('src/lib/types.ts');
+const state=read('src/lib/pocketOperationState.ts');
+const app=read('src/App.svelte');
+const multi=read('src/lib/dxfMultiTargetToolpath.ts');
+const fail=(m)=>{console.error(`006C contract FAIL: ${m}`);process.exit(1)};
+if(!types.includes('throughCutAllowanceMm?:number'))fail('PocketOperation does not persist through-cut allowance.');
+if(!types.includes('throughCutAllowanceMm:0'))fail('Pocket default is not zero.');
+if(!state.includes("operation.totalDepthMm+throughCutAllowance"))fail('allowance is not added to nominal DXF depth before canonical generation.');
+if(!state.includes("summary.kind==='dxf'"))fail('DXF scope boundary is missing.');
+if(!state.includes('Durchfräszugabe aktiv'))fail('effective-depth warning/detail is missing.');
+if(!app.includes('updatePocketThroughCutAllowance'))fail('Bearbeiten UI does not expose the allowance.');
+if(!app.includes('Durchfräszugabe'))fail('German UI label is missing.');
+if(!multi.includes('buildPocketOperationState'))fail('006B multi-target pockets no longer route through shared pocket state.');
+if(state.includes('CanonicalMachineMotion')||state.includes('materializeSafeMotionChain'))fail('006C must not materialize or rewrite machine motion.');
+console.log('006C contract PASS: DXF pocket through-cut allowance extends canonical target depth before 004T; default remains 0; multi-target shares the same pocket builder.');
