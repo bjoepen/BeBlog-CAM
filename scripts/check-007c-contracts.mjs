@@ -18,7 +18,6 @@ if(!types.includes("kind:'surface-carve'"))fail('SurfaceCarveOperation is not de
 if(!types.includes('export interface SurfaceCarveOperation'))fail('Standalone SurfaceCarveOperation type is missing.');
 if(!types.includes('roughingOperationId:string|null'))fail('Surface Carve does not retain an explicit Z-Level predecessor reference.');
 if(!types.includes('geometrySourceId:string|null'))fail('Surface Carve does not reserve an operation-owned secondary 2D geometry source.');
-if(types.includes("OperationKind='facing'|'contour'|'pocket'|'carve'|'surface-carve'"))fail('007C must not expose unfinished Surface Carve in the existing operation UI before secondary geometry wiring.');
 
 if(!canonical.includes("|'surface-carve'|'drill'"))fail('Canonical operation vocabulary does not distinguish Surface Carve from Carve.');
 if(!canonical.includes("|'surface-carve'|'drill'|'helical-bore'"))fail('Canonical strategy vocabulary does not distinguish Surface Carve from Carve.');
@@ -38,8 +37,8 @@ if(!contract.includes('operation.faceIds.includes'))fail('Surface Carve does not
 if(!contract.includes('unter Bearbeiten geladene sekundäre 2D-Geometrie'))fail('Secondary geometry ownership under Bearbeiten is not encoded in validation.');
 
 if(safe.includes("operationKind==='surface-carve'"))fail('004T was specialized for Surface Carve instead of staying generic.');
-if(jobPreflight.includes('surfaceCarveOperationContract')||gcode.includes('surfaceCarveOperationContract')||post.includes('surfaceCarveOperationContract'))fail('Surface Carve operation contract was prematurely coupled into protected production paths.');
+if(jobPreflight.includes('surfaceCarveOperationContract')||gcode.includes('surfaceCarveOperationContract')||post.includes('surfaceCarveOperationContract'))fail('Surface Carve operation contract was directly coupled into protected production paths.');
 if(!rustImport.includes('"step"|"stp"')||!rustImport.includes('"dxf"'))fail('Primary importer no longer preserves STEP/STP and DXF support.');
 if(!rustImport.includes('BeBlog CAM unterstützt STEP/STP und DXF.'))fail('Primary Bauteil import boundary is no longer explicit.');
 
-console.log('007C contract PASS: Surface Carve is a distinct STEP-only operation contract with its own canonical identity, requires an earlier successful face-target Z-Level operation on the same face, reserves Bearbeiten-owned 2D geometry, and leaves normal Carve plus protected CAM paths separate.');
+console.log('007C contract PASS: Surface Carve remains a distinct STEP-only operation contract with its own canonical identity, requires an earlier successful face-target Z-Level operation on the same face, reserves Bearbeiten-owned 2D geometry, and leaves normal Carve plus protected CAM paths separate.');
