@@ -11,7 +11,6 @@ export type CanonicalPreflightResult={
 };
 
 const finite=(value:number)=>Number.isFinite(value);
-const explicitMotionKind=(toolpath:CanonicalToolpath)=>toolpath.operationKind==='drill'||toolpath.operationKind==='surface-finishing'||toolpath.operationKind==='surface-carve';
 
 export function validateCanonicalToolpath(toolpath:CanonicalToolpath|null|undefined):CanonicalPreflightResult{
   if(!toolpath){
@@ -42,10 +41,9 @@ export function validateCanonicalToolpath(toolpath:CanonicalToolpath|null|undefi
   }
 
   if(toolpath.operationKind==='drill'&&motionCount===0)errors.push('Bohren/Helix muss als kanonische XYZ-Maschinenbewegung vorliegen.');
-  if(toolpath.operationKind==='surface-carve'&&motionCount===0)errors.push('Surface Carve muss als kanonische XYZ-Maschinenbewegung vorliegen.');
-  if(!explicitMotionKind(toolpath)&&runCount===0)errors.push(`${toolpath.operationKind}: keine kanonische Schnittbahn vorhanden.`);
+  if(toolpath.operationKind!=='drill'&&toolpath.operationKind!=='surface-finishing'&&runCount===0)errors.push(`${toolpath.operationKind}: keine kanonische Schnittbahn vorhanden.`);
 
-  const summary=explicitMotionKind(toolpath)
+  const summary=toolpath.operationKind==='drill'||toolpath.operationKind==='surface-finishing'
     ? `${motionCount} kanonische XYZ-Bewegung${motionCount===1?'':'en'} · ${toolpath.strategy}`
     : `${runCount} kanonische Werkzeugbahn${runCount===1?'':'en'}${spatialEntryCount?` · ${spatialEntryCount} räumliche Einstiegsbewegung${spatialEntryCount===1?'':'en'}`:''} · ${toolpath.strategy}`;
 

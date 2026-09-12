@@ -14,6 +14,15 @@ mount(App, { target: document.getElementById('app')! });
 let materialSelector: ReturnType<typeof mount> | null = null;
 let materialHost: HTMLElement | null = null;
 
+const retiredStepProofControls = new Set([
+  'Gekrümmte Zielfläche',
+  'Hohlkehle Schruppen',
+  'Ballnose Kontakt',
+  'Modellregionen',
+  'Stock − Model',
+  'Modell-Schruppbahn',
+]);
+
 function syncMaterialSelector() {
   const inspector = document.querySelector<HTMLElement>('.inspector');
   const eyebrow = inspector?.querySelector<HTMLElement>('.eyebrow');
@@ -36,10 +45,21 @@ function syncMaterialSelector() {
   }
 }
 
+function syncRetiredExperimentalControls() {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.geometry-caption .help button')) {
+    const label = button.textContent?.trim() ?? '';
+    if (!retiredStepProofControls.has(label)) continue;
+    button.hidden = true;
+    button.setAttribute('aria-hidden', 'true');
+    button.tabIndex = -1;
+  }
+}
+
 function syncUiExtensions() {
   syncMaterialSelector();
   syncToolpath25dControl();
   syncDxfNoStockDrillGuard();
+  syncRetiredExperimentalControls();
 }
 
 requestAnimationFrame(() => {
