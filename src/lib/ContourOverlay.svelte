@@ -49,7 +49,7 @@
   }
 
   function buildScene(..._deps: unknown[]){
-    if(operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')return null;
+    if(operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'||operation.kind==='surface-carve')return null;
     const curves=summary.planarGeometry?.curves??[];if(summary.kind!=='dxf'||!curves.length)return null;
     const rotatedCurves=curves.map((curve,id)=>({id,curve,points:sampleCurve(curve).map(rotate)}));
     const all=rotatedCurves.flatMap(c=>c.points);if(!all.length)return null;const partB=bounds(all);
@@ -127,7 +127,7 @@
   $: scene=buildScene(
     summary.fileName,
     operation.kind,
-    operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'?operation.kind:(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):normalizeDxfTargetIds(operation).join(','),
+    operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'||operation.kind==='surface-carve'?operation.kind:(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):normalizeDxfTargetIds(operation).join(','),
     operation.kind==='contour'?operation.topology:operation.kind,
     operation.kind==='contour'?operation.openSide:operation.kind,
     operation.kind==='contour'?(operation.excludedSegmentIds??[]).join(','):operation.kind,
