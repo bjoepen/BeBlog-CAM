@@ -49,6 +49,8 @@ jobs:
         run: pnpm check:006c
       - name: STEP surface carve projection contract
         run: pnpm check:007a
+      - name: Surface carve canonical motion contract
+        run: pnpm check:007b
       - name: Frontend build
         run: pnpm build
       - name: Rust check
