@@ -2,6 +2,7 @@ import fs from 'node:fs';
 
 const read=path=>fs.readFileSync(path,'utf8');
 const projection=read('src/lib/surfaceCarveProjection.ts');
+const curvedView=read('src/lib/curvedViewCache.ts');
 const carve=read('src/lib/carveCanonicalToolpath.ts');
 const safe=read('src/lib/safeMotionChain.ts');
 const preflight=read('src/lib/jobPreflight.ts');
@@ -15,7 +16,11 @@ if(!projection.includes('verlässt die ausgewählte STEP-Fläche'))fail('outside
 if(!projection.includes('sampleSpacingMm'))fail('projection does not expose deterministic preview sampling.');
 if(projection.includes('materializeSafeMotionChain'))fail('007A must not materialize Safe Motion.');
 if(projection.includes('generateJobGcode')||projection.includes('postprocessors'))fail('007A must not generate or postprocess NC.');
+if(!curvedView.includes('projectCarveToolpathToSurface'))fail('visual proof does not route through the 007A projection adapter.');
+if(!curvedView.includes('surfaceCarveDiagnosticToolpath'))fail('visual proof diagnostic geometry is missing.');
+if(!curvedView.includes('point.z+.09'))fail('visual proof is not lifted only for display visibility.');
+if(curvedView.includes('materializeSafeMotionChain')||curvedView.includes('generateJobGcode'))fail('visual proof must remain preview-only.');
 if(carve.includes('surfaceCarveProjection')||carve.includes('curvedFaceTargetZAt'))fail('existing carve canonical kernel was coupled to surface projection.');
 if(safe.includes('surfaceCarveProjection')||preflight.includes('surfaceCarveProjection')||gcode.includes('surfaceCarveProjection')||post.includes('surfaceCarveProjection'))fail('007A leaked into the protected motion/NC pipeline.');
 
-console.log('007A contract PASS: STEP surface-carve projection is an isolated preview adapter over existing carve geometry and CurvedFaceTarget; CAM kernel, 004T, preflight, NC and postprocessors remain untouched.');
+console.log('007A contract PASS: STEP surface-carve projection and visual proof remain isolated preview adapters; CAM kernel, 004T, preflight, NC and postprocessors remain untouched.');
