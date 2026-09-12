@@ -1,14 +1,14 @@
 # Build 007A — STEP Surface Carve Projection
 
 ## Goal
-Prove that existing planar Carve geometry can be projected onto an already-selected STEP/BRep surface without changing the working CAM kernel.
+Prove that planar Carve geometry can be projected onto an already-selected STEP/BRep surface without changing the working CAM kernel.
 
 007A is deliberately preview-only. It does not generate a new machining operation, Safe Motion, NC code, or postprocessor output.
 
 ## Architecture boundary
 
 ```text
-existing Carve geometry
+planar Carve geometry
         ↓
 surfaceCarveProjection.ts
         ↓
@@ -24,7 +24,20 @@ Protected and unchanged in 007A:
 - `src/lib/jobGcode.ts`
 - `src/lib/postprocessors.ts`
 
-The projection adapter consumes the existing planar canonical Carve runs read-only. It samples their line/arc geometry and asks the established STEP height-field contract for Z at each XY point.
+The projection adapter consumes planar canonical Carve runs read-only. It samples their line/arc geometry and asks the established STEP height-field contract for Z at each XY point.
+
+## Visual proof
+
+The existing Curved-Face proof path now also routes a small deterministic diagnostic Carve motif through `projectCarveToolpathToSurface()` and draws the resulting XYZ polyline slightly above the surface for visibility.
+
+The +0.09 mm display lift is rendering-only; the projection result itself remains exactly on `Z(x,y)`.
+
+This visual proof is intentionally diagnostic geometry. It does not create or modify a CAM operation and cannot reach Safe Motion or NC generation.
+
+### Important current product boundary
+BeBlog CAM currently owns one `ImportSummary` at a time. A STEP model and a second DXF/SVG logo therefore cannot yet coexist as independent geometry sources in the same project state.
+
+007A does **not** solve that by changing the CAM kernel. A later import/UI layer may add secondary decoration geometry. Surface Carve itself remains source-agnostic: once geometry is normalized to planar Carve geometry, the projection adapter does not care whether it originated from DXF, SVG, text, or another source.
 
 ## Fail-closed behavior
 - only `operationKind === 'carve'` is accepted;
@@ -38,6 +51,7 @@ Default preview sampling is 0.5 mm. A caller may provide another positive `sampl
 
 ## Explicitly out of scope
 - SVG import
+- secondary decoration-geometry project state
 - logo placement UI
 - engraving depth relative to the surface
 - surface-following CanonicalMachineMotion
@@ -48,7 +62,7 @@ Default preview sampling is 0.5 mm. A caller may provide another positive `sampl
 Those only become eligible after the visual projection itself passes Real-World acceptance.
 
 ## Acceptance
-1. Existing planar Carve geometry projects onto a selected planar/sloped STEP face.
+1. Diagnostic Carve geometry visibly follows the selected STEP surface in the existing curved-face proof view.
 2. On a curved valid STEP face, projected preview points exhibit varying Z.
 3. A path extending beyond the selected surface fails with a concrete XY location.
 4. Existing planar Carve behavior remains unchanged.
