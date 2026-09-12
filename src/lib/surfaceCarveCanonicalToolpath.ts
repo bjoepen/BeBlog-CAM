@@ -89,16 +89,15 @@ export function buildSurfaceCarveCanonicalToolpath(
   const errors:string[]=[];
   const warnings:string[]=[];
 
-  if(planarCarveToolpath.operationKind!=='carve')errors.push('007B erwartet eine vorhandene kanonische Carve-Geometrie.');
+  // A normal planar Carve is only the normalized 2D source geometry. The
+  // machining result below is deliberately a distinct Surface Carve.
+  if(planarCarveToolpath.operationKind!=='carve')errors.push('Surface Carve erwartet eine vorhandene kanonische 2D-Carve-Quellgeometrie.');
   if(!target.valid)errors.push(...target.errors.map(error=>`STEP-Fläche: ${error}`));
   if(!finite(options.safeZMm))errors.push('Sicherheits-Z muss endlich sein.');
   if(!(options.feedMmMin>0&&finite(options.feedMmMin)))errors.push('Vorschub muss größer als 0 sein.');
   if(!(options.plungeMmMin>0&&finite(options.plungeMmMin)))errors.push('Eintauchvorschub muss größer als 0 sein.');
   if(errors.length)return{ok:false,toolpath:null,errors:[...new Set(errors)],warnings,runCount:0,cuttingMotionCount:0};
 
-  // Planar Carve geometry is canonical WCS geometry. The selected STEP target is
-  // reconstructed in stock/world coordinates, so projection happens in world XY
-  // and the result is converted back to WCS afterwards.
   const worldToolpath=worldCarveToolpath(planarCarveToolpath,options.origin);
   const projected=projectCarveToolpathToSurface(worldToolpath,target,{sampleSpacingMm:options.sampleSpacingMm});
   errors.push(...projected.errors);
@@ -112,14 +111,12 @@ export function buildSurfaceCarveCanonicalToolpath(
 
   for(const projectedRun of projected.runs){
     const sourceRun=planarCarveToolpath.runs[projectedRun.sourceRunIndex];
-    if(!sourceRun){errors.push(`Projizierter Carve-Lauf ${projectedRun.sourceRunIndex+1} besitzt keinen Quelllauf.`);continue;}
-    if(projectedRun.points.length<2){warnings.push(`Projizierter Carve-Lauf ${projectedRun.sourceRunIndex+1} enthält weniger als zwei Punkte.`);continue;}
+    if(!sourceRun){errors.push(`Projizierter Surface-Carve-Lauf ${projectedRun.sourceRunIndex+1} besitzt keinen Quelllauf.`);continue;}
+    if(projectedRun.points.length<2){warnings.push(`Projizierter Surface-Carve-Lauf ${projectedRun.sourceRunIndex+1} enthält weniger als zwei Punkte.`);continue;}
 
-    // Existing planar Carve uses negative Z values for cutting depth. Preserve
-    // exactly that depth as an offset relative to the local STEP surface.
     const relativeDepthMm=sourceRun.z;
     if(!finite(relativeDepthMm)||relativeDepthMm>EPS){
-      errors.push(`Carve-Lauf ${projectedRun.sourceRunIndex+1}: relative Schnitttiefe ${relativeDepthMm} mm ist ungültig.`);
+      errors.push(`Surface-Carve-Lauf ${projectedRun.sourceRunIndex+1}: relative Schnitttiefe ${relativeDepthMm} mm ist ungültig.`);
       continue;
     }
 
@@ -135,14 +132,14 @@ export function buildSurfaceCarveCanonicalToolpath(
     const endSafe:ToolpathPoint3={x:end.x,y:end.y,z:options.safeZMm};
 
     if(previousSafe&&!samePoint(previousSafe,startSafe)){
-      appendMotion(motions,{kind:'rapid3',start:previousSafe,end:startSafe},errors,`Carve-Lauf ${projectedRun.sourceRunIndex+1} XY-Rapid`);
+      appendMotion(motions,{kind:'rapid3',start:previousSafe,end:startSafe},errors,`Surface-Carve-Lauf ${projectedRun.sourceRunIndex+1} XY-Rapid`);
     }
-    appendMotion(motions,{kind:'line3',start:startSafe,end:start,feedMmMin:options.plungeMmMin},errors,`Carve-Lauf ${projectedRun.sourceRunIndex+1} Zustellung`);
+    appendMotion(motions,{kind:'line3',start:startSafe,end:start,feedMmMin:options.plungeMmMin},errors,`Surface-Carve-Lauf ${projectedRun.sourceRunIndex+1} Zustellung`);
     for(const [index,segment] of cutSegments3.entries()){
-      appendMotion(motions,segment,errors,`Carve-Lauf ${projectedRun.sourceRunIndex+1} Schnitt ${index+1}`);
+      appendMotion(motions,segment,errors,`Surface-Carve-Lauf ${projectedRun.sourceRunIndex+1} Schnitt ${index+1}`);
       cuttingMotionCount++;
     }
-    appendMotion(motions,{kind:'rapid3',start:end,end:endSafe},errors,`Carve-Lauf ${projectedRun.sourceRunIndex+1} Sicherheits-Retract`);
+    appendMotion(motions,{kind:'rapid3',start:end,end:endSafe},errors,`Surface-Carve-Lauf ${projectedRun.sourceRunIndex+1} Sicherheits-Retract`);
     previousSafe=endSafe;
 
     runs.push({
@@ -154,9 +151,9 @@ export function buildSurfaceCarveCanonicalToolpath(
     });
   }
 
-  if(!runs.length&&!errors.length)errors.push('007B konnte keine surface-following Carve-Schnittbahn erzeugen.');
-  if(motions.length&&Math.abs(motions[0].start.z-options.safeZMm)>EPS)errors.push('007B-Motions beginnen nicht auf Sicherheits-Z.');
-  if(motions.length&&Math.abs(motions.at(-1)!.end.z-options.safeZMm)>EPS)errors.push('007B-Motions enden nicht auf Sicherheits-Z.');
+  if(!runs.length&&!errors.length)errors.push('Surface Carve konnte keine surface-following Schnittbahn erzeugen.');
+  if(motions.length&&Math.abs(motions[0].start.z-options.safeZMm)>EPS)errors.push('Surface-Carve-Motions beginnen nicht auf Sicherheits-Z.');
+  if(motions.length&&Math.abs(motions.at(-1)!.end.z-options.safeZMm)>EPS)errors.push('Surface-Carve-Motions enden nicht auf Sicherheits-Z.');
 
   if(errors.length)return{ok:false,toolpath:null,errors:[...new Set(errors)],warnings:[...new Set(warnings)],runCount:runs.length,cuttingMotionCount};
 
@@ -164,8 +161,8 @@ export function buildSurfaceCarveCanonicalToolpath(
     ok:true,
     toolpath:{
       version:1,
-      operationKind:'carve',
-      strategy:'carve',
+      operationKind:'surface-carve',
+      strategy:'surface-carve',
       tool:{diameterMm:planarCarveToolpath.tool.diameterMm},
       stepoverPercent:0,
       runs,
