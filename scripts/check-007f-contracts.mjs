@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const read=path=>fs.readFileSync(path,'utf8');
 const exists=path=>fs.existsSync(path);
 const app=read('src/App.svelte');
+const main=read('src/main.ts');
 const types=read('src/lib/types.ts');
 const operations=read('src/lib/operationsProject.ts');
 const active=read('src/lib/activeCanonicalToolpath.ts');
@@ -31,4 +32,7 @@ if(!projection.includes('projectCarveToolpathToSurface'))fail('007A experimental
 if(!canonical.includes('buildSurfaceCarveCanonicalToolpath'))fail('007B experimental canonical helper was unexpectedly removed.');
 if(app.includes('surfaceCarveProjection')||active.includes('buildSurfaceCarveCanonicalToolpath')||preflight.includes('buildSurfaceCarveCanonicalToolpath')||gcode.includes('buildSurfaceCarveCanonicalToolpath'))fail('Experimental 007A/007B code leaked back into the product pipeline.');
 
-console.log('007F cleanup PASS: Surface Carve product/UI/persistence integration is removed; ordinary Carve and Z-Level remain; 007A/007B survive only as isolated experimental research helpers.');
+if(!main.includes('syncRetiredExperimentalControls'))fail('Retired experimental STEP control cleanup is missing.');
+if(!main.includes("button.textContent?.trim() === 'Gekrümmte Zielfläche'"))fail('Gekrümmte Zielfläche remains product-facing.');
+
+console.log('007F cleanup PASS: Surface Carve product/UI/persistence integration is removed; the retired curved-target control is not product-facing; ordinary Carve and Z-Level remain; 007A/007B survive only as isolated experimental research helpers.');
