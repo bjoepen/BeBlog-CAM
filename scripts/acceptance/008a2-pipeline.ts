@@ -48,6 +48,22 @@ const summary = (geometry: PlanarGeometry, fileName: string): ImportSummary => (
   note: 'Generated in code; no external DXF fixture required.',
 });
 
+const axialDrillTool = {
+  ...defaultDrillOperation.tool,
+  id: 'tool-drill-6',
+  name: 'Bohrer 6 mm',
+  diameterMm: 6,
+  shaftDiameterMm: 6,
+};
+
+const helixMillTool = {
+  ...defaultContourOperation.tool,
+  id: 'tool-helix-3',
+  name: 'Schaftfräser 3 mm',
+  diameterMm: 3,
+  kind: 'end-mill' as const,
+};
+
 const fixtures: Array<{ name: string; summary: ImportSummary; operation: CamOperation }> = [
   {
     name: 'facing',
@@ -72,12 +88,12 @@ const fixtures: Array<{ name: string; summary: ImportSummary; operation: CamOper
   {
     name: 'drill',
     summary: summary(drillPattern(), 'synthetic-drill.dxf'),
-    operation: { ...defaultDrillOperation, id: 'a2-drill', name: 'Bohren A2', curveIds: [0, 1], method: 'drill', totalDepthMm: 4, tool: { ...defaultDrillOperation.tool } },
+    operation: { ...defaultDrillOperation, id: 'a2-drill', name: 'Bohren A2', curveIds: [0, 1], method: 'drill', totalDepthMm: 4, tool: axialDrillTool },
   },
   {
     name: 'helix',
     summary: summary(drillPattern(), 'synthetic-helix.dxf'),
-    operation: { ...defaultDrillOperation, id: 'a2-helix', name: 'Bohren A2 Helix', curveIds: [0, 1], method: 'helical-mill', totalDepthMm: 4, stepDownMm: 1, tool: { ...defaultDrillOperation.tool } },
+    operation: { ...defaultDrillOperation, id: 'a2-helix', name: 'Bohren A2 Helix', curveIds: [0, 1], method: 'helical-mill', totalDepthMm: 4, stepDownMm: 1, tool: helixMillTool },
   },
 ];
 
