@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 import type { CamOperation, ContourOperation, OperationKind, OperationsProject, PocketOperation } from './types';
 import { normalizeDxfTargetIds } from './dxfMultiTargetSelection';
-import { defaultFacingOperation, defaultCarveOperation, defaultSurfaceCarveOperation, defaultContourOperation, defaultPocketOperation, defaultDrillOperation, defaultZLevelRoughingOperation, defaultSurfaceFinishingOperation, defaultOperationsProject } from './types';
+import { defaultFacingOperation, defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultDrillOperation, defaultZLevelRoughingOperation, defaultSurfaceFinishingOperation, defaultOperationsProject } from './types';
 
 export const operationsProjectStore=writable<OperationsProject>({
   operations:defaultOperationsProject.operations.map(op=>cloneOperation(op)),
@@ -18,11 +18,10 @@ function operationName(kind:OperationKind,serial:number){
   if(kind==='facing')return`Planen ${serial}`;
   if(kind==='contour')return`Kontur ${serial}`;
   if(kind==='pocket')return`Tasche ${serial}`;
-  if(kind==='carve')return`Carve ${serial}`;
-  if(kind==='surface-carve')return`Surface Carve ${serial}`;
   if(kind==='drill')return`Bohren ${serial}`;
   if(kind==='z-level-roughing')return`Z-Level Schruppen ${serial}`;
-  return`3D Schlichten ${serial}`;
+  if(kind==='surface-finishing')return`3D Schlichten ${serial}`;
+  return`Carve ${serial}`;
 }
 
 export function createOperation(kind:OperationKind,index:number):CamOperation {
@@ -30,11 +29,10 @@ export function createOperation(kind:OperationKind,index:number):CamOperation {
   if(kind==='facing') return {...defaultFacingOperation,id:`op-facing-${serial}`,name:operationName(kind,serial),tool:{...defaultFacingOperation.tool}};
   if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:operationName(kind,serial),contourIds:[],excludedSegmentIds:[],tool:{...defaultContourOperation.tool}};
   if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:operationName(kind,serial),contourIds:[],tool:{...defaultPocketOperation.tool}};
-  if(kind==='carve') return {...defaultCarveOperation,id:`op-carve-${serial}`,name:operationName(kind,serial),curveIds:[],tool:{...defaultCarveOperation.tool}};
-  if(kind==='surface-carve') return {...defaultSurfaceCarveOperation,id:`op-surface-carve-${serial}`,name:operationName(kind,serial),faceId:null,roughingOperationId:null,geometrySourceId:null,tool:{...defaultSurfaceCarveOperation.tool}};
   if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:operationName(kind,serial),curveIds:[],stepHoleFeatureIds:[],tool:{...defaultDrillOperation.tool}};
   if(kind==='z-level-roughing') return {...defaultZLevelRoughingOperation,id:`op-z-level-roughing-${serial}`,name:operationName(kind,serial),faceIds:[],tool:{...defaultZLevelRoughingOperation.tool}};
-  return {...defaultSurfaceFinishingOperation,id:`op-surface-finishing-${serial}`,name:operationName(kind,serial),faceIds:[],tool:{...defaultSurfaceFinishingOperation.tool}};
+  if(kind==='surface-finishing') return {...defaultSurfaceFinishingOperation,id:`op-surface-finishing-${serial}`,name:operationName(kind,serial),faceIds:[],tool:{...defaultSurfaceFinishingOperation.tool}};
+  return {...defaultCarveOperation,id:`op-carve-${serial}`,name:operationName(kind,serial),curveIds:[],tool:{...defaultCarveOperation.tool}};
 }
 
 export function activeOperation(project:OperationsProject):CamOperation|null {
@@ -81,12 +79,6 @@ export function operationSummary(operation:CamOperation):string {
     const side=operation.side==='left'?'Links':operation.side==='right'?'Rechts':'Auf Linie';
     return `${source} · ${operation.curveIds.length} Linie${operation.curveIds.length===1?'':'n'} · ${side} · ${tool}`;
   }
-  if(operation.kind==='surface-carve'){
-    const face=operation.faceId===null?'Keine STEP-Fläche':`STEP-Fläche ${operation.faceId}`;
-    const source=operation.geometrySourceId?'2D-Geometrie geladen':'Keine 2D-Geometrie';
-    const roughing=operation.roughingOperationId?'Z-Level zugeordnet':'Z-Level erforderlich';
-    return `${face} · ${source} · ${roughing} · ${operation.totalDepthMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm tief · ${tool}`;
-  }
   if(operation.kind==='drill'){
     const stepCount=operation.stepHoleFeatureIds?.length??0;
     const count=stepCount||operation.curveIds.length;
@@ -95,7 +87,9 @@ export function operationSummary(operation:CamOperation):string {
     const depth=(operation.depthMode??'manual')==='stock-bottom'?`Durch Rohling + ${(operation.overcutMm??0).toLocaleString('de-DE',{maximumFractionDigits:3})} mm`:`${operation.totalDepthMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm tief`;
     return `${method} · ${depth} · ${source} · ${count} Bohrung${count===1?'':'en'} · ${tool}`;
   }
-  if(operation.kind==='surface-finishing')return `${operation.direction==='x'?'Parallel X':'Parallel Y'} · ${operation.stepoverPercent}% Stepover · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${tool}`;
+  if(operation.kind==='surface-finishing'){
+    return `${operation.direction==='x'?'Parallel X':'Parallel Y'} · ${operation.stepoverPercent}% Stepover · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${tool}`;
+  }
   if(operation.kind==='z-level-roughing'){
     const source=(operation.roughingMode??'face-target')==='model'?'Modell':'Face Target';
     const islands=(operation.islandMode??'preserve')==='clear'?'Inseln mit schruppen':'Inseln stehen lassen';
