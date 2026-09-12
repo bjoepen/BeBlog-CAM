@@ -12,9 +12,9 @@ export type SurfaceCarveOperationValidation={
   roughingOperation:ZLevelRoughingOperation|null;
 };
 
-function earlierOperations(project:OperationsProject,operationId:string){
-  const index=project.operations.findIndex(operation=>operation.id===operationId);
-  return index<0?[]:project.operations.slice(0,index);
+function earlierOperations(project:OperationsProject,operationIndex:number){
+  const index=Math.max(0,Math.min(project.operations.length,Math.floor(operationIndex)));
+  return project.operations.slice(0,index);
 }
 
 function isFaceTargetRoughing(operation:OperationsProject['operations'][number]):operation is ZLevelRoughingOperation{
@@ -24,20 +24,23 @@ function isFaceTargetRoughing(operation:OperationsProject['operations'][number])
 export function eligibleSurfaceCarveRoughingOperations(args:{
   summary:ImportSummary;
   project:OperationsProject;
-  surfaceCarveOperationId:string;
+  operationIndex:number;
   faceId:number|null;
   successfulOperationIds:ReadonlySet<string>;
 }):SurfaceCarveEligibility{
   const errors:string[]=[];
   if(args.summary.kind!=='step')errors.push('Surface Carve ist ausschließlich auf einem STEP/BRep-Bauteil verfügbar.');
   if(args.faceId===null)errors.push('Surface Carve benötigt genau eine ausgewählte STEP-Fläche.');
+  if(!Number.isInteger(args.operationIndex)||args.operationIndex<0||args.operationIndex>args.project.operations.length){
+    errors.push('Surface Carve besitzt keine gültige Position in der Operationsreihenfolge.');
+  }
 
-  const eligible=args.faceId===null?[]:earlierOperations(args.project,args.surfaceCarveOperationId)
+  const eligible=args.faceId===null||errors.some(error=>error.includes('Operationsreihenfolge'))?[]:earlierOperations(args.project,args.operationIndex)
     .filter(isFaceTargetRoughing)
     .filter(operation=>operation.faceIds.includes(args.faceId!))
     .filter(operation=>args.successfulOperationIds.has(operation.id));
 
-  if(args.faceId!==null&&!eligible.length){
+  if(args.faceId!==null&&!eligible.length&&!errors.some(error=>error.includes('Operationsreihenfolge'))){
     errors.push('Surface Carve benötigt davor eine erfolgreiche eigenständige Z-Level-Schruppoperation für dieselbe STEP-Fläche.');
   }
 
@@ -48,6 +51,7 @@ export function validateSurfaceCarveOperation(args:{
   summary:ImportSummary;
   project:OperationsProject;
   operation:SurfaceCarveOperation;
+  operationIndex:number;
   successfulOperationIds:ReadonlySet<string>;
   requireGeometrySource?:boolean;
 }):SurfaceCarveOperationValidation{
@@ -55,7 +59,7 @@ export function validateSurfaceCarveOperation(args:{
   const eligibility=eligibleSurfaceCarveRoughingOperations({
     summary:args.summary,
     project:args.project,
-    surfaceCarveOperationId:operation.id,
+    operationIndex:args.operationIndex,
     faceId:operation.faceId,
     successfulOperationIds:args.successfulOperationIds,
   });
