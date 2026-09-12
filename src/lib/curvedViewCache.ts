@@ -64,7 +64,7 @@ function surfaceCarveDiagnosticToolpath(target:Target):CanonicalToolpath|null{
   return{
     version:1,
     operationKind:'carve',
-    strategy:'surface-carve-007a-proof',
+    strategy:'carve',
     tool:{diameterMm:1},
     stepoverPercent:0,
     runs:[{kind:'cut',z:0,points,segments,retractAfter:true}],
@@ -95,8 +95,9 @@ export function cachedCurvedViewSamples(ctx:Context,target:Target,selectedFaceId
     }
 
     // 007A visual proof: a deterministic, preview-only Carve motif is routed
-    // through the real Surface-Carve projection adapter.  It is deliberately
-    // diagnostic geometry: no operation state, Safe Motion or NC is created.
+    // through the real Surface-Carve projection adapter. It uses the existing
+    // canonical 'carve' strategy because 007A must not widen the CAM contract.
+    // No operation state, Safe Motion or NC is created.
     const diagnostic=surfaceCarveDiagnosticToolpath(target);
     if(diagnostic){
       const projected=projectCarveToolpathToSurface(diagnostic,target,{sampleSpacingMm:.35});
