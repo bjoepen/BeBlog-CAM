@@ -48,6 +48,7 @@
     "check:008a": "node scripts/check-008a-production-acceptance.mjs",
     "check:008a1": "node scripts/check-008a1-acceptance-harness.mjs",
     "check:008a2": "node scripts/check-008a2-synthetic-production.mjs",
+    "check:008a3": "node scripts/check-008a3-step-master.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
     "native:dev": "bash scripts/dev-macos-native.sh",
