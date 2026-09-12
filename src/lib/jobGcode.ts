@@ -30,7 +30,7 @@ export type JobGcodeResult={ok:boolean;errors:string[];warnings:string[];code:st
 type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[];machineEnvelope?:MachineEnvelope|null;machineWcsOrigin?:MachineWcsOrigin|null;spindleHead?:SpindleHeadGeometry|null;preflight?:JobPreflightResult};
 type OperationCode={ok:boolean;errors:string[];warnings:string[];code:string};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
-const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':op.kind==='surface-carve'?'Surface Carve':op.kind==='drill'?'Bohren':op.kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
+const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':op.kind==='drill'?'Bohren':op.kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
 const toolKey=(op:CamOperation)=>toolIdentityKey(op);
 const operationDisplayName=(op:CamOperation,index:number)=>{const expected=label(op),name=op.name.trim();return name.startsWith(expected)?name:`${expected} ${index+1}`;};
 
@@ -69,10 +69,9 @@ function generateOperation(args:Args,operation:CamOperation):OperationCode{
   }
   if(operation.kind==='drill'){const drill=operation as DrillOperation;const r=args.summary.kind==='step'?generateStepDrillGcode({...common,operation:drill}):generateCanonicalDrillGcode({...common,operation:drill});return{...r,code:normalizeGcodeComments(r.code)};}
   if(operation.kind==='carve'){const r=generateCarveGcode({...common,operation:operation as CarveOperation});return{...r,code:normalizeGcodeComments(r.code)};}
-  if(operation.kind==='surface-carve')return{ok:false,errors:['Surface Carve 007D ist noch nicht für NC-Ausgabe freigegeben.'],warnings:[],code:''};
   if(operation.kind==='surface-finishing'){const state=buildSurfaceFinishingOperationState({summary:args.summary,stock:args.stock,placement:args.placement,orientation:args.orientation,wcs:args.wcs,operation});if(!state.ok||!state.toolpath)return{ok:false,errors:state.errors.length?state.errors:['3D-Schlichtwerkzeugweg konnte nicht rekonstruiert werden.'],warnings:state.warnings,code:''};const posted=postSurfaceFinishingCanonicalToolpath(state.toolpath,operation);return{...posted,code:posted.ok?normalizeGcodeComments(posted.code):''};}
   if(operation.kind==='z-level-roughing'){const roughing=operation as ZLevelRoughingOperation;const state=buildZLevelOperationState({summary:args.summary,stock:args.stock,placement:args.placement,orientation:args.orientation,wcs:args.wcs,operation:roughing});if(!state.toolpath||state.errors.length)return{ok:false,errors:state.errors.length?state.errors:['Z-Level-Schruppbahn konnte nicht rekonstruiert werden.'],warnings:state.warnings,code:''};try{const code=postFaceTargetCanonicalToolpath(state.toolpath,{safeZMm:roughing.safeZMm,feedMmMin:roughing.feedMmMin,plungeMmMin:roughing.plungeMmMin,spindleRpm:roughing.spindleRpm,source:zLevelMode(roughing)});return{ok:true,errors:[],warnings:state.warnings,code:normalizeGcodeComments(code)};}catch(error){return{ok:false,errors:[String(error)],warnings:[],code:''};}}
-  return{ok:false,errors:['Nicht unterstützte Bearbeitung.'],warnings:[],code:''};
+  return generateContourGcode({...common,operation:operation as ContourOperation});
 }
 
 function operationBody(code:string):string[]{const body=code.split(/\r?\n/).filter(line=>{const t=line.trim();if(!t)return false;if(t==='G21'||t==='G90'||t==='G17'||t==='M30')return false;if(/^\( BeBlog CAM /.test(t))return false;return true;});while(body.length){const t=body[body.length-1].trim();if(t==='M5'||/^G0\s+Z[-+]?\d+(?:\.\d+)?$/i.test(t)){body.pop();continue;}break;}return body;}
