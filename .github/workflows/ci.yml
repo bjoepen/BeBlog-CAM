@@ -47,6 +47,8 @@ jobs:
         run: pnpm check:006b
       - name: Pocket through-cut allowance contract
         run: pnpm check:006c
+      - name: STEP surface carve projection contract
+        run: pnpm check:007a
       - name: Frontend build
         run: pnpm build
       - name: Rust check
