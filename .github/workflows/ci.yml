@@ -51,6 +51,8 @@ jobs:
         run: pnpm check:007a
       - name: Surface carve canonical motion contract
         run: pnpm check:007b
+      - name: Surface Carve operation contract
+        run: pnpm check:007c
       - name: Frontend build
         run: pnpm build
       - name: Rust check
