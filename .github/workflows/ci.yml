@@ -45,6 +45,8 @@ jobs:
         run: pnpm check:006a
       - name: DXF multi-target contract
         run: pnpm check:006b
+      - name: Pocket through-cut allowance contract
+        run: pnpm check:006c
       - name: Frontend build
         run: pnpm build
       - name: Rust check
