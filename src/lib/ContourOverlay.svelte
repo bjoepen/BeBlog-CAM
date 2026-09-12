@@ -127,7 +127,7 @@
   $: scene=buildScene(
     summary.fileName,
     operation.kind,
-    operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'?operation.kind:(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):(operation.kind==='contour'||operation.kind==='pocket')?normalizeDxfTargetIds(operation).join(','):operation.kind,
+    operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing'?operation.kind:(operation.kind==='carve'||operation.kind==='drill')?operation.curveIds.join(','):normalizeDxfTargetIds(operation).join(','),
     operation.kind==='contour'?operation.topology:operation.kind,
     operation.kind==='contour'?operation.openSide:operation.kind,
     operation.kind==='contour'?(operation.excludedSegmentIds??[]).join(','):operation.kind,
