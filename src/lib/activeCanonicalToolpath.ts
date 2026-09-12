@@ -8,12 +8,16 @@ import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
 import { buildStepDrillOperationState } from './stepDrillOperation';
 import { buildZLevelOperationState } from './zLevelOperationState';
 import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';
+import { buildSurfaceCarveOperationState } from './surfaceCarveOperationState';
 import { buildDxfMultiTargetContourState, buildDxfMultiTargetPocketState } from './dxfMultiTargetToolpath';
 import type { CamOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
 export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:CamOperation;previousToolpaths?:CanonicalToolpath[]}):CanonicalToolpath|null{
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;
-  if(operation.kind==='surface-carve')return null;
+  if(operation.kind==='surface-carve'){
+    const state=buildSurfaceCarveOperationState({summary,stock,placement,orientation,wcs,operation});
+    return state.ok?state.toolpath:null;
+  }
   if(operation.kind==='facing'){
     if(stockMode==='none')return null;
     return buildFacingToolpath({stock,wcs,operation}).toolpath;
