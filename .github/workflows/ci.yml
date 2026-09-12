@@ -55,6 +55,8 @@ jobs:
         run: pnpm check:007c
       - name: Surface Carve Bearbeiten product slice contract
         run: pnpm check:007d
+      - name: Surface Carve projection integration contract
+        run: pnpm check:007e
       - name: Frontend build
         run: pnpm build
       - name: Rust check
