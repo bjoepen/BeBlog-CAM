@@ -28,26 +28,24 @@ let targetKey='';
 let targetValue:Target|null=null;
 let sampleKey='';
 let sampleValue:P3[][]=[];
-let proofKey='';
-let proofValue:P3[][]=[];
 let roughingKey='';
 let roughingValue:Roughing|null=null;
 
-export const curvedViewCacheStats={targetBuilds:0,sampleBuilds:0,proofBuilds:0,roughingBuilds:0};
+export const curvedViewCacheStats={targetBuilds:0,sampleBuilds:0,roughingBuilds:0};
 
 export function cachedCurvedViewTarget(ctx:Context,part:P3[],displayFaceIds:number[],selectedFaceIds:number[]){
   const key=baseKey(ctx,selectedFaceIds);
   if(key!==targetKey){
     targetKey=key;
     targetValue=buildCurvedFaceTarget(part,displayFaceIds,selectedFaceIds);
-    sampleKey='';proofKey='';roughingKey='';
+    sampleKey='';roughingKey='';
     curvedViewCacheStats.targetBuilds++;
   }
   return targetValue;
 }
 
 export function cachedCurvedViewSamples(ctx:Context,target:Target,selectedFaceIds:number[]){
-  const key=baseKey(ctx,selectedFaceIds)+'|samples24';
+  const key=baseKey(ctx,selectedFaceIds)+'|samples24|surface-carve-view-proof';
   if(key===sampleKey)return sampleValue;
   const out:P3[][]=[];
   if(target?.valid&&target.bounds){
@@ -68,19 +66,11 @@ export function cachedCurvedViewSamples(ctx:Context,target:Target,selectedFaceId
       }
       if(column.length>=2)out.push(column);
     }
+    const proof=buildSurfaceCarveViewProof(target);
+    if(proof.ok)out.push(...proof.paths);
   }
   sampleKey=key;sampleValue=out;curvedViewCacheStats.sampleBuilds++;
   return out;
-}
-
-export function cachedSurfaceCarveViewProof(ctx:Context,target:Target,selectedFaceIds:number[]){
-  const key=baseKey(ctx,selectedFaceIds)+'|surface-carve-view-proof';
-  if(key===proofKey)return proofValue;
-  const proof=buildSurfaceCarveViewProof(target);
-  proofKey=key;
-  proofValue=proof.ok?proof.paths:[];
-  curvedViewCacheStats.proofBuilds++;
-  return proofValue;
 }
 
 export function cachedCurvedViewRoughing(ctx:Context,target:Target,selectedFaceIds:number[],operation:ZLevelRoughingOperation){
