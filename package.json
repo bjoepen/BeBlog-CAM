@@ -43,6 +43,7 @@
     "check:006b": "node scripts/check-006b-multi-target-contracts.mjs",
     "check:006c": "node scripts/check-006c-pocket-through-cut-contracts.mjs",
     "check:007a": "node scripts/check-007a-contracts.mjs",
+    "check:007b": "node scripts/check-007b-contracts.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
     "native:dev": "bash scripts/dev-macos-native.sh",
