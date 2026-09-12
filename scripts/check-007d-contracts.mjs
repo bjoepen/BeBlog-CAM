@@ -39,7 +39,9 @@ if((persistence.match(/source:\{path:string;fileName:string\}/g)??[]).length<2)f
 
 if(!active.includes("if(operation.kind==='surface-carve')return null"))fail('007D must not silently route Surface Carve through an unrelated production toolpath builder.');
 if(!preflight.includes('Surface Carve 007D ist im Bearbeiten-Workflow konfigurierbar, aber noch nicht in den Produktions-Preflight/NC-Pfad verdrahtet.'))fail('007D production preflight is not fail-closed.');
-if(gcode.includes("operation.kind==='surface-carve'")||post.includes("operation.kind==='surface-carve'"))fail('007D prematurely introduced Surface Carve-specific NC/postprocessor behavior.');
+if(!gcode.includes("operation.kind==='surface-carve'" )||!gcode.includes('Surface Carve 007D ist noch nicht für NC-Ausgabe freigegeben.'))fail('007D NC layer does not reject Surface Carve explicitly.');
+if(gcode.includes('buildSurfaceCarveCanonicalToolpath')||gcode.includes('surfaceCarveOperationContract'))fail('007D prematurely wired Surface Carve projection into job G-code.');
+if(post.includes("surface-carve")||post.includes('Surface Carve'))fail('007D prematurely introduced Surface Carve-specific postprocessor behavior.');
 if(!rustImport.includes('"step"|"stp"')||!rustImport.includes('"dxf"'))fail('Primary importer no longer supports the established STEP/STP/DXF formats.');
 
-console.log('007D contract PASS: Surface Carve is a distinct STEP-only Bearbeiten operation with operation-owned DXF geometry, placement and V2 persistence, while primary import remains STEP/STP/DXF and production NC stays fail-closed until projection wiring.');
+console.log('007D contract PASS: Surface Carve is a distinct STEP-only Bearbeiten operation with operation-owned DXF geometry, placement and V2 persistence, while primary import remains STEP/STP/DXF and production NC stays explicitly fail-closed until projection wiring.');
