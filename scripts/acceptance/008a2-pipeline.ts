@@ -81,7 +81,7 @@ const fixtures: Array<{ name: string; summary: ImportSummary; operation: CamOper
   },
 ];
 
-const results = fixtures.map(({ name, summary, operation }) => {
+export const results = fixtures.map(({ name, summary, operation }) => {
   const job = generateJobGcode({ summary, stock, stockMode: 'manual', placement, orientation, wcs, operations: [operation] });
   const posted = job.ok ? postProcessEstlcam(job.code) : { ok: false, errors: ['raw job failed'], warnings: [], code: '' };
   return {
@@ -92,4 +92,4 @@ const results = fixtures.map(({ name, summary, operation }) => {
   };
 });
 
-process.stdout.write(JSON.stringify(results));
+console.log(JSON.stringify(results));
