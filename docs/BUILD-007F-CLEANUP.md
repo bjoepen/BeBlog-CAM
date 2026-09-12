@@ -6,6 +6,10 @@ Status: implementation branch. Merge only after explicit approval.
 
 Surface Carve is removed as a product feature after Build 007E failed real-world acceptance. A circular DXF projected onto a planar STEP face did not preserve the expected planar geometry when viewed from the model front. The feature is therefore not production-safe or product-appropriate for BeBlog CAM's 3-axis maker scope.
 
+## Cleanup strategy
+
+007F restores the product-facing files changed by 007C/007D to the known-good post-007B state. This deliberately keeps the isolated 007A/007B projection/canonical experiments in the repository, but removes their product exposure.
+
 ## Cleanup goals
 
 - remove Surface Carve from the Bearbeiten operation UI
@@ -14,8 +18,12 @@ Surface Carve is removed as a product feature after Build 007E failed real-world
 - remove Surface-Carve-specific production/preflight guards introduced by 007D
 - preserve ordinary Carve unchanged
 - preserve Z-Level Schruppen unchanged and standalone
-- preserve existing project files safely where practical
-- keep experimental 007A/007B projection helpers isolated unless they are coupled into product code
+- return project persistence to the post-007B V1 contract
+- keep experimental 007A/007B projection helpers isolated from the product pipeline
+
+## Project persistence
+
+The V2 project format existed only to persist the experimental 007D Surface-Carve operation. Because that product feature is now rejected, 007F deliberately returns persistence to the post-007B V1 contract. Experimental `.beblogcam` files saved specifically with 007D/V2 are therefore not part of the supported product format after cleanup.
 
 ## Non-goals
 
@@ -32,5 +40,6 @@ Surface Carve is removed as a product feature after Build 007E failed real-world
 3. Z-Level Schruppen remains available and behaves unchanged.
 4. STEP and DXF remain the only primary part import formats.
 5. Prüfen/Fräsen contain no product-facing Surface-Carve path.
-6. Existing V1/V2 project parsing remains fail-safe; removed Surface-Carve operations are not revived into an active production path.
-7. Static gates, `pnpm check`, frontend build and Rust check pass.
+6. Project persistence is back at V1, matching the known-good post-007B product state.
+7. 007A/007B helpers remain experimental only and are not reachable from the active product operation pipeline.
+8. Static gates, `pnpm check`, frontend build and Rust check pass.
