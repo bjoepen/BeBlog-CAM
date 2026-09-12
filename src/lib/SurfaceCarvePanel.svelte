@@ -17,25 +17,15 @@
   $: earlier=project.operations.slice(0,Math.max(0,project.operations.findIndex(candidate=>candidate.id===operation.id)));
   $: roughingCandidates=earlier.filter((candidate):candidate is ZLevelRoughingOperation=>candidate.kind==='z-level-roughing'&&candidate.enabled!==false&&(candidate.roughingMode??'face-target')==='face-target');
   $: matchingRoughing=roughingCandidates.filter(candidate=>operation.faceId!==null&&candidate.faceIds.includes(operation.faceId));
-  $: geometryCurveCount=geometrySummary?.planarGeometry?.curves.filter(eligibleCurve).length??0;
+  $: geometryCurveCount=operation.geometrySource?.planarGeometry?.curves.filter(eligibleCurve).length??geometrySummary?.planarGeometry?.curves.filter(eligibleCurve).length??0;
 
-  $: if(operation.geometrySource?.path&&operation.geometrySource.path!==loadedPath&&!loadingGeometry){void restoreGeometry(operation.geometrySource.path);}
+  $: if(operation.geometrySource?.path&&operation.geometrySource.path!==loadedPath&&!loadingGeometry&&!operation.geometrySource.planarGeometry){void restoreGeometry(operation.geometrySource.path);}
 
-  function update(patch:Partial<SurfaceCarveOperation>){
-    onChange({...operation,...patch});
-  }
-
+  function update(patch:Partial<SurfaceCarveOperation>){onChange({...operation,...patch});}
   function numberFrom(event:Event){return Number((event.currentTarget as HTMLInputElement).value);}
   function updateFaceId(event:Event){const raw=(event.currentTarget as HTMLInputElement).value.trim();const value=raw===''?null:Number(raw);if(value===null||(Number.isInteger(value)&&value>=0))update({faceId:value,roughingOperationId:null});}
   function chooseRoughing(event:Event){update({roughingOperationId:(event.currentTarget as HTMLSelectElement).value||null});}
-  function updateGeometryTransform(field:'offsetX'|'offsetY'|'scale'|'rotationDeg',event:Event){
-    if(!operation.geometrySource)return;
-    const value=numberFrom(event);
-    if(!Number.isFinite(value))return;
-    if(field==='scale'&&value<=0)return;
-    const geometrySource={...operation.geometrySource,[field]:value};
-    update({geometrySource,geometrySourceId:geometrySource.id});
-  }
+  function updateGeometryTransform(field:'offsetX'|'offsetY'|'scale'|'rotationDeg',event:Event){if(!operation.geometrySource)return;const value=numberFrom(event);if(!Number.isFinite(value))return;if(field==='scale'&&value<=0)return;const geometrySource={...operation.geometrySource,[field]:value};update({geometrySource,geometrySourceId:geometrySource.id});}
 
   async function restoreGeometry(path:string){
     loadingGeometry=true;geometryError='';
@@ -43,6 +33,7 @@
       const restored=await invoke<ImportSummary>('inspect_import',{path});
       if(restored.kind!=='dxf'||!restored.planarGeometry)throw new Error('Surface Carve erwartet eine DXF-2D-Geometrie.');
       geometrySummary=restored;loadedPath=path;
+      if(operation.geometrySource&&!operation.geometrySource.planarGeometry)update({geometrySource:{...operation.geometrySource,planarGeometry:restored.planarGeometry}});
     }catch(error){geometrySummary=null;loadedPath=path;geometryError=`2D-Geometrie konnte nicht geladen werden: ${String(error)}`;}
     finally{loadingGeometry=false;}
   }
@@ -57,7 +48,7 @@
       if(imported.kind!=='dxf'||!imported.planarGeometry)throw new Error('Surface Carve akzeptiert in diesem Build ausschließlich normalisierte DXF-2D-Geometrie.');
       const id=`surface-carve-geometry-${operation.id}`;
       geometrySummary=imported;loadedPath=path;
-      update({geometrySourceId:id,geometrySource:{id,path,fileName:imported.fileName,offsetX:0,offsetY:0,scale:1,rotationDeg:0}});
+      update({geometrySourceId:id,geometrySource:{id,path,fileName:imported.fileName,offsetX:0,offsetY:0,scale:1,rotationDeg:0,planarGeometry:imported.planarGeometry}});
     }catch(error){geometrySummary=null;geometryError=String(error);}
     finally{loadingGeometry=false;}
   }
@@ -103,7 +94,7 @@
         <label>Versatz Y <input type="number" step="0.1" value={operation.geometrySource.offsetY} oninput={e=>updateGeometryTransform('offsetY',e)}/> mm</label>
         <label>Skalierung <input type="number" min="0.001" step="0.05" value={operation.geometrySource.scale} oninput={e=>updateGeometryTransform('scale',e)}/> ×</label>
         <label>Rotation <input type="number" step="1" value={operation.geometrySource.rotationDeg} oninput={e=>updateGeometryTransform('rotationDeg',e)}/> °</label>
-        <p class="note">Skalierung bleibt proportional. Die Werte werden mit der Operation gespeichert; die eigentliche Projektion auf die STEP-Fläche folgt dem bereits geprüften 007B-Kern.</p>
+        <p class="note">Die DXF ist intern bereits normalisierte 2D-Geometrie. 007E verwendet genau diesen Snapshot für Projektion, Preview, Prüfen und NC.</p>
       </div>
     {/if}
   {/if}
