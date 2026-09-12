@@ -37,13 +37,18 @@ function repeatFinishRuns(toolpath:CanonicalToolpath,count:number){return Array.
 
 export function buildPocketOperationState(args:PocketBuildArgs&{operation:PocketOperation;previousToolpaths?:CanonicalToolpath[]}):PocketOperationState{
   const {summary,operation}=args,errors:string[]=[],warnings:string[]=[];
+  const throughCutAllowance=Math.max(0,Number(operation.throughCutAllowanceMm??0));
+  const effectiveDepthMm=summary.kind==='dxf'?operation.totalDepthMm+throughCutAllowance:operation.totalDepthMm;
+  const depthOperation:PocketOperation=throughCutAllowance>EPS&&summary.kind==='dxf'?{...operation,totalDepthMm:effectiveDepthMm}:operation;
   const radialAllowance=Math.max(0,Number(operation.radialAllowanceMm??0)),axialAllowance=Math.max(0,Number(operation.axialAllowanceMm??0)),finishEnabled=operation.finishPassEnabled??false,finishCount=Math.max(1,Math.floor(operation.finishPassCount??1));
-  const nominalOperation:PocketOperation={...operation,radialAllowanceMm:0,axialAllowanceMm:0,finishPassEnabled:false,finishPassCount:1};
+  const nominalOperation:PocketOperation={...depthOperation,radialAllowanceMm:0,axialAllowanceMm:0,finishPassEnabled:false,finishPassCount:1};
   const nominal=buildBasePocket(args,nominalOperation);errors.push(...nominal.errors);warnings.push(...nominal.warnings);const targetDepthMm=nominal.targetDepthMm;
+  if(throughCutAllowance>EPS&&summary.kind==='dxf')warnings.push(`Durchfräszugabe aktiv: ${throughCutAllowance.toFixed(3)} mm · effektive Endtiefe ${effectiveDepthMm.toFixed(3)} mm.`);
+  if(throughCutAllowance>1)warnings.push('Durchfräszugabe über 1,000 mm prüfen: Opferplatte und Aufspannung beachten.');
   if(!nominal.toolpath||targetDepthMm==null||errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};
   if(axialAllowance>=targetDepthMm-EPS&&axialAllowance>0)errors.push(`Axiales Taschen-Aufmaß muss kleiner als die Zieltiefe ${targetDepthMm.toFixed(3)} mm sein.`);if(errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};
   const roughDepth=Math.max(EPS,targetDepthMm-axialAllowance),roughToolDiameter=operation.tool.diameterMm+2*radialAllowance;
-  const roughOperation:PocketOperation={...operation,tool:{...operation.tool,diameterMm:roughToolDiameter},totalDepthMm:summary.kind==='dxf'?roughDepth:operation.totalDepthMm,radialAllowanceMm:0,axialAllowanceMm:0,finishPassEnabled:false,finishPassCount:1};
+  const roughOperation:PocketOperation={...depthOperation,tool:{...operation.tool,diameterMm:roughToolDiameter},totalDepthMm:summary.kind==='dxf'?roughDepth:operation.totalDepthMm,radialAllowanceMm:0,axialAllowanceMm:0,finishPassEnabled:false,finishPassCount:1};
   const rough=radialAllowance>EPS||axialAllowance>EPS?buildBasePocket(args,roughOperation):nominal;errors.push(...rough.errors);warnings.push(...rough.warnings);let toolpath=rough.toolpath;
   if(!toolpath||errors.length)return{ok:false,toolpath:null,errors,warnings,targetDepthMm};if(summary.kind==='step'&&axialAllowance>EPS)toolpath=limitPocketDepth(toolpath,roughDepth);toolpath={...toolpath,tool:{diameterMm:operation.tool.diameterMm}};
   if(radialAllowance>EPS||axialAllowance>EPS)warnings.push(`Schrupp-Aufmaß aktiv: radial ${radialAllowance.toFixed(3)} mm · axial ${axialAllowance.toFixed(3)} mm.`);
