@@ -1,7 +1,9 @@
 import type { PartOrientation, PartPlacement, StockDefinition, ZLevelRoughingOperation } from './types';
+import type { CanonicalToolpath, CanonicalToolpathSegment, ToolpathPoint2 } from './canonicalToolpath';
 import type { P3 } from './stepView';
 import { buildCurvedFaceTarget, curvedFaceTargetZAt } from './curvedFaceTarget';
 import { buildCurvedFaceRoughing } from './curvedFaceRoughing';
+import { projectCarveToolpathToSurface } from './surfaceCarveProjection';
 
 type Target=ReturnType<typeof buildCurvedFaceTarget>;
 type Roughing=ReturnType<typeof buildCurvedFaceRoughing>;
@@ -43,8 +45,34 @@ export function cachedCurvedViewTarget(ctx:Context,part:P3[],displayFaceIds:numb
   return targetValue;
 }
 
+function surfaceCarveDiagnosticToolpath(target:Target):CanonicalToolpath|null{
+  if(!target.valid||!target.bounds)return null;
+  const b=target.bounds;
+  const width=b.maxX-b.minX,height=b.maxY-b.minY;
+  if(width<=1e-6||height<=1e-6)return null;
+  const insetX=width*.24,insetY=height*.24;
+  const left=b.minX+insetX,right=b.maxX-insetX,bottom=b.minY+insetY,top=b.maxY-insetY;
+  const midX=(left+right)/2,midY=(bottom+top)/2;
+  const points:ToolpathPoint2[]=[
+    {x:left,y:top},
+    {x:midX,y:bottom},
+    {x:right,y:top},
+    {x:left,y:midY},
+    {x:right,y:midY},
+  ];
+  const segments:CanonicalToolpathSegment[]=points.slice(1).map((end,index)=>({kind:'line',start:points[index],end}));
+  return{
+    version:1,
+    operationKind:'carve',
+    strategy:'surface-carve-007a-proof',
+    tool:{diameterMm:1},
+    stepoverPercent:0,
+    runs:[{kind:'cut',z:0,points,segments,retractAfter:true}],
+  };
+}
+
 export function cachedCurvedViewSamples(ctx:Context,target:Target,selectedFaceIds:number[]){
-  const key=baseKey(ctx,selectedFaceIds)+'|samples24';
+  const key=baseKey(ctx,selectedFaceIds)+'|samples24|surface-carve-007a-proof';
   if(key===sampleKey)return sampleValue;
   const out:P3[][]=[];
   if(target?.valid&&target.bounds){
@@ -64,6 +92,17 @@ export function cachedCurvedViewSamples(ctx:Context,target:Target,selectedFaceId
         if(z===null){if(column.length>=2)out.push(column);column=[];}else column.push({x,y,z:z+.04});
       }
       if(column.length>=2)out.push(column);
+    }
+
+    // 007A visual proof: a deterministic, preview-only Carve motif is routed
+    // through the real Surface-Carve projection adapter.  It is deliberately
+    // diagnostic geometry: no operation state, Safe Motion or NC is created.
+    const diagnostic=surfaceCarveDiagnosticToolpath(target);
+    if(diagnostic){
+      const projected=projectCarveToolpathToSurface(diagnostic,target,{sampleSpacingMm:.35});
+      if(projected.ok){
+        for(const run of projected.runs)out.push(run.points.map(point=>({...point,z:point.z+.09})));
+      }
     }
   }
   sampleKey=key;sampleValue=out;curvedViewCacheStats.sampleBuilds++;
