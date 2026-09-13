@@ -21,4 +21,5 @@ pass('008B5 unknown operation kind is rejected',byId('unknown-operation-kind')?.
 pass('008B5 missing or invalid tool identity is rejected',byId('missing-tool')?.rejected&&byId('missing-tool-id')?.rejected&&byId('invalid-tool-diameter')?.rejected);
 pass('008B5 dangling active-operation reference is rejected',byId('dangling-active-operation')?.rejected&&byId('dangling-active-operation')?.error?.includes('aktive Bearbeitung'));
 pass('008B5 dangling or self rest-machining reference is rejected',byId('dangling-rest-source')?.rejected&&byId('self-rest-source')?.rejected);
+pass('008B5 rest-machining source must be an earlier pocket operation',byId('wrong-kind-rest-source')?.rejected&&byId('forward-rest-source')?.rejected);
 if(!process.exitCode)console.log('PASS 008B5 project reference-integrity contract: invalid operation identities, tools and cross-operation references are rejected during project parsing before saved project state can be accepted.');
