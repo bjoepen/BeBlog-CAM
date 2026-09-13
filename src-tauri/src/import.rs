@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, path::Path};
 #[serde(rename_all = "camelCase")]
 pub struct ImportSummary { pub kind:String,pub file_name:String,pub backend:String,pub status:String,pub entities:BTreeMap<String,usize>,pub planar_geometry:Option<PlanarGeometry>,pub brep:Option<BrepSummary>,pub note:Option<String>,pub source_fingerprint:String }
 
-fn source_fingerprint(path:&Path)->Result<String,String>{
+pub(crate) fn source_fingerprint(path:&Path)->Result<String,String>{
  let bytes=std::fs::read(path).map_err(|e|format!("Quelldatei konnte für die Identitätsprüfung nicht gelesen werden: {e}"))?;
  let mut hash:u64=0xcbf29ce484222325;
  for byte in &bytes{hash^=u64::from(*byte);hash=hash.wrapping_mul(0x100000001b3);}
