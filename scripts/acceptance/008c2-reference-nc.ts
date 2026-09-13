@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { run008a5 } from './008a5-estlcam';
 
 export function build008c2Reference(source: string, operationIds: string[], expectedToolChanges: number) {
@@ -15,8 +14,6 @@ export function build008c2Reference(source: string, operationIds: string[], expe
     expectedToolChanges,
     actualToolChanges: lines.filter((line) => /^M6$/i.test(line)).length,
     lineCount: lines.length,
-    byteLength: Buffer.byteLength(code, 'utf8'),
-    sha256: createHash('sha256').update(code, 'utf8').digest('hex'),
     terminalCommand: lines.at(-1) ?? null,
     removedLines: posted.removedLines,
     transformedLines: posted.transformedLines,
