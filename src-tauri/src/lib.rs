@@ -32,7 +32,20 @@ fn save_project_file(path: String, content: String) -> Result<(), String> {
     if path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.eq_ignore_ascii_case("beblogcam")) != Some(true) {
         return Err("BeBlog CAM speichert Projekte ausschließlich als .beblogcam-Datei.".into());
     }
-    std::fs::write(path, content.as_bytes())
+
+    let mut project:serde_json::Value=serde_json::from_str(&content)
+        .map_err(|error|format!("Projektdatei konnte vor dem Speichern nicht validiert werden: {error}"))?;
+    let source_path=project.get("source").and_then(|source|source.get("path")).and_then(|value|value.as_str())
+        .ok_or_else(||"Projektdatei enthält keine gültige Quelldatei-Referenz.".to_string())?;
+    let fingerprint=import::source_fingerprint(std::path::Path::new(source_path))?;
+    let source=project.get_mut("source").and_then(|value|value.as_object_mut())
+        .ok_or_else(||"Projektdatei enthält keine gültige Quelldatei-Referenz.".to_string())?;
+    source.insert("geometryIdentity".into(),serde_json::Value::String(fingerprint));
+    let mut encoded=serde_json::to_string_pretty(&project)
+        .map_err(|error|format!("Projektdatei konnte nicht serialisiert werden: {error}"))?;
+    encoded.push('\n');
+
+    std::fs::write(path, encoded.as_bytes())
         .map_err(|error| format!("Projektdatei konnte nicht gespeichert werden: {error}"))
 }
 
