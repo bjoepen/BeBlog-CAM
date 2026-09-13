@@ -55,6 +55,7 @@
     "check:008b2": "node scripts/check-008b2-project-fail-closed.mjs",
     "check:008b3": "node scripts/check-008b3-source-recovery.mjs",
     "check:008b3b": "node scripts/check-008b3b-project-load-integration.mjs",
+    "check:008b4": "node scripts/check-008b4-source-change.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
     "native:dev": "bash scripts/dev-macos-native.sh",
