@@ -79,6 +79,8 @@ jobs:
         run: pnpm check:008b6
       - name: Project reload determinism contract
         run: pnpm check:008b7
+      - name: Estlcam qualification baseline
+        run: pnpm check:008c1
       - name: Frontend build
         run: pnpm build
       - name: Rust check
