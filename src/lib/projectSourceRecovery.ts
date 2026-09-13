@@ -1,12 +1,27 @@
 import type { ImportSummary } from './types';
 
-export type ProjectSourceReference={path:string;fileName:string};
+export type ProjectSourceReference={path:string;fileName:string;geometryIdentity?:string};
 export type ProjectSourceResolution={path:string;summary:ImportSummary;relocated:boolean};
 
 export type ProjectSourceInspector=(path:string)=>Promise<ImportSummary>;
 export type ProjectSourceRelocator=(source:ProjectSourceReference,originalError:unknown)=>Promise<string|null>;
 
+type ImportSummaryWithIdentity=ImportSummary&{sourceFingerprint?:string};
+
 const baseName=(path:string)=>path.split(/[\\/]/).filter(Boolean).at(-1)??'';
+
+function assertExpectedSource(source:ProjectSourceReference,summary:ImportSummary):void{
+  if(!source.geometryIdentity){
+    throw new Error(`Projektquelle kann nicht sicher validiert werden: gespeicherte Geometrie-Identität fehlt (${source.fileName}). Projekt nicht geladen.`);
+  }
+  const actual=(summary as ImportSummaryWithIdentity).sourceFingerprint;
+  if(!actual){
+    throw new Error(`Projektquelle kann nicht sicher validiert werden: aktuelle Geometrie-Identität fehlt (${source.fileName}). Projekt nicht geladen.`);
+  }
+  if(actual!==source.geometryIdentity){
+    throw new Error(`Projektquelle wurde seit dem Speichern verändert: ${source.fileName}. Projekt nicht geladen.`);
+  }
+}
 
 export async function resolveProjectSource(args:{
   source:ProjectSourceReference;
@@ -16,10 +31,11 @@ export async function resolveProjectSource(args:{
   const {source,inspect,relocate}=args;
   try{
     const summary=await inspect(source.path);
+    assertExpectedSource(source,summary);
     return{path:source.path,summary,relocated:false};
   }catch(originalError){
     if(!relocate){
-      throw new Error(`Projektquelle nicht verfügbar: ${source.fileName}. Gespeicherter Pfad: ${source.path}`);
+      throw originalError instanceof Error?originalError:new Error(`Projektquelle nicht verfügbar: ${source.fileName}. Gespeicherter Pfad: ${source.path}`);
     }
     const replacement=await relocate(source,originalError);
     if(!replacement){
@@ -31,9 +47,11 @@ export async function resolveProjectSource(args:{
     }
     try{
       const summary=await inspect(replacement);
+      assertExpectedSource(source,summary);
       return{path:replacement,summary,relocated:true};
     }catch(replacementError){
-      throw new Error(`Neu zugeordnete Projektquelle konnte nicht geladen werden: ${source.fileName}. ${String(replacementError)}`);
+      const message=replacementError instanceof Error?replacementError.message:String(replacementError);
+      throw new Error(`Neu zugeordnete Projektquelle konnte nicht sicher geladen werden: ${source.fileName}. ${message}`);
     }
   }
 }
