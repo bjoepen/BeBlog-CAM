@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { acceptanceCase, assertArcRadiusConsistency, assertNcCommandsAllowed, assertNoXyRapidBelow, ncStats } from './acceptance/harness.mjs';
 
 const outDir = '.acceptance/008a5';
@@ -15,9 +16,9 @@ fs.writeFileSync(`${outDir}/package.json`, '{"type":"commonjs"}\n');
 
 const a4 = JSON.parse(execFileSync('node', [`${outDir}/scripts/acceptance/008a4-multi-operation.js`], { encoding: 'utf8' }));
 if (!a4.job.ok) throw new Error(a4.job.errors.join(' | '));
-const sourcePath = `${outDir}/008a4-combined.nc`;
-fs.writeFileSync(sourcePath, a4.job.code);
-const posted = JSON.parse(execFileSync('node', [`${outDir}/scripts/acceptance/008a5-estlcam.js`, sourcePath], { encoding: 'utf8' }));
+const require = createRequire(import.meta.url);
+const { run008a5 } = require(`../${outDir}/scripts/acceptance/008a5-estlcam.js`);
+const posted = run008a5(a4.job.code);
 
 acceptanceCase('008A5 Estlcam combined-job postprocess', () => {
   if (!posted.ok) throw new Error(posted.errors.join(' | '));
