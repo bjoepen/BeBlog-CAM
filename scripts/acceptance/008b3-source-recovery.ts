@@ -1,10 +1,11 @@
 import { resolveProjectSource } from '../../src/lib/projectSourceRecovery';
 import type { ImportSummary } from '../../src/lib/types';
 
-const summary=(fileName:string):ImportSummary=>({kind:'dxf',fileName,backend:'008b3-fixture',status:'ready',entities:{LINE:4},planarGeometry:{curves:[]}});
+const identity='src-v1:008b3:fixture';
+const summary=(fileName:string):ImportSummary=>({kind:'dxf',fileName,backend:'008b3-fixture',status:'ready',entities:{LINE:4},planarGeometry:{curves:[]},sourceFingerprint:identity} as ImportSummary&{sourceFingerprint:string});
 
 export async function run008b3(){
-  const source={path:'/old/location/008b3-reference.dxf',fileName:'008b3-reference.dxf'};
+  const source={path:'/old/location/008b3-reference.dxf',fileName:'008b3-reference.dxf',geometryIdentity:identity};
 
   const direct=await resolveProjectSource({
     source,
