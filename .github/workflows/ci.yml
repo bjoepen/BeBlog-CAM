@@ -71,6 +71,8 @@ jobs:
         run: pnpm check:008b3
       - name: Project source recovery integration
         run: pnpm check:008b3b
+      - name: Project source change contract
+        run: pnpm check:008b4
       - name: Frontend build
         run: pnpm build
       - name: Rust check
