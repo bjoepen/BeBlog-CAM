@@ -65,6 +65,8 @@ jobs:
         run: pnpm check:008a5
       - name: Project save/load acceptance
         run: pnpm check:008b1
+      - name: Project fail-closed acceptance
+        run: pnpm check:008b2
       - name: Frontend build
         run: pnpm build
       - name: Rust check
