@@ -1,4 +1,6 @@
 #[cfg(feature = "occt-native")]
+use beblog_cam_lib as _;
+#[cfg(feature = "occt-native")]
 use std::ffi::{c_char, CStr, CString};
 
 #[cfg(feature = "occt-native")]
@@ -16,6 +18,8 @@ fn main() {
 
     #[cfg(feature = "occt-native")]
     {
+        // Force this standalone Cargo example to link through the package library.
+        // The library target carries the native bridge metadata emitted by build.rs.
         let path = std::env::args().nth(1).expect("STEP fixture path required");
         let path = CString::new(path).expect("fixture path must not contain NUL");
         let raw = unsafe { beblog_occt_inspect_step(path.as_ptr()) };
