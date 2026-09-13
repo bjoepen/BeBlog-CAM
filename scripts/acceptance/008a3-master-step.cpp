@@ -1,7 +1,6 @@
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
-#include <BRepPrimAPI_MakeSphere.hxx>
 #include <STEPControl_StepModelType.hxx>
 #include <STEPControl_Writer.hxx>
 #include <gp_Ax2.hxx>
@@ -20,7 +19,7 @@ int main(int argc, char** argv) {
     // - 60 x 40 x 10 mm base plate
     // - one open rectangular pocket, 3 mm deep
     // - two through holes, Ø6 mm
-    // - one shallow spherical recess as a genuinely curved 3D face
+    // - one shallow cylindrical trough as a genuinely curved 3D face
     //
     // The part intentionally never exceeds Z=10, so a 10 mm stock keeps the
     // production WCS at the real model top. This matters for STEP pocket,
@@ -37,10 +36,13 @@ int main(int argc, char** argv) {
     shape = BRepAlgoAPI_Cut(shape, holeA).Shape();
     shape = BRepAlgoAPI_Cut(shape, holeB).Shape();
 
-    // Sphere center above the stock top: only the lower cap intersects the
-    // plate and creates a shallow bowl instead of changing the part height.
-    const TopoDS_Shape bowl = BRepPrimAPI_MakeSphere(gp_Pnt(40.0, 28.0, 13.0), 5.0).Shape();
-    shape = BRepAlgoAPI_Cut(shape, bowl).Shape();
+    // Horizontal cylinder along X. Its center sits above the stock top, so only
+    // the lower arc cuts a shallow, single-valued Z(x,y) trough into the plate.
+    // This avoids the pole/seam degeneracy of the previous spherical fixture
+    // while still exercising the real curved-face finishing production path.
+    const TopoDS_Shape trough = BRepPrimAPI_MakeCylinder(
+        gp_Ax2(gp_Pnt(34.0, 31.0, 13.0), gp_Dir(1.0, 0.0, 0.0)), 5.0, 16.0).Shape();
+    shape = BRepAlgoAPI_Cut(shape, trough).Shape();
 
     if (shape.IsNull()) {
         std::cerr << "A3 master shape is null\n";
