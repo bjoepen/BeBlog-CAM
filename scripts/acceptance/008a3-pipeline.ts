@@ -4,6 +4,8 @@ import { buildStepContourTargets } from '../../src/lib/stepContourTargets';
 import { buildStepPocketOperationState } from '../../src/lib/stepPocketOperation';
 import { buildStepManufacturingFeatureSource } from '../../src/lib/stepManufacturingFeatures';
 import { recognizeStepHoles } from '../../src/lib/stepHoleRecognition';
+import { buildFaceTargetOperationState } from '../../src/lib/faceTargetOperation';
+import { buildSurfaceFinishingOperationState } from '../../src/lib/surfaceFinishingOperation';
 import {
   defaultContourOperation,
   defaultDrillOperation,
@@ -48,7 +50,7 @@ function discoverFixtures(summary: ImportSummary) {
     wcs,
     operation: { ...defaultPocketOperation, stepFaceId: null, tool: { ...defaultPocketOperation.tool } },
   });
-  const pocketCandidates = pocketProbe.candidates.filter((candidate) => candidate.zMm < 10 - 1e-6);
+  const pocketCandidates = pocketProbe.candidates.filter((candidate) => candidate.zMm < stock.thickness - 1e-6);
   if (!pocketCandidates.length) throw new Error('008A3 master exposes no sub-top planar pocket face');
   const pocketTarget = [...pocketCandidates].sort((a, b) => a.zMm - b.zMm || a.areaMm2 - b.areaMm2)[0];
 
@@ -60,11 +62,59 @@ function discoverFixtures(summary: ImportSummary) {
   if (sixMmHoles.length < 2) throw new Error(`008A3 master expected two Ø6 holes, recognized ${sixMmHoles.length}`);
 
   const manufacturingFaces = (brep.manufacturingFaces ?? []) as Array<{ faceId:number; kind:string; radiusMm?:number|null }>;
-  const curved = manufacturingFaces.find((face) => face.kind !== 'plane' && face.kind !== 'cylinder')
-    ?? manufacturingFaces.find((face) => face.kind === 'cylinder' && Math.abs((face.radiusMm ?? 0) - 3) > 0.01);
-  if (!curved) throw new Error('008A3 master exposes no dedicated curved finishing face');
+  const planarFaceIds = manufacturingFaces.filter((face) => face.kind === 'plane').map((face) => face.faceId);
+  const zLevelProbeOperation = {
+    ...defaultZLevelRoughingOperation,
+    id: 'a3-z-level-probe',
+    roughingMode: 'face-target' as const,
+    stepDownMm: 1,
+    tool: { ...defaultZLevelRoughingOperation.tool, diameterMm: 3, shaftDiameterMm: 3 },
+  };
+  const zLevelFaceId = planarFaceIds.find((faceId) => buildFaceTargetOperationState({
+    summary,
+    stock,
+    placement,
+    orientation,
+    wcs,
+    operation: { ...zLevelProbeOperation, faceIds: [faceId] },
+  }) !== null);
+  if (zLevelFaceId == null) {
+    throw new Error(`008A3 master exposes no production-valid planar Z-Level face (candidates: ${planarFaceIds.join(', ') || 'none'})`);
+  }
 
-  return { contourTarget, pocketTarget, holes: sixMmHoles.slice(0, 2), curvedFaceId: curved.faceId };
+  const curvedFaceIds = manufacturingFaces
+    .filter((face) => face.kind !== 'plane' && !(face.kind === 'cylinder' && Math.abs((face.radiusMm ?? 0) - 3) <= 0.01))
+    .map((face) => face.faceId);
+  const finishingProbeOperation = {
+    ...defaultSurfaceFinishingOperation,
+    id: 'a3-surface-finishing-probe',
+    stepoverPercent: 20,
+    tool: { ...defaultSurfaceFinishingOperation.tool },
+  };
+  const finishingDiagnostics: string[] = [];
+  const curvedFaceId = curvedFaceIds.find((faceId) => {
+    const state = buildSurfaceFinishingOperationState({
+      summary,
+      stock,
+      placement,
+      orientation,
+      wcs,
+      operation: { ...finishingProbeOperation, faceIds: [faceId] },
+    });
+    if (!state.ok || !state.toolpath) finishingDiagnostics.push(`${faceId}: ${state.errors.join(' | ') || 'no toolpath'}`);
+    return state.ok && state.toolpath !== null;
+  });
+  if (curvedFaceId == null) {
+    throw new Error(`008A3 master exposes no production-valid 3D finishing face (${finishingDiagnostics.join(' ; ') || 'no curved candidates'})`);
+  }
+
+  return {
+    contourTarget,
+    pocketTarget,
+    holes: sixMmHoles.slice(0, 2),
+    zLevelFaceId,
+    curvedFaceId,
+  };
 }
 
 function operationCases(summary: ImportSummary): Array<{ name:string; operation:CamOperation }> {
@@ -108,7 +158,13 @@ function operationCases(summary: ImportSummary): Array<{ name:string; operation:
         method: 'drill',
         totalDepthMm: 5,
         stepDownMm: 5,
-        tool: { ...defaultDrillOperation.tool, id: 'a3-drill-6', name: 'Bohrer 6 mm', diameterMm: 6 },
+        tool: {
+          ...defaultDrillOperation.tool,
+          id: 'a3-drill-6',
+          name: 'Bohrer 6 mm',
+          diameterMm: 6,
+          shaftDiameterMm: 6,
+        },
       },
     },
     {
@@ -118,7 +174,7 @@ function operationCases(summary: ImportSummary): Array<{ name:string; operation:
         id: 'a3-z-level',
         name: 'Z-Level Schruppen A3',
         roughingMode: 'face-target',
-        faceIds: [fixture.pocketTarget.faceId],
+        faceIds: [fixture.zLevelFaceId],
         stepDownMm: 1,
         tool: { ...defaultZLevelRoughingOperation.tool, diameterMm: 3, shaftDiameterMm: 3 },
       },
