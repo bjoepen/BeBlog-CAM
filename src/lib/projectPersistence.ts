@@ -9,7 +9,7 @@ export const CAM_PROJECT_VERSION=1 as const;
 export type CamProjectV1={
   format:typeof CAM_PROJECT_FORMAT;
   version:typeof CAM_PROJECT_VERSION;
-  source:{path:string;fileName:string};
+  source:{path:string;fileName:string;geometryIdentity?:string};
   setup:{
     stock:StockDefinition;
     stockMode:StockMode;
@@ -31,11 +31,11 @@ export type CamProject=CamProjectV1;
 const clone=<T>(value:T):T=>JSON.parse(JSON.stringify(value)) as T;
 const object=(value:unknown):value is Record<string,unknown>=>typeof value==='object'&&value!==null&&!Array.isArray(value);
 
-export function createCamProjectV1(args:{sourcePath:string;sourceFileName:string;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;fixtures:FixtureVolume[];machineEnvelopeEnabled:boolean;machineEnvelope:MachineEnvelope;machineWcsOrigin:MachineWcsOrigin;spindleHeadEnabled:boolean;spindleHead:SpindleHeadGeometry;operationsProject:OperationsProject}):CamProjectV1{
+export function createCamProjectV1(args:{sourcePath:string;sourceFileName:string;sourceGeometryIdentity:string;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;fixtures:FixtureVolume[];machineEnvelopeEnabled:boolean;machineEnvelope:MachineEnvelope;machineWcsOrigin:MachineWcsOrigin;spindleHeadEnabled:boolean;spindleHead:SpindleHeadGeometry;operationsProject:OperationsProject}):CamProjectV1{
   return{
     format:CAM_PROJECT_FORMAT,
     version:CAM_PROJECT_VERSION,
-    source:{path:args.sourcePath,fileName:args.sourceFileName},
+    source:{path:args.sourcePath,fileName:args.sourceFileName,geometryIdentity:args.sourceGeometryIdentity},
     setup:{stock:clone(args.stock),stockMode:args.stockMode,placement:clone(args.placement),orientation:clone(args.orientation),wcs:clone(args.wcs),fixtures:clone(args.fixtures),machineEnvelopeEnabled:args.machineEnvelopeEnabled,machineEnvelope:clone(args.machineEnvelope),machineWcsOrigin:clone(args.machineWcsOrigin),spindleHeadEnabled:args.spindleHeadEnabled,spindleHead:clone(args.spindleHead)},
     operationsProject:clone(args.operationsProject)
   };
@@ -53,6 +53,7 @@ export function parseCamProject(text:string):CamProject{
   if(value.version<1)throw new Error(`Projektversion ${value.version} wird nicht unterstützt.`);
   const project=value as unknown as CamProjectV1;
   if(!object(project.source)||typeof project.source.path!=='string'||!project.source.path.trim())throw new Error('Projektdatei enthält keine gültige Quelldatei-Referenz.');
+  if(project.source.geometryIdentity!==undefined&&(typeof project.source.geometryIdentity!=='string'||!project.source.geometryIdentity.trim()))throw new Error('Projektdatei enthält keine gültige Geometrie-Identität der Quelldatei.');
   if(!object(project.setup))throw new Error('Projektdatei enthält kein gültiges Setup.');
   if(!object(project.operationsProject)||!Array.isArray(project.operationsProject.operations))throw new Error('Projektdatei enthält kein gültiges Operationsprojekt.');
   return clone(project);
