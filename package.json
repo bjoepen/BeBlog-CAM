@@ -59,6 +59,7 @@
     "check:008b5": "node scripts/check-008b5-operation-tool-references.mjs",
     "check:008b6": "node scripts/check-008b6-atomic-project-save.mjs",
     "check:008b7": "node scripts/check-008b7-project-reload-determinism.mjs",
+    "check:008c1": "node scripts/check-008c1-estlcam-qualification.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
     "native:dev": "bash scripts/dev-macos-native.sh",
