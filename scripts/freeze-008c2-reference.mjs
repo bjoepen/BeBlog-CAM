@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
-const input = process.argv[2];
+const input = process.argv.slice(2).find((arg) => arg !== '--');
 if (!input) {
   console.error('Usage: node scripts/freeze-008c2-reference.mjs <reference-file>');
   process.exit(2);
