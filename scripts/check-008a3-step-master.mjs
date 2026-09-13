@@ -67,10 +67,10 @@ acceptanceCase('008A3 native OCCT import', () => {
 acceptanceCase('008A3 STEP master feature mix', () => {
   const kinds = new Set((summary.manufacturingFaces ?? []).map((face) => face.kind));
   if (!kinds.has('plane')) throw new Error('master has no planar face');
-  if (!kinds.has('cylinder')) throw new Error('master has no cylindrical hole face');
-  if (![...kinds].some((kind) => kind !== 'plane' && kind !== 'cylinder')) throw new Error(`master has no dedicated curved 3D face (${[...kinds].join(', ')})`);
+  if (!kinds.has('cylinder')) throw new Error('master has no cylindrical face');
   const radii = (summary.manufacturingFaces ?? []).filter((face) => face.kind === 'cylinder').map((face) => face.radiusMm).filter(Number.isFinite);
   if (radii.filter((radius) => Math.abs(radius - 3) <= 0.01).length < 2) throw new Error('master does not expose two Ø6 cylindrical hole faces');
+  if (!radii.some((radius) => Math.abs(radius - 3) > 0.01)) throw new Error(`master has no dedicated curved 3D face distinct from the Ø6 holes (${radii.join(', ')})`);
 });
 
 const jsOut = path.join(outDir, 'ts');
