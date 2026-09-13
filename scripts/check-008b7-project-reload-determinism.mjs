@@ -7,7 +7,7 @@ fs.rmSync(outDir,{recursive:true,force:true});
 fs.mkdirSync(outDir,{recursive:true});
 fs.writeFileSync(path.join(outDir,'package.json'),'{"type":"commonjs"}\n');
 
-execFileSync('pnpm',['exec','tsc','scripts/acceptance/008b7-project-reload-determinism.ts','--outDir',outDir,'--module','commonjs','--moduleResolution','node','--target','es2022','--esModuleInterop','--skipLibCheck','--noEmitOnError','true'],{stdio:'inherit'});
+execFileSync('pnpm',['exec','tsc','scripts/acceptance/008b7-project-reload-determinism.ts','--outDir',outDir,'--module','commonjs','--moduleResolution','node','--target','es2022','--esModuleInterop','--skipLibCheck','--allowJs','true','--noEmitOnError','true'],{stdio:'inherit'});
 const output=execFileSync('node',[path.join(outDir,'scripts/acceptance/008b7-project-reload-determinism.js')],{encoding:'utf8'}).trim();
 const result=JSON.parse(output);
 
