@@ -67,6 +67,8 @@ jobs:
         run: pnpm check:008b1
       - name: Project fail-closed acceptance
         run: pnpm check:008b2
+      - name: Project source recovery contract
+        run: pnpm check:008b3
       - name: Frontend build
         run: pnpm build
       - name: Rust check
