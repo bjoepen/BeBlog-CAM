@@ -38,10 +38,10 @@ int main(int argc, char** argv) {
 
     // Horizontal cylinder along X. Its center sits above the stock top, so only
     // the lower arc cuts a shallow, single-valued Z(x,y) trough into the plate.
-    // This avoids the pole/seam degeneracy of the previous spherical fixture
-    // while still exercising the real curved-face finishing production path.
+    // Keep the trough at X=34..44 so it stays geometrically separate from both
+    // Ø6 through holes while still exercising the real curved-face finishing path.
     const TopoDS_Shape trough = BRepPrimAPI_MakeCylinder(
-        gp_Ax2(gp_Pnt(34.0, 31.0, 13.0), gp_Dir(1.0, 0.0, 0.0)), 5.0, 16.0).Shape();
+        gp_Ax2(gp_Pnt(34.0, 31.0, 13.0), gp_Dir(1.0, 0.0, 0.0)), 5.0, 10.0).Shape();
     shape = BRepAlgoAPI_Cut(shape, trough).Shape();
 
     if (shape.IsNull()) {
