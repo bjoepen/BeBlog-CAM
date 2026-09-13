@@ -8,6 +8,7 @@ src-tauri/icons/icon.png
 
 # Local/generated build caches
 .cache/
+.acceptance/
 src-tauri/gen/
 
 # Lockfiles are intentionally tracked for reproducible application builds:
