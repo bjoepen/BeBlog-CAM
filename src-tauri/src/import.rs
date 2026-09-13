@@ -6,12 +6,19 @@ use std::{collections::BTreeMap, path::Path};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportSummary { pub kind:String,pub file_name:String,pub backend:String,pub status:String,pub entities:BTreeMap<String,usize>,pub planar_geometry:Option<PlanarGeometry>,pub brep:Option<BrepSummary>,pub note:Option<String> }
+pub struct ImportSummary { pub kind:String,pub file_name:String,pub backend:String,pub status:String,pub entities:BTreeMap<String,usize>,pub planar_geometry:Option<PlanarGeometry>,pub brep:Option<BrepSummary>,pub note:Option<String>,pub source_fingerprint:String }
 
-pub fn inspect(path:&str)->Result<ImportSummary,String>{let path=Path::new(path);let file_name=path.file_name().and_then(|v|v.to_str()).unwrap_or("Bauteil").to_string();let ext=path.extension().and_then(|v|v.to_str()).unwrap_or("").to_ascii_lowercase();match ext.as_str(){"dxf"=>inspect_dxf(path,file_name),"step"|"stp"=>inspect_step(path,file_name),_=>Err("BeBlog CAM unterstützt STEP/STP und DXF.".into())}}
-fn inspect_step(path:&Path,file_name:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note)})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note)})}}
+fn source_fingerprint(path:&Path)->Result<String,String>{
+ let bytes=std::fs::read(path).map_err(|e|format!("Quelldatei konnte für die Identitätsprüfung nicht gelesen werden: {e}"))?;
+ let mut hash:u64=0xcbf29ce484222325;
+ for byte in &bytes{hash^=u64::from(*byte);hash=hash.wrapping_mul(0x100000001b3);}
+ Ok(format!("src-v1:{hash:016x}:{}",bytes.len()))
+}
 
-fn inspect_dxf(path:&Path,file_name:String)->Result<ImportSummary,String>{
+pub fn inspect(path:&str)->Result<ImportSummary,String>{let path=Path::new(path);let file_name=path.file_name().and_then(|v|v.to_str()).unwrap_or("Bauteil").to_string();let ext=path.extension().and_then(|v|v.to_str()).unwrap_or("").to_ascii_lowercase();let fingerprint=source_fingerprint(path)?;match ext.as_str(){"dxf"=>inspect_dxf(path,file_name,fingerprint),"step"|"stp"=>inspect_step(path,file_name,fingerprint),_=>Err("BeBlog CAM unterstützt STEP/STP und DXF.".into())}}
+fn inspect_step(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note),source_fingerprint})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note),source_fingerprint})}}
+
+fn inspect_dxf(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{
  let drawing=dxf::Drawing::load_file(path).map_err(|e|format!("DXF konnte nicht gelesen werden: {e}"))?;
  let mut counts=BTreeMap::new();let mut curves=Vec::new();let mut curve_layers=Vec::new();let mut ignored_zero_lines=0usize;
  for entity in drawing.entities(){let layer=if entity.common.layer.is_empty(){"0".to_string()}else{entity.common.layer.clone()};match &entity.specific{
@@ -22,5 +29,5 @@ fn inspect_dxf(path:&Path,file_name:String)->Result<ImportSummary,String>{
   other=>{let source_kind=format!("{other:?}").split([' ','{','(']).next().unwrap_or("Entity").to_string();*counts.entry(format!("Weitere: {source_kind}")).or_insert(0)+=1;}
  }}
  if ignored_zero_lines>0{counts.insert("Null-Linien ignoriert".into(),ignored_zero_lines);}counts.insert("Layer".into(),drawing.layers().count());
- Ok(ImportSummary{kind:"dxf".into(),file_name,backend:"dxf-rs → BeBlog Geometry".into(),status:"ready".into(),entities:counts,planar_geometry:Some(PlanarGeometry::from_curves_with_layers(curves,curve_layers)),brep:None,note:Some("DXF-Elemente wurden in das interne planare BeBlog-Geometriemodell normalisiert. Die originale Layer-Zuordnung bleibt erhalten, damit offene Geometrien für Carve-Operationen gezielt und gesammelt ausgewählt werden können.".into())})
+ Ok(ImportSummary{kind:"dxf".into(),file_name,backend:"dxf-rs → BeBlog Geometry".into(),status:"ready".into(),entities:counts,planar_geometry:Some(PlanarGeometry::from_curves_with_layers(curves,curve_layers)),brep:None,note:Some("DXF-Elemente wurden in das interne planare BeBlog-Geometriemodell normalisiert. Die originale Layer-Zuordnung bleibt erhalten, damit offene Geometrien für Carve-Operationen gezielt und gesammelt ausgewählt werden können.".into()),source_fingerprint})
 }
