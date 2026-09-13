@@ -39,11 +39,15 @@ function validateOperationsProject(project:CamProjectV1):void{
   if(operations.length===0)throw new Error('Projektdatei enthält keine Bearbeitung.');
 
   const ids=new Set<string>();
+  const operationById=new Map<string,Record<string,unknown>>();
+  const operationIndex=new Map<string,number>();
   for(const [index,value] of operations.entries()){
     if(!object(value))throw new Error(`Bearbeitung ${index+1} besitzt kein gültiges Objektformat.`);
     if(!nonEmptyString(value.id))throw new Error(`Bearbeitung ${index+1} enthält keine gültige ID.`);
     if(ids.has(value.id))throw new Error(`Projektdatei enthält die Bearbeitungs-ID ${value.id} mehrfach.`);
     ids.add(value.id);
+    operationById.set(value.id,value);
+    operationIndex.set(value.id,index);
     if(!operationKinds.has(String(value.kind)))throw new Error(`Bearbeitung ${value.id} enthält einen unbekannten Typ.`);
     if(!object(value.tool))throw new Error(`Bearbeitung ${value.id} enthält kein gültiges Werkzeug.`);
     if(!nonEmptyString(value.tool.id))throw new Error(`Werkzeug der Bearbeitung ${value.id} enthält keine gültige ID.`);
@@ -60,6 +64,9 @@ function validateOperationsProject(project:CamProjectV1):void{
       const reference=operation.restFromOperationId;
       if(!nonEmptyString(reference)||!ids.has(reference))throw new Error(`Restmaterial-Bearbeitung ${String(operation.id)} verweist auf keine vorhandene Quellbearbeitung.`);
       if(reference===operation.id)throw new Error(`Restmaterial-Bearbeitung ${String(operation.id)} darf nicht auf sich selbst verweisen.`);
+      const source=operationById.get(reference)!;
+      if(source.kind!=='pocket')throw new Error(`Restmaterial-Bearbeitung ${String(operation.id)} muss auf eine Taschenbearbeitung verweisen.`);
+      if((operationIndex.get(reference)??-1)>=(operationIndex.get(String(operation.id))??-1))throw new Error(`Restmaterial-Bearbeitung ${String(operation.id)} muss auf eine frühere Taschenbearbeitung verweisen.`);
     }
   }
 }
