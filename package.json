@@ -51,6 +51,7 @@
     "check:008a3": "node scripts/check-008a3-step-master.mjs",
     "check:008a4": "node scripts/check-008a4-multi-operation.mjs",
     "check:008a5": "node scripts/check-008a5-estlcam-contract.mjs",
+    "check:008b1": "node scripts/check-008b1-project-roundtrip.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
     "native:dev": "bash scripts/dev-macos-native.sh",
