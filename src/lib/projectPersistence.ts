@@ -30,6 +30,39 @@ export type CamProject=CamProjectV1;
 
 const clone=<T>(value:T):T=>JSON.parse(JSON.stringify(value)) as T;
 const object=(value:unknown):value is Record<string,unknown>=>typeof value==='object'&&value!==null&&!Array.isArray(value);
+const nonEmptyString=(value:unknown):value is string=>typeof value==='string'&&value.trim().length>0;
+const operationKinds=new Set(['facing','contour','pocket','carve','drill','z-level-roughing','surface-finishing']);
+
+function validateOperationsProject(project:CamProjectV1):void{
+  const operationsProject=project.operationsProject as unknown as Record<string,unknown>;
+  const operations=operationsProject.operations as unknown[];
+  if(operations.length===0)throw new Error('Projektdatei enthält keine Bearbeitung.');
+
+  const ids=new Set<string>();
+  for(const [index,value] of operations.entries()){
+    if(!object(value))throw new Error(`Bearbeitung ${index+1} besitzt kein gültiges Objektformat.`);
+    if(!nonEmptyString(value.id))throw new Error(`Bearbeitung ${index+1} enthält keine gültige ID.`);
+    if(ids.has(value.id))throw new Error(`Projektdatei enthält die Bearbeitungs-ID ${value.id} mehrfach.`);
+    ids.add(value.id);
+    if(!operationKinds.has(String(value.kind)))throw new Error(`Bearbeitung ${value.id} enthält einen unbekannten Typ.`);
+    if(!object(value.tool))throw new Error(`Bearbeitung ${value.id} enthält kein gültiges Werkzeug.`);
+    if(!nonEmptyString(value.tool.id))throw new Error(`Werkzeug der Bearbeitung ${value.id} enthält keine gültige ID.`);
+    if(!nonEmptyString(value.tool.name))throw new Error(`Werkzeug der Bearbeitung ${value.id} enthält keinen gültigen Namen.`);
+    if(typeof value.tool.diameterMm!=='number'||!Number.isFinite(value.tool.diameterMm)||value.tool.diameterMm<=0)throw new Error(`Werkzeug der Bearbeitung ${value.id} enthält keinen gültigen Durchmesser.`);
+  }
+
+  const activeId=operationsProject.activeOperationId;
+  if(activeId!==null&&(!nonEmptyString(activeId)||!ids.has(activeId)))throw new Error('Projektdatei verweist auf eine nicht vorhandene aktive Bearbeitung.');
+
+  for(const value of operations){
+    const operation=value as Record<string,unknown>;
+    if(operation.kind==='pocket'&&operation.restMachiningEnabled===true){
+      const reference=operation.restFromOperationId;
+      if(!nonEmptyString(reference)||!ids.has(reference))throw new Error(`Restmaterial-Bearbeitung ${String(operation.id)} verweist auf keine vorhandene Quellbearbeitung.`);
+      if(reference===operation.id)throw new Error(`Restmaterial-Bearbeitung ${String(operation.id)} darf nicht auf sich selbst verweisen.`);
+    }
+  }
+}
 
 export function createCamProjectV1(args:{sourcePath:string;sourceFileName:string;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;fixtures:FixtureVolume[];machineEnvelopeEnabled:boolean;machineEnvelope:MachineEnvelope;machineWcsOrigin:MachineWcsOrigin;spindleHeadEnabled:boolean;spindleHead:SpindleHeadGeometry;operationsProject:OperationsProject}):CamProjectV1{
   return{
@@ -56,6 +89,7 @@ export function parseCamProject(text:string):CamProject{
   if(project.source.geometryIdentity!==undefined&&(typeof project.source.geometryIdentity!=='string'||!project.source.geometryIdentity.trim()))throw new Error('Projektdatei enthält keine gültige Geometrie-Identität der Quelldatei.');
   if(!object(project.setup))throw new Error('Projektdatei enthält kein gültiges Setup.');
   if(!object(project.operationsProject)||!Array.isArray(project.operationsProject.operations))throw new Error('Projektdatei enthält kein gültiges Operationsprojekt.');
+  validateOperationsProject(project);
   return clone(project);
 }
 
