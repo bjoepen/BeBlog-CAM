@@ -9,6 +9,7 @@ export type ProjectSourceRelocator=(source:ProjectSourceReference,originalError:
 type ImportSummaryWithIdentity=ImportSummary&{sourceFingerprint?:string};
 
 const baseName=(path:string)=>path.split(/[\\/]/).filter(Boolean).at(-1)??'';
+const isIdentityError=(error:unknown)=>error instanceof Error&&(error.message.includes('Geometrie-Identität')||error.message.includes('seit dem Speichern verändert'));
 
 function assertExpectedSource(source:ProjectSourceReference,summary:ImportSummary):void{
   if(!source.geometryIdentity){
@@ -35,7 +36,8 @@ export async function resolveProjectSource(args:{
     return{path:source.path,summary,relocated:false};
   }catch(originalError){
     if(!relocate){
-      throw originalError instanceof Error?originalError:new Error(`Projektquelle nicht verfügbar: ${source.fileName}. Gespeicherter Pfad: ${source.path}`);
+      if(isIdentityError(originalError))throw originalError;
+      throw new Error(`Projektquelle nicht verfügbar: ${source.fileName}. Gespeicherter Pfad: ${source.path}`);
     }
     const replacement=await relocate(source,originalError);
     if(!replacement){
