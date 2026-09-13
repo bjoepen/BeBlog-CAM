@@ -18,11 +18,14 @@ function pass(name,condition,detail=''){
 }
 
 pass('008B3 existing source resolves directly',result.direct?.relocated===false&&result.direct?.path==='/old/location/008b3-reference.dxf');
+pass('008B3 legacy source without fingerprint remains loadable',result.legacyDirect?.relocated===false&&result.legacyDirect?.path==='/old/location/legacy-reference.dxf');
+pass('008B3 geometry identity mismatch fails closed',typeof result.identityMismatchError==='string'&&result.identityMismatchError.includes('seit dem Speichern verändert'));
+pass('008B3 geometry identity mismatch does not open relocation flow',result.identityMismatchRelocateCalls===0);
 pass('008B3 missing source fails closed',typeof result.missingError==='string'&&result.missingError.includes('Projektquelle nicht verfügbar'));
 pass('008B3 moved source can be explicitly relocated',result.moved?.relocated===true&&result.moved?.path==='/new/location/008b3-reference.dxf');
 pass('008B3 cancelled relocation fails closed',typeof result.cancelledError==='string'&&result.cancelledError.includes('keine Neuzuordnung gewählt'));
 pass('008B3 wrong replacement filename is rejected',typeof result.wrongNameError==='string'&&result.wrongNameError.includes('Neuzuordnung abgelehnt'));
 
 if(!process.exitCode){
-  console.log('PASS 008B3 source recovery contract: missing project sources fail closed, while an explicitly relocated source with the expected file identity can be restored without changing the project state contract.');
+  console.log('PASS 008B3 source recovery contract: legacy projects remain loadable, identity mismatches fail closed without misleading relocation, and genuinely missing sources can still be explicitly relocated.');
 }
