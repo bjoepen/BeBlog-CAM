@@ -59,6 +59,8 @@ jobs:
         run: pnpm check:008a1
       - name: Synthetic 2D production acceptance
         run: pnpm check:008a2
+      - name: Multi-operation production acceptance
+        run: pnpm check:008a4
       - name: Frontend build
         run: pnpm build
       - name: Rust check
