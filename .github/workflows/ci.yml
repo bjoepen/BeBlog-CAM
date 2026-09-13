@@ -73,6 +73,8 @@ jobs:
         run: pnpm check:008b3b
       - name: Project source change contract
         run: pnpm check:008b4
+      - name: Project reference-integrity contract
+        run: pnpm check:008b5
       - name: Frontend build
         run: pnpm build
       - name: Rust check
