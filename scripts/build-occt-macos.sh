@@ -34,6 +34,7 @@ cmake -S "$SRC" -B "$BUILD" \
   -DBUILD_MODULE_Visualization=OFF \
   -DBUILD_MODULE_ApplicationFramework=OFF \
   -DBUILD_MODULE_Draw=OFF \
+  -DUSE_TCL=OFF \
   -DUSE_TK=OFF \
   -DUSE_FREETYPE=OFF \
   -DUSE_TBB=OFF \
