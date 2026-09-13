@@ -12,9 +12,10 @@ const baseName=(path:string)=>path.split(/[\\/]/).filter(Boolean).at(-1)??'';
 const isIdentityError=(error:unknown)=>error instanceof Error&&(error.message.includes('Geometrie-Identität')||error.message.includes('seit dem Speichern verändert'));
 
 function assertExpectedSource(source:ProjectSourceReference,summary:ImportSummary):void{
-  if(!source.geometryIdentity){
-    throw new Error(`Projektquelle kann nicht sicher validiert werden: gespeicherte Geometrie-Identität fehlt (${source.fileName}). Projekt nicht geladen.`);
-  }
+  // Legacy projects created before source fingerprinting remain loadable. Once
+  // they are saved by a fingerprint-aware build, the backend injects a
+  // geometryIdentity and all subsequent loads use the strict validation path.
+  if(!source.geometryIdentity)return;
   const actual=(summary as ImportSummaryWithIdentity).sourceFingerprint;
   if(!actual){
     throw new Error(`Projektquelle kann nicht sicher validiert werden: aktuelle Geometrie-Identität fehlt (${source.fileName}). Projekt nicht geladen.`);
@@ -35,8 +36,11 @@ export async function resolveProjectSource(args:{
     assertExpectedSource(source,summary);
     return{path:source.path,summary,relocated:false};
   }catch(originalError){
+    // Identity failures are not path failures. Relocating the file cannot make
+    // a changed or unverifiable fingerprint valid and would present a
+    // misleading "open model" dialog to the user.
+    if(isIdentityError(originalError))throw originalError;
     if(!relocate){
-      if(isIdentityError(originalError))throw originalError;
       throw new Error(`Projektquelle nicht verfügbar: ${source.fileName}. Gespeicherter Pfad: ${source.path}`);
     }
     const replacement=await relocate(source,originalError);
