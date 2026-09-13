@@ -2,6 +2,7 @@ mod domain;
 mod geometry;
 mod import;
 mod occt;
+mod project_file;
 
 use domain::Project;
 use import::ImportSummary;
@@ -45,8 +46,8 @@ fn save_project_file(path: String, content: String) -> Result<(), String> {
         .map_err(|error|format!("Projektdatei konnte nicht serialisiert werden: {error}"))?;
     encoded.push('\n');
 
-    std::fs::write(path, encoded.as_bytes())
-        .map_err(|error| format!("Projektdatei konnte nicht gespeichert werden: {error}"))
+    project_file::atomic_write(path, encoded.as_bytes())
+        .map_err(|error| format!("Projektdatei konnte nicht sicher gespeichert werden: {error}"))
 }
 
 #[tauri::command]
