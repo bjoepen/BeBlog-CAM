@@ -1,7 +1,7 @@
 use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -38,6 +38,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn test_dir(name: &str) -> PathBuf {
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
