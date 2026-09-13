@@ -25,8 +25,9 @@ pass('008C1 A5 remains the automated motion-truth baseline',
   /Estlcam motion truth parity/.test(a5)&&/motion count changed/.test(a5)&&/min Z changed/.test(a5));
 
 pass('008C1 manual tool-change contract remains bare M6 without T',
-  /Estlcam tool-change contract/.test(a5)&&/\^M6\$/i.test(a5)&&/T\\d\+/.test(a5)&&
-  /out\.push\('M6'\)/.test(post));
+  /Estlcam tool-change contract/.test(a5)&&
+  a5.includes("/^M6$/i.test(line)")&&a5.includes('/\\bT\\d+/i.test(line)')&&
+  post.includes("out.push('M6')"));
 
 pass('008C1 real Estlcam acceptance is explicitly manual and outside CI',
   /008C3 — Manual Estlcam 11 Acceptance/.test(doc)&&/must \*\*not\*\* be moved into GitHub CI/.test(doc));
