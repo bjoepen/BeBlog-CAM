@@ -25,6 +25,9 @@
   const path=(pts:P2[],closed=false)=>pts.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')+(closed?' Z':'');
   const eligibleCarve=(curve:Curve2)=>curve.kind==='line'||curve.kind==='arc'||(curve.kind==='polyline'&&!curve.closed);
   let pickingContourStart=false;
+  let contourPanelX=12,contourPanelY=12,contourPanelDragging=false;
+  let contourOverlayElement:HTMLDivElement|null=null,contourPanelElement:HTMLDivElement|null=null;
+  let contourPanelPointerId:number|null=null,contourPanelGrabX=0,contourPanelGrabY=0;
 
   function fit(points:P2[]){
     const b=bounds(points),sx=Math.max(b.maxX-b.minX,1e-9),sy=Math.max(b.maxY-b.minY,1e-9),scale=Math.min((width-2*pad)/sx,(height-2*pad)/sy),ox=(width-sx*scale)/2,oy=(height-sy*scale)/2;
@@ -48,6 +51,36 @@
   function toggleClosedSegment(id:number){
     if(operation.kind!=='contour'||operation.topology!=='closed'||operation.contourId===null)return;
     const set=new Set(operation.excludedSegmentIds??[]);set.has(id)?set.delete(id):set.add(id);operation.excludedSegmentIds=[...set].sort((a,b)=>a-b);onSelectContour(operation.contourId,'closed');
+  }
+
+  function clampContourPanelPosition(){
+    if(!contourOverlayElement||!contourPanelElement)return;
+    const overlayRect=contourOverlayElement.getBoundingClientRect(),panelRect=contourPanelElement.getBoundingClientRect();
+    const maxX=Math.max(0,overlayRect.width-panelRect.width),maxY=Math.max(0,overlayRect.height-panelRect.height);
+    contourPanelX=Math.min(Math.max(0,contourPanelX),maxX);
+    contourPanelY=Math.min(Math.max(0,contourPanelY),maxY);
+  }
+  function beginContourPanelDrag(event:PointerEvent){
+    if(event.button!==0||!contourPanelElement||!contourOverlayElement)return;
+    const panelRect=contourPanelElement.getBoundingClientRect();
+    contourPanelDragging=true;contourPanelPointerId=event.pointerId;
+    contourPanelGrabX=event.clientX-panelRect.left;contourPanelGrabY=event.clientY-panelRect.top;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+  function moveContourPanel(event:PointerEvent){
+    if(!contourPanelDragging||contourPanelPointerId!==event.pointerId||!contourOverlayElement||!contourPanelElement)return;
+    const overlayRect=contourOverlayElement.getBoundingClientRect(),panelRect=contourPanelElement.getBoundingClientRect();
+    const maxX=Math.max(0,overlayRect.width-panelRect.width),maxY=Math.max(0,overlayRect.height-panelRect.height);
+    contourPanelX=Math.min(Math.max(0,event.clientX-overlayRect.left-contourPanelGrabX),maxX);
+    contourPanelY=Math.min(Math.max(0,event.clientY-overlayRect.top-contourPanelGrabY),maxY);
+  }
+  function endContourPanelDrag(event:PointerEvent){
+    if(contourPanelPointerId!==event.pointerId)return;
+    const target=event.currentTarget as HTMLElement;
+    if(target.hasPointerCapture(event.pointerId))target.releasePointerCapture(event.pointerId);
+    contourPanelDragging=false;contourPanelPointerId=null;
+    clampContourPanelPosition();
   }
 
   function commitClosedContourPatch(patch:Partial<ContourOperation>){
@@ -89,6 +122,7 @@
   function setContourEntryMode(mode:'plunge'|'lead'|'ramp'){
     const legacyLead=mode==='lead'?'line':'none';
     commitClosedContourPatch({entryMode:mode,leadMode:legacyLead});
+    requestAnimationFrame(clampContourPanelPosition);
   }
   function updateContourRampAngle(event:Event){
     const value=Number((event.currentTarget as HTMLInputElement).value);
@@ -203,8 +237,10 @@
   );
 </script>
 
+<svelte:window onresize={clampContourPanelPosition}/>
+
 {#if scene}
-<div class="contour-overlay" class:drill-overlay={scene.kind==='drill'} aria-label="Geometrieauswahl und Werkzeugweg" data-stock-width={stockMode==='none'?undefined:stock.width}>
+<div bind:this={contourOverlayElement} class="contour-overlay" class:drill-overlay={scene.kind==='drill'} aria-label="Geometrieauswahl und Werkzeugweg" data-stock-width={stockMode==='none'?undefined:stock.width}>
   <svg viewBox="0 0 1000 650">
     {#if scene.kind==='carve'}
       {#each scene.carve as curve}
@@ -255,8 +291,10 @@
     {/if}
   </svg>
   {#if scene.kind==='contour'&&operation.kind==='contour'&&operation.topology==='closed'&&!scene.broken&&operation.contourId!==null}
-    <div class="contour-start-controls">
-      <div class="control-title">Konturstart</div>
+    <div bind:this={contourPanelElement} class="contour-start-controls" class:dragging={contourPanelDragging} style={`left:${contourPanelX}px;top:${contourPanelY}px`}>
+      <div class="contour-start-header" class:dragging={contourPanelDragging} onpointerdown={beginContourPanelDrag} onpointermove={moveContourPanel} onpointerup={endContourPanelDrag} onpointercancel={endContourPanelDrag}>
+        <div class="control-title">Konturstart</div>
+      </div>
       <div class="control-row"><button class:active={(operation.startMode??'auto')==='auto'} onclick={setContourStartAuto}>Automatisch</button><button class:active={(operation.startMode??'auto')==='manual'} class:picking={pickingContourStart} onclick={beginContourStartPick}>{pickingContourStart?'Auf Bahn klicken …':'In Vorschau wählen'}</button></div>
       <div class="control-note">{(operation.startMode??'auto')==='auto'?'Bevorzugt die Mitte einer langen Geraden.':`Manuell · ${(scene.previewStartFraction*100).toFixed(1)} % des Umlaufs`}</div>
       <div class="control-title entry-title">Einfahrt</div>
@@ -284,7 +322,7 @@
   .pocket-entry-toolpath{stroke-dasharray:3 2;stroke-width:1.9}
   .contour-start-pick{fill:none;stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:crosshair}
   .contour-start-marker{pointer-events:none}.contour-start-marker circle{fill:#fafaf8;stroke:#b1453b;stroke-width:2;vector-effect:non-scaling-stroke}.contour-start-marker path{fill:none;stroke:#b1453b;stroke-width:1.5;vector-effect:non-scaling-stroke}
-  .contour-start-controls{position:absolute;left:12px;top:12px;width:220px;padding:10px;border:1px solid rgba(210,212,207,.92);border-radius:8px;background:rgba(250,250,248,.96);box-shadow:0 5px 18px rgba(45,51,47,.08);color:#454d48;font-size:.7rem}.control-title{font-weight:650;margin-bottom:6px}.entry-title{margin-top:10px}.control-row{display:grid;grid-template-columns:1fr 1fr;gap:5px}.control-row.three{grid-template-columns:repeat(3,1fr)}.control-row button{border:1px solid #d5d7d2;border-radius:5px;background:#fff;padding:5px 6px;color:#4e5651;font:inherit;cursor:pointer}.control-row button.active{border-color:#8e9a93;background:#eef1ed;color:#27322c}.control-row button.picking{border-color:#b1453b;color:#8b3932}.control-note{margin-top:5px;color:#777d78}.ramp-angle{display:flex;align-items:center;gap:5px;margin-top:7px}.ramp-angle input{width:58px;border:1px solid #d5d7d2;border-radius:5px;padding:4px 5px;background:#fff;color:#39413d}
+  .contour-start-controls{position:absolute;width:220px;padding:10px;border:1px solid rgba(210,212,207,.92);border-radius:8px;background:rgba(250,250,248,.96);box-shadow:0 5px 18px rgba(45,51,47,.08);color:#454d48;font-size:.7rem}.contour-start-controls.dragging{box-shadow:0 7px 20px rgba(45,51,47,.11)}.contour-start-header{margin:-4px -4px 6px;padding:4px;cursor:grab;user-select:none;touch-action:none}.contour-start-header.dragging{cursor:grabbing}.contour-start-header .control-title{margin-bottom:0}.control-title{font-weight:650;margin-bottom:6px}.entry-title{margin-top:10px}.control-row{display:grid;grid-template-columns:1fr 1fr;gap:5px}.control-row.three{grid-template-columns:repeat(3,1fr)}.control-row button{border:1px solid #d5d7d2;border-radius:5px;background:#fff;padding:5px 6px;color:#4e5651;font:inherit;cursor:pointer}.control-row button.active{border-color:#8e9a93;background:#eef1ed;color:#27322c}.control-row button.picking{border-color:#b1453b;color:#8b3932}.control-note{margin-top:5px;color:#777d78}.ramp-angle{display:flex;align-items:center;gap:5px;margin-top:7px}.ramp-angle input{width:58px;border:1px solid #d5d7d2;border-radius:5px;padding:4px 5px;background:#fff;color:#39413d}
   .open-help{position:absolute;left:50%;top:calc(100% + 42px);transform:translateX(-50%);width:max-content;max-width:86%;padding:6px 9px;border-radius:6px;background:rgba(250,250,248,.94);color:#666b66;font-size:.72rem;pointer-events:none;white-space:normal;text-align:center}
   .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}.carve-candidate.selected-carve{stroke:rgba(38,52,46,.55);stroke-width:1.8;stroke-dasharray:4 3}.carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
   .drill-candidate{fill:none;stroke:rgba(194,117,40,.25);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}.drill-candidate.selected-drill{stroke:#b1453b;stroke-width:2.4}.drill-center{stroke:rgba(194,117,40,.55);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.drill-center.selected-drill{stroke:#b1453b;stroke-width:1.8}.drill-pick{fill:transparent;stroke:transparent;stroke-width:12;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}
