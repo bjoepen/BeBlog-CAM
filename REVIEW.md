@@ -118,7 +118,7 @@ Korrektur wurde am 2026-09-14 ausdrücklich freigegeben und implementiert. Statu
 - **Kategorie:** CAM Planning / Contour Entry / UX
 - **Severity / Priorität:** P1 vor RC
 - **Confidence:** High
-- **Status:** Core PASS / DXF UI implemented / Pending local UI QA
+- **Status:** PASS / Real-World accepted
 - **Betroffene Dateien / Codebereiche:**
   - `src/lib/types.ts`
   - `src/lib/contourStartPlacement.ts`
@@ -148,15 +148,16 @@ Der bisherige geschlossene Konturpfad übernahm seinen Start implizit aus der Re
 
 ### UI
 
-Für den DXF-Real-World-Pfad ist die Funktion jetzt direkt in der Bearbeiten-Vorschau verdrahtet:
+Für den DXF-Real-World-Pfad ist die Funktion direkt in der Bearbeiten-Vorschau verdrahtet:
 
 - `Automatisch`
 - `In Vorschau wählen`
 - sichtbarer Startmarker
 - `Senkrecht | Tangential | Rampe`
 - Rampenwinkel bei aktiver Rampe
+- verschiebbares Konturstart-Panel innerhalb des Preview-Overlays
 
-Der Klick wird auf die dargestellte Werkzeugbahn projiziert und als `startFraction` in die Operation zurückgeschrieben. Die vorhandene DXF-Geometrieauswahl bleibt erhalten; die Optimierung bleibt vollständig vor dem Postprozessor.
+Der Klick wird auf die dargestellte Werkzeugbahn projiziert und als `startFraction` in die Operation zurückgeschrieben. Die vorhandene DXF-Geometrieauswahl bleibt erhalten; die Optimierung bleibt vollständig vor dem Postprozessor. Das Panel-Dragging ist reine Viewport-UX und verändert keinen CAM- oder Motion-State.
 
 ### Acceptance
 
@@ -170,10 +171,18 @@ Der Klick wird auf die dargestellte Werkzeugbahn projiziert und als `startFracti
 
 `check:008rw6-ui` prüft zusätzlich die Verdrahtung von Preview-Picking, Marker, Auto/Manual und Entry-Controls.
 
+Die lokale UI-QA mit dem Rod-Plate-Real-World-Job ist PASS. Der daraus erzeugte Gesamtjob wurde erfolgreich exportiert. Der zusätzliche UI-Polish für das verschiebbare Konturstart-Panel wurde anschließend im Native-UI geprüft und ebenfalls als PASS bestätigt.
+
 ### Abgrenzung
 
 Der Core-Contract ist formatunabhängig. Die direkte manuelle Auswahl im nativen STEP-3D-Viewport bleibt ein separater UI-Anschluss; sie ändert weder Start- noch Entry-Contract und blockiert den aktuellen DXF-Real-World-Test nicht.
 
 ### Freigabe / aktueller Stand
 
-RW-006A/B wurde am 2026-09-14 ausdrücklich freigegeben. Der Core-Gate ist lokal PASS. Die DXF-Preview-UI ist implementiert und wartet auf `check:008rw6-ui`, Type-/Svelte-Check, Build und den erneuten Rod-Plate-Real-World-Test.
+RW-006A/B sowie der UI-Polish wurden am 2026-09-14 freigegeben, implementiert und im Real-World-Pfad abgenommen. **RW-006 ist damit abgeschlossen und PASS.**
+
+### Post-PASS Branch Audit
+
+Der Branch bleibt fachlich konsistent mit der Motion-Truth-Invariante. Der aktuelle GitHub-CI-Lauf ist dennoch rot, weil der historische Gate `check:004y` einen exakten Quelltext-String erwartet (`for(const chain of chains){const entry=buildEntry`), während die aktuelle Implementierung dieselbe Schleife mit Zeilenumbruch formatiert. Die tatsächliche `regionPocketToolpath.ts`-Semantik ist vorhanden: Entry wird weiterhin je sicher verbundener Level-Chain erzeugt. Das ist ein **Gate-/Regression-Harness-Finding**, kein RW-006- oder CAM-Contract-Fehler.
+
+Empfehlung für den nächsten Schritt: `004Y` read-only als veralteten statischen Source-Shape-Gate klassifizieren und durch einen ausführbaren Contract-Test ersetzen bzw. den bestehenden Gate semantisch robust machen. Keine CAM-Änderung ohne separate Freigabe.
