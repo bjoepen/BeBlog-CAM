@@ -69,8 +69,30 @@ export function buildRegionPocketToolpath(args:{outer:P2[];islands?:P2[][];opera
   const toolRadius=operation.tool.diameterMm/2,outer=chooseOffset(args.outer,toolRadius,false),islands=(args.islands??[]).map(loop=>chooseOffset(loop,toolRadius,true));if(areaAbs(outer)<=EPS)return{toolpath:null,errors:['Werkzeug ist für die Taschenregion zu groß.'],warnings};
   const stepover=Math.max(.05,operation.tool.diameterMm*operation.stepoverPercent/100);let planned:{paths:ToolpathPoint2[][];error:string|null};if(strategy==='raster')planned={paths:rasterPaths(outer,islands,stepover),error:null};else if(strategy==='parallel')planned={paths:parallelPaths(outer,islands,stepover),error:null};else planned=concentricPaths(outer,islands,stepover);if(planned.error)errors.push(planned.error);if(!planned.paths.length)errors.push(`Für ${strategy==='raster'?'Raster':strategy==='concentric'?'Kreis':'Konturparallel'} konnte keine sichere Taschenbahn erzeugt werden.`);if(errors.length)return{toolpath:null,errors,warnings};
   const chains=chainPaths(planned.paths,outer,islands);if(!chains.length)return{toolpath:null,errors:['Taschenbahnen konnten nicht zu sicheren zusammenhängenden Ebenenketten verbunden werden.'],warnings};
-  const passes=Math.max(1,Math.ceil(targetDepthMm/operation.stepDownMm)),runs:CanonicalToolpath['runs']=[];for(let pass=1;pass<=passes;pass++){const z=-Math.min(targetDepthMm,pass*operation.stepDownMm),zStart=pass===1?0:-Math.min(targetDepthMm,(pass-1)*operation.stepDownMm);for(const chain of chains){const entry=buildEntry(operation,chain,zStart,z,outer,islands);if(entry.error){errors.push(entry.error);break;}runs.push({kind:'cut',z,points:entry.runPoints,segments:lineSegments(entry.runPoints),entrySegments:entry.segments,retractAfter:true});}if(errors.length)break;}
+  const passes=Math.max(1,Math.ceil(targetDepthMm/operation.stepDownMm)),runs:CanonicalToolpath['runs']=[];
+  for(let pass=1;pass<=passes;pass++){
+    const z=-Math.min(targetDepthMm,pass*operation.stepDownMm),zStart=pass===1?0:-Math.min(targetDepthMm,(pass-1)*operation.stepDownMm);
+    for(const chain of chains){
+      const entry=buildEntry(operation,chain,zStart,z,outer,islands);if(entry.error){errors.push(entry.error);break;}
+      runs.push({kind:'cut',z,points:entry.runPoints,segments:lineSegments(entry.runPoints),entrySegments:entry.segments,retractAfter:true});
+    }
+    if(errors.length)break;
+  }
   if(errors.length)return{toolpath:null,errors,warnings};
+
+  let certifiedDepthLinks=0;
+  for(let i=0;i<runs.length-1;i++){
+    const current=runs[i],next=runs[i+1];
+    if(!(next.z<current.z-EPS))continue;
+    const currentEnd=current.points.at(-1),nextEntryStart=next.entrySegments?.[0]?.start,nextStart=nextEntryStart?{x:nextEntryStart.x,y:nextEntryStart.y}:next.points[0];
+    if(!currentEnd||!nextStart)continue;
+    if(nextEntryStart&&Math.abs(nextEntryStart.z-current.z)>1e-9)continue;
+    if(!connectorSafe(currentEnd,nextStart,outer,islands))continue;
+    current.retractAfter=false;
+    certifiedDepthLinks++;
+  }
+
+  if(certifiedDepthLinks)warnings.push(`Stay-down Tiefenlinking: ${certifiedDepthLinks} Übergang${certifiedDepthLinks===1?'':'e'} zwischen aufeinanderfolgenden Zustellungen bleiben im nachweislich geräumten Taschenraum.`);
   if(strategy==='raster')warnings.push('Raster verwendet zusammenhängende Zickzack-Ebenenketten; eine Einfahrt erfolgt nur am Anfang jeder sicher verbundenen Ebene.');else if(strategy==='concentric')warnings.push('Kreisräumen verwendet konzentrische Kernbahnen plus konturparallele Cleanup-Schalen für Ecken und Freiformbereiche.');else warnings.push('Konturparallel verwendet werkzeugradiuskorrigierte Offset-Schalen der Sollkontur und verbindet sichere Nachbarschalen stay-down.');
   return{toolpath:{version:1,operationKind:'pocket',strategy:strategy==='raster'?'raster':strategy==='parallel'?'parallel-pocket':'concentric',tool:{diameterMm:operation.tool.diameterMm},stepoverPercent:operation.stepoverPercent,runs},errors:[],warnings};
 }
