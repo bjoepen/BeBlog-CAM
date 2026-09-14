@@ -64,6 +64,7 @@
     "check:008rw3": "node scripts/check-008rw3-pocket-depth-linking.mjs",
     "check:008rw4": "node scripts/check-008rw4-contour-entry.mjs",
     "check:008rw6": "node scripts/check-008rw6-contour-start-entry.mjs",
+    "check:008rw6-ui": "node scripts/check-008rw6-ui.mjs",
     "freeze:008c2": "node scripts/freeze-008c2-reference.mjs",
     "tauri": "tauri",
     "native:setup": "bash scripts/build-occt-macos.sh",
