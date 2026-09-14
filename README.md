@@ -4,6 +4,8 @@
 
 BeBlog CAM is an open-source, maker-friendly CAM application for macOS. It turns DXF and STEP geometry into visible, verifiable toolpaths without forcing hobby makers through the usual CAM maze of object trees, permanent toolbars and deeply nested dialogs.
 
+**Status: Beta / Production Qualification — 0.2.0-beta.1.**
+
 The guiding idea is simple:
 
 > **Klarheit ist nicht weniger Information. Klarheit ist Information zur richtigen Zeit.**
@@ -148,20 +150,20 @@ The aim is narrower and harder to fake: make common CNC work understandable, ins
 
 ## Road to production readiness
 
-Feature expansion is no longer the primary development goal. Build 008 focuses on proving and hardening the existing system:
+Build 008 established the production-readiness baseline and moved BeBlog CAM out of the alpha phase:
 
 - **008A — Production Acceptance Suite:** reproducible reference jobs and NC regression gates
 - **008B — Project & Failure Hardening:** deterministic persistence and fail-closed recovery paths
-- **008C — Estlcam Production Qualification:** qualify the real Estlcam 11 / 3-axis workflow
-- **008D — Release Candidate:** reproducible native macOS build, DMG, installation and end-to-end acceptance
+- **008C1/008C2 — Estlcam Qualification Baseline:** qualified syntax contract and frozen reference NC
+- **008C3/008C4 — External Qualification:** deliberately deferred manual Estlcam and machine validation
 
 See [Build 008 — Production Readiness Roadmap](docs/ROADMAP-008-PRODUCTION-READINESS.md).
 
 ## Status
 
-**Production-hardening alpha.**
+**Beta / Production Qualification — 0.2.0-beta.1.**
 
-The intended maker-CAM feature scope is substantially present. Current development prioritizes reproducible acceptance, failure safety, controller qualification and release packaging over additional machining strategies.
+Build 008 completed the software production-readiness gate. Current work can now focus on controller/machine qualification, release packaging and the next deliberately scoped product increments rather than reopening the validated CAM contracts.
 
 Features are established only after technical gates and real-world acceptance agree.
 
