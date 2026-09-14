@@ -6,7 +6,7 @@
 - **Kategorie:** Toolpath / Safe Motion / Manufacturing Efficiency
 - **Severity / Priorität:** Medium / P1 für Production Readiness
 - **Confidence:** Very High
-- **Status:** Implemented / Pending local QA
+- **Status:** PASS / Real-World accepted
 - **Betroffene Dateien / Codebereiche:**
   - `src/lib/pocketStayDown.ts`
   - `src/lib/pocketCanonicalToolpath.ts`
@@ -16,57 +16,26 @@
 
 ### Beobachtung
 
-Im Real-World-Test zeigte die Manufacturing Preview bei Taschenbearbeitungen weiterhin eine auffällig hohe Zahl von Retracts zwischen aufeinanderfolgenden Tiefenstufen. Der erste Fix reduzierte den Real-World-Export nur geringfügig und löste die Ursache nicht vollständig.
-
-Die anschließende read-only Nachanalyse ergab drei gekoppelte Ursachen:
-
-1. Der Gesamtjob wird aus den von Preflight/004T materialisierten `toolpath.motions` exportiert und nicht direkt aus dem zuvor geänderten Pocket-G-Code-Generator.
-2. Explizit gewählte DXF-Taschenstrategien laufen über `buildDxfRegionPocket()` / `buildRegionPocketToolpath()` und setzten bisher jeden Run auf `retractAfter:true`.
-3. `materializeSafeMotionChain()` ignorierte die bereits vorhandene kanonische Semantik `retractAfter:false` und erzeugte nach jedem Run zwingend einen globalen Safe-Z-Retract.
-
-### Begründung / Risiko
-
-Das bisherige Verhalten war geometrisch konservativ und damit grundsätzlich sicher, erzeugte aber unnötige Z-Bewegungen, zusätzliche Plunges und längere Bearbeitungszeiten. Bei realen Taschenjobs wurde das in der Preview als wiederkehrendes Retract-Muster deutlich sichtbar.
-
-Eine pauschale Entfernung von Retracts ist ausdrücklich nicht zulässig. Die Production-Invariante bleibt bindend:
-
-`Inspector Motion Truth = Simulation Motion Truth = Preview Motion Truth = Preflight Motion Truth = NC Motion Truth`
+Im Real-World-Test zeigte die Manufacturing Preview bei Taschenbearbeitungen eine auffällig hohe Zahl von Retracts zwischen aufeinanderfolgenden Tiefenstufen. Die Nachanalyse identifizierte den Production-Path über kanonischen Toolpath, 004T und Gesamtjob-NC als maßgeblich.
 
 ### Implementierter Contract
 
-1. `retractAfter !== false` behält unverändert das historische fail-closed Verhalten: globaler Safe-Z-Retract vor dem nächsten Run.
-2. `retractAfter === false` gilt als explizite kanonische Zertifizierung, dass der direkte Connector zum nächsten kanonischen Entry/Start im bereits freigeräumten Raum liegt.
-3. 004T materialisiert einen solchen Connector auf aktueller Schnitttiefe und fährt anschließend über den kanonischen Entry bzw. die nächste Zustellung weiter, ohne globales Safe-Z zu besuchen.
-4. Ist der Contract unvollständig oder inkonsistent — z. B. kein Folgerun, falscher Entry-Z-Anker oder nicht zusammenhängende Bewegung — schlägt 004T fail-closed fehl.
-5. `buildRegionPocketToolpath()` setzt `retractAfter:false` nur bei Übergängen auf eine tiefere Zustellung, deren direkter Connector mit derselben Region-/Insel-Topologie geometrisch geprüft wurde.
-6. Inseln, getrennte Regionen oder nicht beweisbare Connectoren behalten den globalen Safe-Z-Retract.
-7. Die Optimierung bleibt vor dem Postprozessor in der kanonischen Motion Truth; Estlcam- oder andere Postprozessoren rekonstruieren keine Geometrie.
+1. `retractAfter !== false` behält das fail-closed Verhalten mit globalem Safe-Z-Retract.
+2. `retractAfter === false` gilt nur als explizite kanonische Zertifizierung eines geometrisch geprüften Stay-down-Übergangs.
+3. 004T materialisiert zertifizierte Übergänge auf aktueller Schnitttiefe und erfindet keine Postprozessor-Geometrie.
+4. Unvollständige oder inkonsistente Stay-down-Contracts schlagen fail-closed fehl.
+5. Inseln, getrennte Regionen und nicht beweisbare Connectoren behalten Safe-Z.
+6. Preview, Preflight und NC konsumieren dieselbe kanonische Motion Truth.
 
 ### Regression / Acceptance
 
-Der frühere RW-003-Gate prüfte überwiegend statische Quelltextmerkmale und konnte deshalb einen falschen PASS liefern. Er wurde durch einen ausführbaren Production-Path-Gate ersetzt:
+`check:008rw3` prüft den ausführbaren Production Path einschließlich mehrerer Zustellungen, expliziter DXF-Taschenstrategie, zertifiziertem Stay-down, fail-closed Retracts und Gesamtjob-NC.
 
-`Operation → Canonical Toolpath → 004T Safe Motion → Gesamtjob-NC`
-
-Der Gate prüft mindestens:
-
-- AUTO-Tasche mit mehreren Zustellungen,
-- explizit konturparallele DXF-Tasche,
-- keine globalen Safe-Z-Retracts zwischen zertifizierten Tiefenstufen,
-- globales Safe-Z am Operationsende,
-- fail-closed Retracts bei unabhängigen Runs,
-- reduzierte Rapid-Anzahl bei zertifiziertem Stay-down,
-- Fehler bei offenem/ungültigem `retractAfter:false`-Contract.
-
-### Abgrenzung
-
-Das Finding bedeutet **nicht**, dass BeBlog CAM keine Pocket-Stay-down-Optimierung besitzt. Die vorhandene Optimierung innerhalb einer Ebene bleibt bestehen. RW-003 erweitert die kanonische Semantik auf nachweislich sichere Übergänge zwischen aufeinanderfolgenden Tiefenebenen.
+Die lokale Rod-Plate-Real-World-QA und der daraus erzeugte vollständige Gesamtjob sind PASS. Die beobachtete Retract-Problematik wurde im realen Produktionspfad erneut geprüft und abgenommen.
 
 ### Freigabe / aktueller Stand
 
-Finding und Zielbild wurden im Real-World-Review am 2026-09-13 bestätigt. Nach erneutem Real-World-Nachweis der verbleibenden Retracts wurde die Architektur am 2026-09-14 read-only auditiert und die korrigierte Lösung ausdrücklich zur Umsetzung freigegeben.
-
-Implementierung ist vorhanden; Status bleibt **Pending local QA**, bis `check:008rw3`, Type-/Svelte-Check, Build und der erneute Rod-Plate-Real-World-Export PASS sind.
+Finding und Zielbild wurden im Real-World-Review bestätigt, implementiert und anschließend im Rod-Plate-Real-World-Job abgenommen. **RW-003 ist abgeschlossen und PASS.**
 
 ---
 
@@ -76,7 +45,7 @@ Implementierung ist vorhanden; Status bleibt **Pending local QA**, bis `check:00
 - **Kategorie:** Safe Motion / Contour Entry / Preview-NC Parity
 - **Severity / Priorität:** Medium / P1 für Production Readiness
 - **Confidence:** Very High
-- **Status:** Implemented / Pending local QA
+- **Status:** PASS / Real-World accepted
 - **Betroffene Dateien / Codebereiche:**
   - `src/lib/safeMotionChain.ts`
   - `src/lib/contourLeads.ts`
@@ -84,31 +53,25 @@ Implementierung ist vorhanden; Status bleibt **Pending local QA**, bis `check:00
 
 ### Beobachtung
 
-Im Rod-Plate-Real-World-Export wurde eine geschlossene Kontur mit aktivem Lead-in zunächst auf Safe-Z am eigentlichen Konturstart angefahren, danach auf Safe-Z zum 3-mm-Lead-Start zurückgefahren und erst dort eingetaucht. Die Schnittgeometrie selbst war plausibel; die Safe-Z-Anfahrt besuchte jedoch einen unnötigen Zwischenpunkt.
-
-### Ursache
-
-`applyContourLeads()` beschreibt den expliziten Entry korrekt als:
-
-`Lead-Start @ Safe-Z → Lead-Start @ Schnitttiefe → Konturstart @ Schnitttiefe`
-
-004T leitete `safeStart` bislang trotzdem aus `run.points[0]` ab. Bei Runs mit expliziten `entrySegments` ist aber deren erster XY-Punkt der kanonische Anfahranker.
+Im Rod-Plate-Real-World-Export wurde eine geschlossene Kontur mit Lead-in zunächst unnötig am eigentlichen Konturstart auf Safe-Z angefahren. Der kanonische Entry-Anker musste stattdessen aus dem expliziten Entry stammen.
 
 ### Implementierter Contract
 
-1. Ohne explizinen Entry bleibt `run.points[0]` der Safe-Z-Anfahranker.
-2. Mit `entrySegments` verwendet 004T die XY-Koordinate von `entrySegments[0].start` als Safe-Z-Anfahranker.
-3. Falls der Entry selbst unter Safe-Z beginnt, positioniert 004T zuerst auf derselben XY-Koordinate bei Safe-Z und materialisiert anschließend den expliziten Entry; es erfindet keinen alternativen Werkzeugweg.
+1. Ohne expliziten Entry bleibt `run.points[0]` der Safe-Z-Anfahranker.
+2. Mit `entrySegments` verwendet 004T `entrySegments[0].start` als kanonischen Safe-Z-Anfahranker.
+3. Beginnt der Entry unter Safe-Z, positioniert 004T zuerst auf derselben XY-Koordinate bei Safe-Z und materialisiert danach ausschließlich den expliziten Entry.
 4. Der Konturstart wird vor dem Lead-in nicht mehr unnötig auf Safe-Z besucht.
-5. Preview, Preflight und NC erhalten weiterhin dieselbe materialisierte Motion Truth.
+5. Preview, Preflight und NC erhalten dieselbe materialisierte Motion Truth.
 
 ### Regression / Acceptance
 
-`scripts/check-008rw4-contour-entry.mjs` kompiliert eine ausführbare Acceptance-Fixture mit explizitem Lead-in und prüft den Ablauf vor dem Entry. Der spätere legitime Retract einer geschlossenen Kontur auf denselben XY-Punkt wird ausdrücklich nicht als Entry-Fehler gewertet.
+`check:008rw4` prüft die ausführbare Acceptance-Fixture mit explizitem Lead-in und den korrekten Ablauf vor dem Entry.
+
+Die lokale Rod-Plate-Real-World-QA und der vollständige Gesamtjob sind PASS; die Safe-Z-Anfahrt wurde im realen Produktionspfad abgenommen.
 
 ### Freigabe / aktueller Stand
 
-Korrektur wurde am 2026-09-14 ausdrücklich freigegeben und implementiert. Status bleibt **Pending local QA**, bis `check:008rw4`, 004T-Gates, Type-/Svelte-Check, Build und erneuter Rod-Plate-Export PASS sind.
+Korrektur wurde freigegeben, implementiert und im Rod-Plate-Real-World-Job abgenommen. **RW-004 ist abgeschlossen und PASS.**
 
 ---
 
@@ -129,60 +92,58 @@ Korrektur wurde am 2026-09-14 ausdrücklich freigegeben und implementiert. Statu
   - `scripts/check-008rw6-ui.mjs`
   - Canonical Contour Toolpath → 004T → Preview / Preflight / NC
 
-### Beobachtung
-
-Der bisherige geschlossene Konturpfad übernahm seinen Start implizit aus der Reihenfolge der importierten DXF-/Toolpath-Geometrie. Für reale Außenkonturen kann dieser Punkt nahe einer Ecke oder an einer fertigungstechnisch ungünstigen Stelle liegen. Bei Rampeneinfahrt wird die Startwahl zusätzlich sicherheits- und qualitätsrelevant, da ab dem Start genügend zusammenhängende Konturstrecke für den Z-Abstieg benötigt wird.
-
 ### Freigegebener und implementierter Contract
 
-1. `startMode: auto | manual` ist Bestandteil der ContourOperation.
-2. Der manuelle Start wird als normalisierte Position `startFraction` entlang der geschlossenen Kontur gespeichert; keine rohe, fragile XY-Referenz.
-3. Auto bevorzugt die Mitte einer langen Geraden und verwendet nur dann ein anderes längstes Segment, wenn keine geeignete Gerade vorhanden ist.
-4. Alle Z-Ebenen einer Operation werden zyklisch am selben Start neu angeordnet.
-5. Start Placement geschieht vor Entry/Lead/Rampe und Tabs, sodass alle nachfolgenden Stufen denselben Start verwenden.
-6. `entryMode: plunge | lead | ramp` trennt Startpunkt und Einfahrstrategie fachlich. Alte Projekte ohne `entryMode` bleiben kompatibel: `leadMode=line` wird als `lead`, sonst als `plunge` interpretiert.
-7. Geschlossene Rampeneinfahrt verwendet `rampAngleDeg`; die benötigte Rampenlänge ergibt sich aus der aktuellen Zustellung und dem Winkel.
-8. Die Rampe folgt der kanonischen Kontur, erreicht die neue Z-Ebene und bereinigt den Rampenabschnitt auf Soll-Z zurück bis zum gemeinsamen Konturstart, bevor der vollständige Konturschnitt beginnt.
-9. Reicht die Konturlänge nicht aus oder ist der Rampencontract inkonsistent, wird die Operation fail-closed abgewiesen. Kein stiller Plunge-Fallback.
-10. Aufgebrochene/offene Konturen behalten ihre vorhandenen spezialisierten Entry-Regeln und werden nicht stillschweigend in RW-006 einbezogen.
+1. `startMode: auto | manual` und normalisierte `startFraction` bilden den geschlossenen Konturstart deterministisch ab.
+2. Auto bevorzugt die Mitte einer langen Geraden; alle Z-Ebenen verwenden denselben zyklisch angeordneten Start.
+3. Start Placement geschieht vor Entry und Tabs.
+4. `entryMode: plunge | lead | ramp` trennt Startpunkt und Einfahrstrategie.
+5. Rampeneinfahrt folgt der kanonischen Kontur und schlägt bei unzureichender Konturlänge fail-closed fehl.
+6. Offene Konturen behalten ihre spezialisierten Entry-Regeln.
 
-### UI
+### UI / Acceptance
 
-Für den DXF-Real-World-Pfad ist die Funktion direkt in der Bearbeiten-Vorschau verdrahtet:
+Der DXF-Real-World-Pfad bietet Auto/Manual, Preview-Picking, sichtbaren Startmarker, Senkrecht/Tangential/Rampe und ein verschiebbares Konturstart-Panel. Panel-Dragging bleibt reine Viewport-UX ohne CAM-/Motion-State.
 
-- `Automatisch`
-- `In Vorschau wählen`
-- sichtbarer Startmarker
-- `Senkrecht | Tangential | Rampe`
-- Rampenwinkel bei aktiver Rampe
-- verschiebbares Konturstart-Panel innerhalb des Preview-Overlays
-
-Der Klick wird auf die dargestellte Werkzeugbahn projiziert und als `startFraction` in die Operation zurückgeschrieben. Die vorhandene DXF-Geometrieauswahl bleibt erhalten; die Optimierung bleibt vollständig vor dem Postprozessor. Das Panel-Dragging ist reine Viewport-UX und verändert keinen CAM- oder Motion-State.
-
-### Acceptance
-
-`check:008rw6` ist am 2026-09-14 lokal PASS und prüft ausführbar:
-
-- Auto-Start auf der Mitte einer bevorzugten langen Geraden,
-- deterministischen manuellen Start über mehrere Tiefenebenen,
-- kanonische Rampeneinfahrt mit Rückkehr zum Konturstart auf Ziel-Z,
-- Akzeptanz der Entry-Kette durch 004T,
-- fail-closed bei unzureichender Rampenlänge.
-
-`check:008rw6-ui` prüft zusätzlich die Verdrahtung von Preview-Picking, Marker, Auto/Manual und Entry-Controls.
-
-Die lokale UI-QA mit dem Rod-Plate-Real-World-Job ist PASS. Der daraus erzeugte Gesamtjob wurde erfolgreich exportiert. Der zusätzliche UI-Polish für das verschiebbare Konturstart-Panel wurde anschließend im Native-UI geprüft und ebenfalls als PASS bestätigt.
+`check:008rw6` und `check:008rw6-ui` sind PASS. Die lokale Rod-Plate-UI-QA, der vollständige Gesamtjob und das verschiebbare Panel wurden im Native UI abgenommen. **RW-006 ist abgeschlossen und PASS.**
 
 ### Abgrenzung
 
-Der Core-Contract ist formatunabhängig. Die direkte manuelle Auswahl im nativen STEP-3D-Viewport bleibt ein separater UI-Anschluss; sie ändert weder Start- noch Entry-Contract und blockiert den aktuellen DXF-Real-World-Test nicht.
+Die direkte manuelle Startauswahl im nativen STEP-3D-Viewport bleibt ein separater späterer UI-Anschluss und blockiert 008 nicht.
 
-### Freigabe / aktueller Stand
+---
 
-RW-006A/B sowie der UI-Polish wurden am 2026-09-14 freigegeben, implementiert und im Real-World-Pfad abgenommen. **RW-006 ist damit abgeschlossen und PASS.**
+## 008 — Production Readiness Abschlussstand
 
-### Post-PASS Branch Audit
+- **Repository-/CI-Status:** PASS
+- **Rod-Plate Real-World Job:** PASS
+- **RW-003:** PASS / Real-World accepted
+- **RW-004:** PASS / Real-World accepted
+- **RW-006:** PASS / Real-World accepted
+- **004Y / 004Z / 008B4 Regression-Harness:** an aktuellen Contract angepasst; CI PASS
 
-Der Branch bleibt fachlich konsistent mit der Motion-Truth-Invariante. Der aktuelle GitHub-CI-Lauf ist dennoch rot, weil der historische Gate `check:004y` einen exakten Quelltext-String erwartet (`for(const chain of chains){const entry=buildEntry`), während die aktuelle Implementierung dieselbe Schleife mit Zeilenumbruch formatiert. Die tatsächliche `regionPocketToolpath.ts`-Semantik ist vorhanden: Entry wird weiterhin je sicher verbundener Level-Chain erzeugt. Das ist ein **Gate-/Regression-Harness-Finding**, kein RW-006- oder CAM-Contract-Fehler.
+Die während des Post-PASS-Audits gefundenen historischen Gate-Abweichungen in 004Y, 004Z und 008B4 wurden ausschließlich auf Regression-/Acceptance-Seite korrigiert. Sie erforderten keine nachträgliche Aufweichung des CAM-Kernels oder der kanonischen Motion Truth.
 
-Empfehlung für den nächsten Schritt: `004Y` read-only als veralteten statischen Source-Shape-Gate klassifizieren und durch einen ausführbaren Contract-Test ersetzen bzw. den bestehenden Gate semantisch robust machen. Keine CAM-Änderung ohne separate Freigabe.
+### 008C — Estlcam Qualification
+
+**008C1 — Qualification Baseline: PASS.**
+
+Das qualifizierte Referenzprofil bleibt Estlcam 11 Build 11245, 3-axis milling, millimetres, manual tool change. Der Postprozessor ist syntax-only und darf keine Geometrie oder Motion Truth rekonstruieren.
+
+**008C2 — Reference NC Artifact: PASS / frozen.**
+
+Eine deterministische Referenz-NC wurde für die spätere externe Abnahme eingefroren. Der Freeze/Manifest-Contract schützt Byte-Identität, SHA-256, Werkzeugwechsel-Erwartung und terminales `M5`.
+
+**008C3 — Manual Estlcam 11 Acceptance: DEFERRED / MANUAL.**
+
+Der Test der eingefrorenen Referenz-NC unter dem realen Estlcam 11 Build 11245 erfolgt bewusst später auf Windows. Dieser externe Abnahmeschritt ist kein GitHub-CI-Gate und wird bis zur tatsächlichen Durchführung nicht als PASS markiert.
+
+Zu prüfen sind insbesondere Dateiakzeptanz, Werkzeugwechsel, Bahn-/Operationsreihenfolge sowie Start-/Endverhalten.
+
+**008C4 — Real-machine Qualification: DEFERRED / MANUAL.**
+
+Ein kontrollierter Maschinen-Dry-Run und eine gegebenenfalls anschließende reale Materialbearbeitung bleiben ein separater lokaler Produktionsqualifikationsschritt. Auch dieser Schritt wird nicht synthetisch durch CI ersetzt.
+
+### Merge-Interpretation
+
+Die bewusst verschobenen externen 008C3/008C4-Abnahmen stellen keine offene Software-Implementierung dar. Der 008-Softwarestand kann nach finalem read-only Branch-/Merge-Audit abgeschlossen und gemergt werden. Die spätere Estlcam-/Maschinenqualifikation wird gegen das eingefrorene Referenzartefakt durchgeführt und separat dokumentiert.
