@@ -104,12 +104,7 @@ Im Rod-Plate-Real-World-Export wurde eine geschlossene Kontur mit aktivem Lead-i
 
 ### Regression / Acceptance
 
-`scripts/check-008rw4-contour-entry.mjs` kompiliert eine ausführbare Acceptance-Fixture mit explizitem Lead-in und prüft:
-
-- erster materialisierter Safe-Z-Anker = Lead-Start,
-- erster Safe-Z-Anker ist nicht der Konturstart,
-- kein Rapid besucht den Konturstart auf Safe-Z vor dem Lead-in,
-- 004T akzeptiert die zusammenhängende Entry-Kette.
+`scripts/check-008rw4-contour-entry.mjs` kompiliert eine ausführbare Acceptance-Fixture mit explizitem Lead-in und prüft den Ablauf vor dem Entry. Der spätere legitime Retract einer geschlossenen Kontur auf denselben XY-Punkt wird ausdrücklich nicht als Entry-Fehler gewertet.
 
 ### Freigabe / aktueller Stand
 
@@ -117,32 +112,47 @@ Korrektur wurde am 2026-09-14 ausdrücklich freigegeben und implementiert. Statu
 
 ---
 
-## 008-RW-006 — User-selectable contour start point
+## 008-RW-006 — Contour Start & Entry Placement
 
 - **ID:** 008-RW-006
-- **Kategorie:** CAM UX / Contour Planning
-- **Severity / Priorität:** Enhancement / nach RW-004 verifizieren
-- **Confidence:** Medium
-- **Status:** Proposed
+- **Kategorie:** CAM Planning / Contour Entry / UX
+- **Severity / Priorität:** P1 vor RC
+- **Confidence:** High
+- **Status:** Core implemented / Pending local QA and UI wiring
+- **Betroffene Dateien / Codebereiche:**
+  - `src/lib/types.ts`
+  - `src/lib/contourStartPlacement.ts`
+  - `src/lib/contourEntry.ts`
+  - `src/lib/gcode.ts`
+  - Canonical Contour Toolpath → 004T → Preview / Preflight / NC
 
 ### Beobachtung
 
-Der automatisch gewählte Konturstart ist nicht immer fertigungstechnisch oder visuell optimal. Für reale Werkstücke kann es sinnvoll sein, den Startpunkt einer geschlossenen Kontur bewusst zu platzieren, z. B. mittig auf einer langen geraden Seite statt nahe einer Ecke.
+Der bisherige geschlossene Konturpfad übernahm seinen Start implizit aus der Reihenfolge der importierten DXF-/Toolpath-Geometrie. Für reale Außenkonturen kann dieser Punkt nahe einer Ecke oder an einer fertigungstechnisch ungünstigen Stelle liegen. Bei Rampeneinfahrt wird die Startwahl zusätzlich sicherheits- und qualitätsrelevant, da ab dem Start genügend zusammenhängende Konturstrecke für den Z-Abstieg benötigt wird.
 
-### Zielbild
+### Freigegebener Contract
 
-Für geschlossene Konturen soll optional ein Benutzer-Startpunkt wählbar sein. Die Auswahl muss auf die vorhandene Konturgeometrie projiziert und anschließend in der kanonischen Toolpath-Reihenfolge berücksichtigt werden, bevor Lead-in/Lead-out erzeugt werden.
+1. `startMode: auto | manual` ist Bestandteil der ContourOperation.
+2. Der manuelle Start wird als normalisierte Position `startFraction` entlang der geschlossenen Kontur gespeichert; keine rohe, fragile XY-Referenz.
+3. Auto bevorzugt die Mitte einer langen Geraden und verwendet nur dann ein anderes längstes Segment, wenn keine geeignete Gerade vorhanden ist.
+4. Alle Z-Ebenen einer Operation werden zyklisch am selben Start neu angeordnet.
+5. Start Placement geschieht vor Entry/Lead/Rampe und Tabs, sodass alle nachfolgenden Stufen denselben Start verwenden.
+6. `entryMode: plunge | lead | ramp` trennt Startpunkt und Einfahrstrategie fachlich. Alte Projekte ohne `entryMode` bleiben kompatibel: `leadMode=line` wird als `lead`, sonst als `plunge` interpretiert.
+7. Geschlossene Rampeneinfahrt verwendet `rampAngleDeg`; die benötigte Rampenlänge ergibt sich aus der aktuellen Zustellung und dem Winkel.
+8. Die Rampe folgt der kanonischen Kontur, erreicht die neue Z-Ebene und bereinigt den Rampenabschnitt auf Soll-Z zurück bis zum gemeinsamen Konturstart, bevor der vollständige Konturschnitt beginnt.
+9. Reicht die Konturlänge nicht aus oder ist der Rampencontract inkonsistent, wird die Operation fail-closed abgewiesen. Kein stiller Plunge-Fallback.
+10. Aufgebrochene/offene Konturen behalten ihre vorhandenen spezialisierten Entry-Regeln und werden nicht stillschweigend in RW-006 einbezogen.
 
-### Anforderungen für eine spätere Umsetzung
+### Acceptance
 
-1. `Auto` bleibt Standard und vollständig rückwärtskompatibel.
-2. Benutzer kann einen Punkt bzw. eine Position auf der ausgewählten geschlossenen Kontur bestimmen.
-3. Der Start darf nicht einfach die Geometrie verschieben; die Kontur muss zyklisch am gewählten Punkt aufgetrennt/rotiert werden.
-4. Bei LINE-Segmenten muss ein Start mitten auf dem Segment möglich sein; bei ARC-Segmenten entsprechend auf dem Bogen.
-5. Lead-in/-out wird erst **nach** Auflösung des Startpunkts erzeugt.
-6. Tabs, Finish-Passes, Preview, Safe Motion und NC müssen denselben Startpunkt verwenden.
-7. Ungültige oder nicht mehr auflösbare gespeicherte Startpunkte müssen fail-closed auf `Auto` zurückfallen oder explizit gewarnt werden; keine stille Geometrieänderung.
+`check:008rw6` prüft ausführbar:
 
-### Abgrenzung
+- Auto-Start auf der Mitte einer bevorzugten langen Geraden,
+- deterministischen manuellen Start über mehrere Tiefenebenen,
+- kanonische Rampeneinfahrt mit Rückkehr zum Konturstart auf Ziel-Z,
+- Akzeptanz der Entry-Kette durch 004T,
+- fail-closed bei unzureichender Rampenlänge.
 
-Dieses Feature ist bewusst nicht Bestandteil des RW-004-Bugfixes. RW-004 korrigiert ausschließlich den falschen Safe-Z-Anfahranker eines bereits vorhandenen kanonischen Lead-ins.
+### Noch offen
+
+Der Core-Contract ist implementiert. Die direkte Auswahl des manuellen Startpunkts in der Bearbeiten-Preview sowie die endgültigen Inspector-Bedienelemente werden erst nach grünem lokalen Core-Gate verdrahtet, damit ein eventueller Geometrie-/Type-Fehler nicht mit UI-Arbeit vermischt wird.
