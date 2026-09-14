@@ -2,6 +2,7 @@ import fs from 'node:fs';
 
 const read=(path)=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 const requireText=(text,needle,label)=>{if(!text.includes(needle))throw new Error(`${label}: missing ${needle}`);};
+const requirePattern=(text,pattern,label)=>{if(!pattern.test(text))throw new Error(`${label}: missing semantic source pattern ${pattern}`);};
 const rejectText=(text,needle,label)=>{if(text.includes(needle))throw new Error(`${label}: forbidden ${needle}`);};
 
 const canonical=read('src/lib/canonicalToolpath.ts');
@@ -38,7 +39,10 @@ requireText(region,'function chainPaths','shared region kernel chains safely con
 requireText(region,'connectorSafe','stay-down links remain inside the pocket region');
 requireText(region,'runPoints=[{...entryEnd}', 'ramp entry ends at the canonical run start');
 requireText(region,'reversePath(rampPoints)','ramped material is recut at final Z before normal pocket clearing');
-requireText(region,"for(const chain of chains){const entry=buildEntry",'entry is owned by each connected level chain, not every raster row');
+// This is intentionally whitespace-stable: formatting the loop and buildEntry call
+// across separate lines must not invalidate the 004Y contract. The gate guards the
+// ownership relationship (one entry per connected level chain), not one exact source string.
+requirePattern(region,/for\s*\(\s*const\s+chain\s+of\s+chains\s*\)\s*\{[\s\S]*?const\s+entry\s*=\s*buildEntry\s*\(\s*operation\s*,\s*chain\s*,\s*zStart\s*,\s*z\s*,\s*outer\s*,\s*islands\s*\)/,'entry is owned by each connected level chain, not every raster row');
 requireText(region,"strategy==='raster'?'raster'",'shared raster emits canonical raster strategy');
 requireText(region,"kind:'arc3'",'shared region strategies materialize helix entry as canonical XYZ arc');
 requireText(dxfRegion,'RegionPocketStrategy','DXF region accepts every shared pocket strategy');
