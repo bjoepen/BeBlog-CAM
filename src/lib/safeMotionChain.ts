@@ -41,6 +41,10 @@ function appendConnected(target:CanonicalMachineMotion[],motion:CanonicalMachine
 /**
  * 004T materialises the canonical run contract without inventing machining intent.
  *
+ * When a run has explicit entrySegments their first XY coordinate is the canonical
+ * approach anchor. Safe-Z positioning therefore targets that entry anchor directly
+ * instead of visiting run.points[0] first and then travelling backwards to the lead.
+ *
  * retractAfter !== false keeps the historic fail-closed behaviour: retract to the
  * configured global Safe-Z before another run is entered.
  *
@@ -75,8 +79,10 @@ export function materializeSafeMotionChain(args:{toolpath:CanonicalToolpath;safe
 
   for(const [runIndex,run] of toolpath.runs.entries()){
     if(run.points.length<2){errors.push(`Werkzeugbahn ${runIndex+1}: weniger als zwei XY-Punkte.`);continue;}
-    const runStart=p3(run.points[0],run.z),runEnd=p3(run.points.at(-1)!,run.z),safeStart={x:runStart.x,y:runStart.y,z:safeZMm},safeEnd={x:runEnd.x,y:runEnd.y,z:safeZMm};
+    const runStart=p3(run.points[0],run.z),runEnd=p3(run.points.at(-1)!,run.z);
     const entry=run.entrySegments??[];
+    const approach=entry.length?entry[0].start:runStart;
+    const safeStart={x:approach.x,y:approach.y,z:safeZMm},safeEnd={x:runEnd.x,y:runEnd.y,z:safeZMm};
 
     if(linkedPoint){
       if(entry.length){
