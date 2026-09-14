@@ -1,0 +1,12 @@
+{
+  "qualification": "008C2",
+  "controller": "Estlcam 11 build 11245",
+  "workflow": "3-axis milling / millimetres / manual tool change",
+  "referenceFile": "beblog-cam-008c2-estlcam-reference.nc",
+  "expectedToolChanges": 3,
+  "actualToolChanges": 3,
+  "lineCount": 77,
+  "byteLength": 2397,
+  "sha256": "e9468621a03a03334533e5891617245b17488719823183b8f52e547f97515dc5",
+  "terminalCommand": "M5"
+}

@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation, Curve2, OpenContourSide } from './types';
+  import type { ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, CamOperation, ContourOperation, Curve2, OpenContourSide } from './types';
   import { buildClosedChains, buildSemanticContours, offsetPolygon, sampleCurve, type P2 } from './contourMath';
   import { buildOpenChains, offsetOpenChain } from './openContour';
   import { buildBrokenContourPath } from './brokenContour';
   import { buildBrokenSemanticContour, sampleSemanticRun, sampleSemanticSegment } from './brokenSemanticContour';
   import { buildPocketCanonicalToolpath, samplePocketSpatialSegment } from './pocketCanonicalToolpath';
   import { normalizeDxfTargetIds } from './dxfMultiTargetSelection';
+  import { nearestContourFraction, pointAtContourFraction } from './contourStartPlacement';
 
   export let summary: ImportSummary;
   export let stock: StockDefinition;
@@ -23,6 +24,10 @@
   const bounds=(pts:P2[])=>{const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)}};
   const path=(pts:P2[],closed=false)=>pts.map((p,i)=>`${i?'L':'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')+(closed?' Z':'');
   const eligibleCarve=(curve:Curve2)=>curve.kind==='line'||curve.kind==='arc'||(curve.kind==='polyline'&&!curve.closed);
+  let pickingContourStart=false;
+  let contourPanelX=12,contourPanelY=12,contourPanelDragging=false;
+  let contourOverlayElement:HTMLDivElement|null=null,contourPanelElement:HTMLDivElement|null=null;
+  let contourPanelPointerId:number|null=null,contourPanelGrabX=0,contourPanelGrabY=0;
 
   function fit(points:P2[]){
     const b=bounds(points),sx=Math.max(b.maxX-b.minX,1e-9),sy=Math.max(b.maxY-b.minY,1e-9),scale=Math.min((width-2*pad)/sx,(height-2*pad)/sy),ox=(width-sx*scale)/2,oy=(height-sy*scale)/2;
@@ -46,6 +51,82 @@
   function toggleClosedSegment(id:number){
     if(operation.kind!=='contour'||operation.topology!=='closed'||operation.contourId===null)return;
     const set=new Set(operation.excludedSegmentIds??[]);set.has(id)?set.delete(id):set.add(id);operation.excludedSegmentIds=[...set].sort((a,b)=>a-b);onSelectContour(operation.contourId,'closed');
+  }
+
+  function clampContourPanelPosition(){
+    if(!contourOverlayElement||!contourPanelElement)return;
+    const overlayRect=contourOverlayElement.getBoundingClientRect(),panelRect=contourPanelElement.getBoundingClientRect();
+    const maxX=Math.max(0,overlayRect.width-panelRect.width),maxY=Math.max(0,overlayRect.height-panelRect.height);
+    contourPanelX=Math.min(Math.max(0,contourPanelX),maxX);
+    contourPanelY=Math.min(Math.max(0,contourPanelY),maxY);
+  }
+  function beginContourPanelDrag(event:PointerEvent){
+    if(event.button!==0||!contourPanelElement||!contourOverlayElement)return;
+    const panelRect=contourPanelElement.getBoundingClientRect();
+    contourPanelDragging=true;contourPanelPointerId=event.pointerId;
+    contourPanelGrabX=event.clientX-panelRect.left;contourPanelGrabY=event.clientY-panelRect.top;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+  function moveContourPanel(event:PointerEvent){
+    if(!contourPanelDragging||contourPanelPointerId!==event.pointerId||!contourOverlayElement||!contourPanelElement)return;
+    const overlayRect=contourOverlayElement.getBoundingClientRect(),panelRect=contourPanelElement.getBoundingClientRect();
+    const maxX=Math.max(0,overlayRect.width-panelRect.width),maxY=Math.max(0,overlayRect.height-panelRect.height);
+    contourPanelX=Math.min(Math.max(0,event.clientX-overlayRect.left-contourPanelGrabX),maxX);
+    contourPanelY=Math.min(Math.max(0,event.clientY-overlayRect.top-contourPanelGrabY),maxY);
+  }
+  function endContourPanelDrag(event:PointerEvent){
+    if(contourPanelPointerId!==event.pointerId)return;
+    const target=event.currentTarget as HTMLElement;
+    if(target.hasPointerCapture(event.pointerId))target.releasePointerCapture(event.pointerId);
+    contourPanelDragging=false;contourPanelPointerId=null;
+    clampContourPanelPosition();
+  }
+
+  function commitClosedContourPatch(patch:Partial<ContourOperation>){
+    if(operation.kind!=='contour'||operation.topology!=='closed'||operation.contourId===null)return;
+    const activeId=operation.contourId;
+    const selectedIds=normalizeDxfTargetIds(operation);
+    Object.assign(operation,patch);
+    if(summary.kind==='dxf'){
+      // App's existing DXF callback is a selection toggle. Temporarily remove the
+      // active target so the callback re-adds it while cloning the patched operation
+      // back into OperationsProject. Geometry selection itself therefore stays stable.
+      operation.contourId=null;
+      operation.contourIds=selectedIds.filter(id=>id!==activeId);
+      onSelectContour(activeId,'closed');
+    }else onSelectContour(activeId,'closed');
+  }
+
+  function autoPreviewStartFraction(points:P2[]){
+    if(points.length<2)return 0;
+    const lengths=points.slice(1).map((point,index)=>Math.hypot(point.x-points[index].x,point.y-points[index].y));
+    const total=lengths.reduce((sum,length)=>sum+length,0);if(!(total>1e-9))return 0;
+    let bestIndex=0,bestLength=-Infinity;
+    for(let i=0;i<lengths.length;i++)if(lengths[i]>bestLength){bestLength=lengths[i];bestIndex=i;}
+    const before=lengths.slice(0,bestIndex).reduce((sum,length)=>sum+length,0);
+    return(before+bestLength*.5)/total;
+  }
+
+  function setContourStartAuto(){pickingContourStart=false;commitClosedContourPatch({startMode:'auto'});}
+  function beginContourStartPick(){if(operation.kind!=='contour'||operation.topology!=='closed'||operation.contourId===null)return;pickingContourStart=true;}
+  function pickContourStart(event:MouseEvent,points:P2[]){
+    if(!pickingContourStart||operation.kind!=='contour'||operation.topology!=='closed')return;
+    const target=event.currentTarget as SVGPathElement,svg=target.ownerSVGElement;if(!svg)return;
+    const rect=svg.getBoundingClientRect();if(!(rect.width>0&&rect.height>0))return;
+    const pick={x:(event.clientX-rect.left)*width/rect.width,y:(event.clientY-rect.top)*height/rect.height};
+    const fraction=nearestContourFraction(points,pick);
+    pickingContourStart=false;
+    commitClosedContourPatch({startMode:'manual',startFraction:fraction});
+  }
+  function setContourEntryMode(mode:'plunge'|'lead'|'ramp'){
+    const legacyLead=mode==='lead'?'line':'none';
+    commitClosedContourPatch({entryMode:mode,leadMode:legacyLead});
+    requestAnimationFrame(clampContourPanelPosition);
+  }
+  function updateContourRampAngle(event:Event){
+    const value=Number((event.currentTarget as HTMLInputElement).value);
+    if(Number.isFinite(value)&&value>0&&value<=15)commitClosedContourPatch({rampAngleDeg:value});
   }
 
   function buildScene(..._deps: unknown[]){
@@ -121,7 +202,11 @@
     }
     if(selectedOpen){toolRuns=[{points:offsetOpenChain(selectedOpen.points,radius,operation.openSide,.003).points.map(map),closed:false}];}
     const open=os.map(c=>({...c,screen:c.points.map(map),left:offsetOpenChain(c.points,radius,'left',.003).points.map(map),right:offsetOpenChain(c.points,radius,'right',.003).points.map(map)}));
-    const selectedIds=new Set(operation.topology==='closed'?normalizeDxfTargetIds(operation):[]);return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map),selected:selectedIds.has(c.id)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0,nativeBreakSelection:!!selectedSemantic?.segments.length};
+    const selectedIds=new Set(operation.topology==='closed'?normalizeDxfTargetIds(operation):[]);
+    const startPath=operation.topology==='closed'&&!excluded.size?(toolRuns[0]?.points??[]):[];
+    const previewStartFraction=operation.kind==='contour'&&operation.topology==='closed'?((operation.startMode??'auto')==='manual'?Number(operation.startFraction??0):autoPreviewStartFraction(startPath)):0;
+    const startMarker=startPath.length?pointAtContourFraction(startPath,previewStartFraction):null;
+    return{kind:'contour' as const,closed:cs.map(c=>({...c,screen:c.points.map(map),selected:selectedIds.has(c.id)})),open,selected:selectedClosed?{screen:selectedClosed.points.map(map),closed:true}:selectedOpen?{screen:selectedOpen.points.map(map),closed:false}:null,selectedSegments,toolRuns,broken:excluded.size>0,nativeBreakSelection:!!selectedSemantic?.segments.length,startPath,startMarker,previewStartFraction};
   }
 
   $: scene=buildScene(
@@ -131,6 +216,10 @@
     operation.kind==='contour'?operation.topology:operation.kind,
     operation.kind==='contour'?operation.openSide:operation.kind,
     operation.kind==='contour'?(operation.excludedSegmentIds??[]).join(','):operation.kind,
+    operation.kind==='contour'?(operation.startMode??'auto'):operation.kind,
+    operation.kind==='contour'?Number(operation.startFraction??0):operation.kind,
+    operation.kind==='contour'?(operation.entryMode??((operation.leadMode??'none')==='line'?'lead':'plunge')):operation.kind,
+    operation.kind==='contour'?Number(operation.rampAngleDeg??3):operation.kind,
     operation.kind==='carve'?operation.side:operation.kind,
     (operation.kind==='carve'||operation.kind==='drill')?operation.selectionMode:operation.kind,
     (operation.kind==='carve'||operation.kind==='drill')?operation.layerName:operation.kind,
@@ -148,8 +237,10 @@
   );
 </script>
 
+<svelte:window onresize={clampContourPanelPosition}/>
+
 {#if scene}
-<div class="contour-overlay" class:drill-overlay={scene.kind==='drill'} aria-label="Geometrieauswahl und Werkzeugweg" data-stock-width={stockMode==='none'?undefined:stock.width}>
+<div bind:this={contourOverlayElement} class="contour-overlay" class:drill-overlay={scene.kind==='drill'} aria-label="Geometrieauswahl und Werkzeugweg" data-stock-width={stockMode==='none'?undefined:stock.width}>
   <svg viewBox="0 0 1000 650">
     {#if scene.kind==='carve'}
       {#each scene.carve as curve}
@@ -193,9 +284,25 @@
       {#each contourDepths() as z}
         {#each scene.toolRuns as tool}<path d={path(tool.points,tool.closed)} class="toolpath contour-toolpath toolpath-preview" data-toolpath-z={z}/>{/each}
       {/each}
+      {#if operation.kind==='contour'&&operation.topology==='closed'&&!scene.broken&&scene.startPath.length}
+        {#if pickingContourStart}<path d={path(scene.startPath,true)} class="contour-start-pick" onclick={(event)=>pickContourStart(event,scene.startPath)}><title>Neuen Konturstart auf der Werkzeugbahn wählen</title></path>{/if}
+        {#if scene.startMarker}<g class="contour-start-marker" transform={`translate(${scene.startMarker.x} ${scene.startMarker.y})`}><circle r="7"/><path d="M -3.5 0 L 3.5 0 M 0 -3.5 L 0 3.5"/></g>{/if}
+      {/if}
     {/if}
   </svg>
-  {#if scene.kind==='contour'}<div class="open-help">{scene.broken?(scene.nativeBreakSelection?'Kontur aufgebrochen: native Linie/Bogen bleibt als CAD-Segment erhalten und wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.'):'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='pocket'&&scene.spatialEntry}<div class="open-help">Räumlicher {scene.entryKind==='helix'?'Helix-':'Rampen-'}Einstieg ist Bestandteil der kanonischen Werkzeugbahn und in 2.5D kontrollierbar.</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
+  {#if scene.kind==='contour'&&operation.kind==='contour'&&operation.topology==='closed'&&!scene.broken&&operation.contourId!==null}
+    <div bind:this={contourPanelElement} class="contour-start-controls" class:dragging={contourPanelDragging} style={`left:${contourPanelX}px;top:${contourPanelY}px`}>
+      <div class="contour-start-header" class:dragging={contourPanelDragging} onpointerdown={beginContourPanelDrag} onpointermove={moveContourPanel} onpointerup={endContourPanelDrag} onpointercancel={endContourPanelDrag}>
+        <div class="control-title">Konturstart</div>
+      </div>
+      <div class="control-row"><button class:active={(operation.startMode??'auto')==='auto'} onclick={setContourStartAuto}>Automatisch</button><button class:active={(operation.startMode??'auto')==='manual'} class:picking={pickingContourStart} onclick={beginContourStartPick}>{pickingContourStart?'Auf Bahn klicken …':'In Vorschau wählen'}</button></div>
+      <div class="control-note">{(operation.startMode??'auto')==='auto'?'Bevorzugt die Mitte einer langen Geraden.':`Manuell · ${(scene.previewStartFraction*100).toFixed(1)} % des Umlaufs`}</div>
+      <div class="control-title entry-title">Einfahrt</div>
+      <div class="control-row three"><button class:active={(operation.entryMode??((operation.leadMode??'none')==='line'?'lead':'plunge'))==='plunge'} onclick={()=>setContourEntryMode('plunge')}>Senkrecht</button><button class:active={(operation.entryMode??((operation.leadMode??'none')==='line'?'lead':'plunge'))==='lead'} onclick={()=>setContourEntryMode('lead')}>Tangential</button><button class:active={(operation.entryMode??((operation.leadMode??'none')==='line'?'lead':'plunge'))==='ramp'} onclick={()=>setContourEntryMode('ramp')}>Rampe</button></div>
+      {#if (operation.entryMode??((operation.leadMode??'none')==='line'?'lead':'plunge'))==='ramp'}<label class="ramp-angle">Rampenwinkel <input type="number" min="0.1" max="15" step="0.5" value={operation.rampAngleDeg??3} onchange={updateContourRampAngle}/> °</label>{/if}
+    </div>
+  {/if}
+  {#if scene.kind==='contour'}<div class="open-help">{pickingContourStart?'Konturstart wählen: direkt auf die Werkzeugbahn klicken.':scene.broken?(scene.nativeBreakSelection?'Kontur aufgebrochen: native Linie/Bogen bleibt als CAD-Segment erhalten und wird nicht gefräst. Erneut anklicken zum Einschalten.':'Kontur aufgebrochen: ausgegraute Strecke wird nicht gefräst. Erneut anklicken zum Einschalten.'):'Kontur wählen, dann direkt eine Strecke anklicken, um sie aus der Bearbeitung herauszunehmen.'}</div>{:else if scene.kind==='pocket'&&scene.spatialEntry}<div class="open-help">Räumlicher {scene.entryKind==='helix'?'Helix-':'Rampen-'}Einstieg ist Bestandteil der kanonischen Werkzeugbahn und in 2.5D kontrollierbar.</div>{:else if scene.kind==='carve'}<div class="open-help">Carve-Werkzeugweg: {scene.side==='left'?'links':scene.side==='right'?'rechts':'auf Linie'} der ausgewählten DXF-Geometrie.</div>{/if}
 </div>
 {/if}
 
@@ -213,6 +320,9 @@
   .toolpath{fill:none;stroke:#b1453b;stroke-width:2.5;vector-effect:non-scaling-stroke;pointer-events:none}
   .contour-toolpath,.pocket-toolpath,.pocket-entry-toolpath{stroke:#327b8d;stroke-width:2.1}
   .pocket-entry-toolpath{stroke-dasharray:3 2;stroke-width:1.9}
+  .contour-start-pick{fill:none;stroke:transparent;stroke-width:18;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:crosshair}
+  .contour-start-marker{pointer-events:none}.contour-start-marker circle{fill:#fafaf8;stroke:#b1453b;stroke-width:2;vector-effect:non-scaling-stroke}.contour-start-marker path{fill:none;stroke:#b1453b;stroke-width:1.5;vector-effect:non-scaling-stroke}
+  .contour-start-controls{position:absolute;width:220px;padding:10px;border:1px solid rgba(210,212,207,.92);border-radius:8px;background:rgba(250,250,248,.96);box-shadow:0 5px 18px rgba(45,51,47,.08);color:#454d48;font-size:.7rem}.contour-start-controls.dragging{box-shadow:0 7px 20px rgba(45,51,47,.11)}.contour-start-header{margin:-4px -4px 6px;padding:4px;cursor:grab;user-select:none;touch-action:none}.contour-start-header.dragging{cursor:grabbing}.contour-start-header .control-title{margin-bottom:0}.control-title{font-weight:650;margin-bottom:6px}.entry-title{margin-top:10px}.control-row{display:grid;grid-template-columns:1fr 1fr;gap:5px}.control-row.three{grid-template-columns:repeat(3,1fr)}.control-row button{border:1px solid #d5d7d2;border-radius:5px;background:#fff;padding:5px 6px;color:#4e5651;font:inherit;cursor:pointer}.control-row button.active{border-color:#8e9a93;background:#eef1ed;color:#27322c}.control-row button.picking{border-color:#b1453b;color:#8b3932}.control-note{margin-top:5px;color:#777d78}.ramp-angle{display:flex;align-items:center;gap:5px;margin-top:7px}.ramp-angle input{width:58px;border:1px solid #d5d7d2;border-radius:5px;padding:4px 5px;background:#fff;color:#39413d}
   .open-help{position:absolute;left:50%;top:calc(100% + 42px);transform:translateX(-50%);width:max-content;max-width:86%;padding:6px 9px;border-radius:6px;background:rgba(250,250,248,.94);color:#666b66;font-size:.72rem;pointer-events:none;white-space:normal;text-align:center}
   .carve-candidate{fill:none;stroke:rgba(194,117,40,.18);stroke-width:1.4;vector-effect:non-scaling-stroke;pointer-events:none}.carve-candidate.selected-carve{stroke:rgba(38,52,46,.55);stroke-width:1.8;stroke-dasharray:4 3}.carve-pick{fill:none;stroke:transparent;stroke-width:14;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}
   .drill-candidate{fill:none;stroke:rgba(194,117,40,.25);stroke-width:1.6;vector-effect:non-scaling-stroke;pointer-events:none}.drill-candidate.selected-drill{stroke:#b1453b;stroke-width:2.4}.drill-center{stroke:rgba(194,117,40,.55);stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:none}.drill-center.selected-drill{stroke:#b1453b;stroke-width:1.8}.drill-pick{fill:transparent;stroke:transparent;stroke-width:12;vector-effect:non-scaling-stroke;pointer-events:all;cursor:pointer}

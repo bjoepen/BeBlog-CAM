@@ -7,7 +7,8 @@ import { canonicalContourToolpathFromGcode, postContourCanonicalToolpath } from 
 import { contourOperationWithResolvedDepth } from './contourDepth';
 import { applyContourFinishing } from './contourFinishing';
 import { applyStepContourTabs } from './stepContourTabs';
-import { applyContourLeads } from './contourLeads';
+import { applyContourStartPlacement } from './contourStartPlacement';
+import { applyContourEntry } from './contourEntry';
 export type { GcodeResult, InterpolationMode };
 type ContourArgs={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:ContourOperation};
 export type DxfContourCanonicalState={ok:boolean;errors:string[];warnings:string[];toolpath:CanonicalToolpath|null;legacy:GcodeResult|null};
@@ -26,12 +27,18 @@ export function buildDxfContourCanonicalState(args:ContourArgs):DxfContourCanoni
   const finished=applyContourFinishing(canonical,args.operation,resolved.resolution.depthMm);
   warnings.push(...finished.warnings);
   if(finished.errors.length)return{ok:false,errors:[...legacy.errors,...finished.errors],warnings,toolpath:null,legacy};
-  // 004Z-F1: leads are resolved on the logical contour passage first. Tabs then
-  // alter only the cutting Z inside that same passage, exactly like STEP.
-  const led=applyContourLeads(finished.toolpath,args.operation);
-  warnings.push(...led.warnings);
-  if(led.errors.length)return{ok:false,errors:[...legacy.errors,...led.errors],warnings,toolpath:null,legacy};
-  const tabbed=applyStepContourTabs(led.toolpath,args.operation,0);
+  // RW-006: the logical closed contour owns one stable start placement before
+  // entry/lead/ramp and tabs are resolved. All downstream consumers therefore
+  // see the same start, entry and cut motion truth.
+  const placed=applyContourStartPlacement(finished.toolpath,args.operation);
+  warnings.push(...placed.warnings);
+  if(placed.errors.length)return{ok:false,errors:[...legacy.errors,...placed.errors],warnings,toolpath:null,legacy};
+  const entered=applyContourEntry(placed.toolpath,args.operation);
+  warnings.push(...entered.warnings);
+  if(entered.errors.length)return{ok:false,errors:[...legacy.errors,...entered.errors],warnings,toolpath:null,legacy};
+  // 004Z-F1 / RW-006: tabs alter only cutting Z after start placement and entry
+  // have been made canonical; they never choose a different contour start.
+  const tabbed=applyStepContourTabs(entered.toolpath,args.operation,0);
   warnings.push(...tabbed.warnings);
   if(tabbed.errors.length)return{ok:false,errors:[...legacy.errors,...tabbed.errors],warnings,toolpath:null,legacy};
   return{ok:true,errors:[],warnings,toolpath:tabbed.toolpath,legacy};

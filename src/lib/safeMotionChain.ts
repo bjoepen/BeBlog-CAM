@@ -15,6 +15,7 @@ export type SafeMotionChainResult={
 const finitePoint=(p:ToolpathPoint3)=>Number.isFinite(p.x)&&Number.isFinite(p.y)&&Number.isFinite(p.z);
 const p3=(p:ToolpathPoint2,z:number):ToolpathPoint3=>({x:p.x,y:p.y,z});
 const samePoint=(a:ToolpathPoint3,b:ToolpathPoint3)=>Math.abs(a.x-b.x)<1e-9&&Math.abs(a.y-b.y)<1e-9&&Math.abs(a.z-b.z)<1e-9;
+const sameXY=(a:ToolpathPoint3,b:ToolpathPoint3)=>Math.abs(a.x-b.x)<1e-9&&Math.abs(a.y-b.y)<1e-9;
 const rapid=(start:ToolpathPoint3,end:ToolpathPoint3):CanonicalMachineMotion=>({kind:'rapid3',start,end});
 const line=(start:ToolpathPoint3,end:ToolpathPoint3,feedMmMin?:number):CanonicalSpatialSegment=>({kind:'line3',start,end,...(feedMmMin?{feedMmMin}:{})});
 
@@ -37,6 +38,22 @@ function appendConnected(target:CanonicalMachineMotion[],motion:CanonicalMachine
   target.push(motion);
 }
 
+/**
+ * 004T materialises the canonical run contract without inventing machining intent.
+ *
+ * When a run has explicit entrySegments their first XY coordinate is the canonical
+ * approach anchor. Safe-Z positioning therefore targets that entry anchor directly
+ * instead of visiting run.points[0] first and then travelling backwards to the lead.
+ *
+ * retractAfter !== false keeps the historic fail-closed behaviour: retract to the
+ * configured global Safe-Z before another run is entered.
+ *
+ * retractAfter === false is an explicit canonical certification that the direct
+ * connector from the current run end to the next run entry/start is inside already
+ * cleared space. 004T may then materialise that connector at the current cut depth
+ * and continue into the next canonical entry/plunge without visiting global Safe-Z.
+ * If that contract is incomplete or geometrically inconsistent, 004T fails closed.
+ */
 export function materializeSafeMotionChain(args:{toolpath:CanonicalToolpath;safeZMm:number}):SafeMotionChainResult{
   const {toolpath,safeZMm}=args,errors:string[]=[],warnings:string[]=[];
   if(!Number.isFinite(safeZMm))return{ok:false,errors:['004T benötigt einen endlichen Sicherheits-Z-Wert.'],warnings,toolpath:null,motionCount:0,rapidCount:0,cuttingMotionCount:0,startSafePoint:null,endSafePoint:null};
@@ -58,20 +75,37 @@ export function materializeSafeMotionChain(args:{toolpath:CanonicalToolpath;safe
 
   const motions:CanonicalMachineMotion[]=[];
   let previousSafe:ToolpathPoint3|null=null;
+  let linkedPoint:ToolpathPoint3|null=null;
+
   for(const [runIndex,run] of toolpath.runs.entries()){
     if(run.points.length<2){errors.push(`Werkzeugbahn ${runIndex+1}: weniger als zwei XY-Punkte.`);continue;}
-    const runStart=p3(run.points[0],run.z),runEnd=p3(run.points.at(-1)!,run.z),safeStart={x:runStart.x,y:runStart.y,z:safeZMm},safeEnd={x:runEnd.x,y:runEnd.y,z:safeZMm};
-
-    if(previousSafe&&!samePoint(previousSafe,safeStart))appendConnected(motions,rapid(previousSafe,safeStart),errors,`Werkzeugbahn ${runIndex+1} XY-Rapid`);
-    previousSafe=safeStart;
-
+    const runStart=p3(run.points[0],run.z),runEnd=p3(run.points.at(-1)!,run.z);
     const entry=run.entrySegments??[];
-    if(entry.length){
-      if(!samePoint(previousSafe,entry[0].start))appendConnected(motions,rapid(previousSafe,entry[0].start),errors,`Werkzeugbahn ${runIndex+1} Entry-Anfahrt`);
-      for(const [index,segment] of entry.entries())appendConnected(motions,segment,errors,`Werkzeugbahn ${runIndex+1} Entry ${index+1}`);
-      const entryEnd=entry.at(-1)!.end;
-      if(!samePoint(entryEnd,runStart))errors.push(`Werkzeugbahn ${runIndex+1}: Entry endet nicht am Schnittstart.`);
-    }else appendConnected(motions,line(previousSafe,runStart),errors,`Werkzeugbahn ${runIndex+1} Zustellung`);
+    const approach=entry.length?entry[0].start:runStart;
+    const safeStart={x:approach.x,y:approach.y,z:safeZMm},safeEnd={x:runEnd.x,y:runEnd.y,z:safeZMm};
+
+    if(linkedPoint){
+      if(entry.length){
+        if(!samePoint(linkedPoint,entry[0].start))errors.push(`Werkzeugbahn ${runIndex+1}: Stay-down-Link endet nicht am kanonischen Entry-Start.`);
+        for(const [index,segment] of entry.entries())appendConnected(motions,segment,errors,`Werkzeugbahn ${runIndex+1} Stay-down Entry ${index+1}`);
+        const entryEnd=entry.at(-1)!.end;
+        if(!samePoint(entryEnd,runStart))errors.push(`Werkzeugbahn ${runIndex+1}: Entry endet nicht am Schnittstart.`);
+      }else{
+        if(!sameXY(linkedPoint,runStart))errors.push(`Werkzeugbahn ${runIndex+1}: Stay-down-Link besitzt ohne Entry einen anderen XY-Start.`);
+        if(!samePoint(linkedPoint,runStart))appendConnected(motions,line(linkedPoint,runStart),errors,`Werkzeugbahn ${runIndex+1} Stay-down Zustellung`);
+      }
+      linkedPoint=null;
+      previousSafe=null;
+    }else{
+      if(previousSafe&&!samePoint(previousSafe,safeStart))appendConnected(motions,rapid(previousSafe,safeStart),errors,`Werkzeugbahn ${runIndex+1} XY-Rapid`);
+      previousSafe=safeStart;
+      if(entry.length){
+        if(!samePoint(previousSafe,entry[0].start))appendConnected(motions,rapid(previousSafe,entry[0].start),errors,`Werkzeugbahn ${runIndex+1} Entry-Anfahrt`);
+        for(const [index,segment] of entry.entries())appendConnected(motions,segment,errors,`Werkzeugbahn ${runIndex+1} Entry ${index+1}`);
+        const entryEnd=entry.at(-1)!.end;
+        if(!samePoint(entryEnd,runStart))errors.push(`Werkzeugbahn ${runIndex+1}: Entry endet nicht am Schnittstart.`);
+      }else appendConnected(motions,line(previousSafe,runStart),errors,`Werkzeugbahn ${runIndex+1} Zustellung`);
+    }
 
     for(const [index,motion] of runCutMotions(run).entries())appendConnected(motions,motion,errors,`Werkzeugbahn ${runIndex+1} Schnitt ${index+1}`);
     const currentEnd=motions.at(-1)?.end??runEnd;
@@ -80,12 +114,27 @@ export function materializeSafeMotionChain(args:{toolpath:CanonicalToolpath;safe
     const exit=run.exitSegments??[];
     if(exit.length){
       for(const [index,segment] of exit.entries())appendConnected(motions,segment,errors,`Werkzeugbahn ${runIndex+1} Exit ${index+1}`);
-      const exitEnd=exit.at(-1)!.end;
-      if(!samePoint(exitEnd,safeEnd))appendConnected(motions,rapid(exitEnd,safeEnd),errors,`Werkzeugbahn ${runIndex+1} Sicherheits-Retract`);
-    }else appendConnected(motions,rapid(runEnd,safeEnd),errors,`Werkzeugbahn ${runIndex+1} Sicherheits-Retract`);
+    }
+    const afterExit=motions.at(-1)?.end??runEnd;
+
+    if(run.retractAfter===false){
+      const next=toolpath.runs[runIndex+1];
+      if(!next||next.points.length<2){errors.push(`Werkzeugbahn ${runIndex+1}: retractAfter=false ohne folgende Werkzeugbahn.`);continue;}
+      const nextRunStart=p3(next.points[0],next.z),nextEntry=next.entrySegments??[];
+      const linkTarget=nextEntry.length?nextEntry[0].start:{x:nextRunStart.x,y:nextRunStart.y,z:afterExit.z};
+      if(Math.abs(linkTarget.z-afterExit.z)>1e-9){errors.push(`Werkzeugbahn ${runIndex+1}: Stay-down-Link würde Z vor dem nächsten kanonischen Entry ändern.`);continue;}
+      if(!samePoint(afterExit,linkTarget))appendConnected(motions,line(afterExit,linkTarget),errors,`Werkzeugbahn ${runIndex+1} Stay-down Link`);
+      linkedPoint=linkTarget;
+      previousSafe=null;
+      continue;
+    }
+
+    if(!samePoint(afterExit,safeEnd))appendConnected(motions,rapid(afterExit,safeEnd),errors,`Werkzeugbahn ${runIndex+1} Sicherheits-Retract`);
     previousSafe=safeEnd;
+    linkedPoint=null;
   }
 
+  if(linkedPoint)errors.push('004T: offene Stay-down-Verbindung am Operationsende.');
   const startSafePoint=motions[0]?.start??previousSafe,endSafePoint=motions.at(-1)?.end??previousSafe;
   if(startSafePoint&&Math.abs(startSafePoint.z-safeZMm)>1e-9)errors.push('004T: materialisierte Bewegungskette beginnt nicht auf Sicherheits-Z.');
   if(endSafePoint&&Math.abs(endSafePoint.z-safeZMm)>1e-9)errors.push('004T: materialisierte Bewegungskette endet nicht auf Sicherheits-Z.');

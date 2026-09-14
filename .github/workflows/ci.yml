@@ -53,6 +53,34 @@ jobs:
         run: pnpm check:007b
       - name: Surface Carve cleanup contract
         run: pnpm check:007f
+      - name: Production acceptance baseline
+        run: pnpm check:008a
+      - name: Production acceptance harness
+        run: pnpm check:008a1
+      - name: Synthetic 2D production acceptance
+        run: pnpm check:008a2
+      - name: Multi-operation production acceptance
+        run: pnpm check:008a4
+      - name: Estlcam multi-operation contract
+        run: pnpm check:008a5
+      - name: Project save/load acceptance
+        run: pnpm check:008b1
+      - name: Project fail-closed acceptance
+        run: pnpm check:008b2
+      - name: Project source recovery contract
+        run: pnpm check:008b3
+      - name: Project source recovery integration
+        run: pnpm check:008b3b
+      - name: Project source change contract
+        run: pnpm check:008b4
+      - name: Project reference-integrity contract
+        run: pnpm check:008b5
+      - name: Atomic project save contract
+        run: pnpm check:008b6
+      - name: Project reload determinism contract
+        run: pnpm check:008b7
+      - name: Estlcam qualification baseline
+        run: pnpm check:008c1
       - name: Frontend build
         run: pnpm build
       - name: Rust check
