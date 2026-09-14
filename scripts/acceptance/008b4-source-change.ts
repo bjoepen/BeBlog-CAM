@@ -20,16 +20,20 @@ export async function run008b4(){
 
   const changedError=await rejected(()=>resolveProjectSource({source,inspect:async()=>summary(changedIdentity)}));
 
+  // Relocation is reserved for path failures. An identity mismatch is a real
+  // source-change failure and must not be converted into an "open model" flow.
   const recovered=await resolveProjectSource({
     source,
-    inspect:async path=>path===source.path?summary(changedIdentity):summary(expectedIdentity),
+    inspect:async path=>{if(path===source.path)throw new Error('ENOENT');return summary(expectedIdentity);},
     relocate:async()=>'/archive/008b4-reference.dxf',
   });
 
-  const legacyError=await rejected(()=>resolveProjectSource({
+  // Legacy projects created before source fingerprinting remain loadable. The
+  // next fingerprint-aware save upgrades them onto the strict identity path.
+  const legacy=await resolveProjectSource({
     source:{path:source.path,fileName},
     inspect:async()=>summary(expectedIdentity),
-  }));
+  });
 
   const changedReplacementError=await rejected(()=>resolveProjectSource({
     source,
@@ -37,7 +41,7 @@ export async function run008b4(){
     relocate:async()=>'/moved/008b4-reference.dxf',
   }));
 
-  return{unchanged,changedError,recovered,legacyError,changedReplacementError};
+  return{unchanged,changedError,recovered,legacy,changedReplacementError};
 }
 
 run008b4().then(result=>console.log(JSON.stringify(result)));
