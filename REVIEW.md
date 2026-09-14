@@ -96,7 +96,7 @@ Im Rod-Plate-Real-World-Export wurde eine geschlossene Kontur mit aktivem Lead-i
 
 ### Implementierter Contract
 
-1. Ohne expliziten Entry bleibt `run.points[0]` der Safe-Z-Anfahranker.
+1. Ohne explizinen Entry bleibt `run.points[0]` der Safe-Z-Anfahranker.
 2. Mit `entrySegments` verwendet 004T die XY-Koordinate von `entrySegments[0].start` als Safe-Z-Anfahranker.
 3. Falls der Entry selbst unter Safe-Z beginnt, positioniert 004T zuerst auf derselben XY-Koordinate bei Safe-Z und materialisiert anschließend den expliziten Entry; es erfindet keinen alternativen Werkzeugweg.
 4. Der Konturstart wird vor dem Lead-in nicht mehr unnötig auf Safe-Z besucht.
@@ -118,19 +118,22 @@ Korrektur wurde am 2026-09-14 ausdrücklich freigegeben und implementiert. Statu
 - **Kategorie:** CAM Planning / Contour Entry / UX
 - **Severity / Priorität:** P1 vor RC
 - **Confidence:** High
-- **Status:** Core implemented / Pending local QA and UI wiring
+- **Status:** Core PASS / DXF UI implemented / Pending local UI QA
 - **Betroffene Dateien / Codebereiche:**
   - `src/lib/types.ts`
   - `src/lib/contourStartPlacement.ts`
   - `src/lib/contourEntry.ts`
   - `src/lib/gcode.ts`
+  - `src/lib/ContourOverlay.svelte`
+  - `scripts/check-008rw6-contour-start-entry.mjs`
+  - `scripts/check-008rw6-ui.mjs`
   - Canonical Contour Toolpath → 004T → Preview / Preflight / NC
 
 ### Beobachtung
 
 Der bisherige geschlossene Konturpfad übernahm seinen Start implizit aus der Reihenfolge der importierten DXF-/Toolpath-Geometrie. Für reale Außenkonturen kann dieser Punkt nahe einer Ecke oder an einer fertigungstechnisch ungünstigen Stelle liegen. Bei Rampeneinfahrt wird die Startwahl zusätzlich sicherheits- und qualitätsrelevant, da ab dem Start genügend zusammenhängende Konturstrecke für den Z-Abstieg benötigt wird.
 
-### Freigegebener Contract
+### Freigegebener und implementierter Contract
 
 1. `startMode: auto | manual` ist Bestandteil der ContourOperation.
 2. Der manuelle Start wird als normalisierte Position `startFraction` entlang der geschlossenen Kontur gespeichert; keine rohe, fragile XY-Referenz.
@@ -143,9 +146,21 @@ Der bisherige geschlossene Konturpfad übernahm seinen Start implizit aus der Re
 9. Reicht die Konturlänge nicht aus oder ist der Rampencontract inkonsistent, wird die Operation fail-closed abgewiesen. Kein stiller Plunge-Fallback.
 10. Aufgebrochene/offene Konturen behalten ihre vorhandenen spezialisierten Entry-Regeln und werden nicht stillschweigend in RW-006 einbezogen.
 
+### UI
+
+Für den DXF-Real-World-Pfad ist die Funktion jetzt direkt in der Bearbeiten-Vorschau verdrahtet:
+
+- `Automatisch`
+- `In Vorschau wählen`
+- sichtbarer Startmarker
+- `Senkrecht | Tangential | Rampe`
+- Rampenwinkel bei aktiver Rampe
+
+Der Klick wird auf die dargestellte Werkzeugbahn projiziert und als `startFraction` in die Operation zurückgeschrieben. Die vorhandene DXF-Geometrieauswahl bleibt erhalten; die Optimierung bleibt vollständig vor dem Postprozessor.
+
 ### Acceptance
 
-`check:008rw6` prüft ausführbar:
+`check:008rw6` ist am 2026-09-14 lokal PASS und prüft ausführbar:
 
 - Auto-Start auf der Mitte einer bevorzugten langen Geraden,
 - deterministischen manuellen Start über mehrere Tiefenebenen,
@@ -153,6 +168,12 @@ Der bisherige geschlossene Konturpfad übernahm seinen Start implizit aus der Re
 - Akzeptanz der Entry-Kette durch 004T,
 - fail-closed bei unzureichender Rampenlänge.
 
-### Noch offen
+`check:008rw6-ui` prüft zusätzlich die Verdrahtung von Preview-Picking, Marker, Auto/Manual und Entry-Controls.
 
-Der Core-Contract ist implementiert. Die direkte Auswahl des manuellen Startpunkts in der Bearbeiten-Preview sowie die endgültigen Inspector-Bedienelemente werden erst nach grünem lokalen Core-Gate verdrahtet, damit ein eventueller Geometrie-/Type-Fehler nicht mit UI-Arbeit vermischt wird.
+### Abgrenzung
+
+Der Core-Contract ist formatunabhängig. Die direkte manuelle Auswahl im nativen STEP-3D-Viewport bleibt ein separater UI-Anschluss; sie ändert weder Start- noch Entry-Contract und blockiert den aktuellen DXF-Real-World-Test nicht.
+
+### Freigabe / aktueller Stand
+
+RW-006A/B wurde am 2026-09-14 ausdrücklich freigegeben. Der Core-Gate ist lokal PASS. Die DXF-Preview-UI ist implementiert und wartet auf `check:008rw6-ui`, Type-/Svelte-Check, Build und den erneuten Rod-Plate-Real-World-Test.
