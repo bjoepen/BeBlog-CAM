@@ -4,7 +4,7 @@
 
 BeBlog CAM is an open-source, maker-friendly CAM application for macOS. It turns DXF and STEP geometry into visible, verifiable toolpaths without forcing hobby makers through the usual CAM maze of object trees, permanent toolbars and deeply nested dialogs.
 
-**Status: Beta / Production Qualification — 0.2.0-beta.1.**
+**Current release: 0.2.0-beta.1 — Beta / Production Qualification.**
 
 The guiding idea is simple:
 
@@ -16,12 +16,40 @@ BeBlog CAM keeps the workpiece at the center and follows one stable workflow:
 
 The interface stays calm while the CAM underneath is allowed to become technically capable.
 
+## Download and macOS installation
+
+The first public beta is currently provided for **Apple Silicon Macs (arm64)** as a DMG.
+
+Release artifact:
+
+`BeBlog CAM_0.2.0-beta.1_aarch64.dmg`
+
+SHA-256:
+
+```text
+f0d7ab5b2163dd5bddc583b161460e3b6fe78a621f0ae2c1d848e41b9699ad2e
+```
+
+The application is currently **not signed with an Apple Developer ID and not notarized by Apple**. The binary carries only an ad-hoc signature. macOS Gatekeeper can therefore block the first launch after downloading the DMG.
+
+To install the beta:
+
+1. Open the DMG and copy **BeBlog CAM** to **Applications**.
+2. Try to open BeBlog CAM normally once.
+3. If macOS blocks it, open **System Settings → Privacy & Security** and use **Open Anyway** for BeBlog CAM.
+4. Confirm the subsequent macOS prompt.
+
+No Terminal command or global Gatekeeper deactivation is required.
+
+This is a beta build. Verify toolpaths and NC before using them on a real machine, and retain the normal machine-side safety procedures.
+
 ## Current capability
 
 BeBlog CAM has reached a broad practical 3-axis maker-CAM scope. The current system includes:
 
 - DXF import for planar geometry
 - native STEP/BRep import through Open CASCADE Technology (OCCT)
+- full 3D model orientation before downstream STEP/CAM processing
 - model orientation, stock placement and work-coordinate handling
 - stock definition from dimensions or part geometry
 - material profiles and tool-library integration
@@ -105,6 +133,7 @@ Machine-side probing and tool-length handling remain controller responsibilities
 - **Native application/core:** Rust
 - **Exact CAD geometry:** Open CASCADE Technology (OCCT)
 - **Primary platform:** macOS
+- **Current binary release:** Apple Silicon (arm64)
 - **Package manager:** pnpm
 
 Exact STEP/BRep geometry remains the source of truth. Tessellation exists for display and interaction; it does not replace the CAD model.
@@ -136,15 +165,25 @@ A production macOS application/DMG must be built through:
 pnpm native:build
 ```
 
-This build path enables the `occt-native` feature and bundles the native STEP/BRep implementation. A plain `pnpm tauri build` is **not considered a valid production build**, because it may omit the native OCCT bridge and therefore lose STEP-derived 3D functionality.
+This build path enables the `occt-native` feature, determines the required OCCT runtime dependency closure, bundles that runtime into the application and verifies that the resulting executable uses the bundle-local Frameworks path rather than a machine-local OCCT installation.
 
-## Scope
+A plain `pnpm tauri build` is **not considered a valid production build**, because it may omit the native OCCT bridge and therefore lose STEP-derived 3D functionality.
+
+The 0.2.0-beta.1 release qualification verified that the bundled application can run its native STEP workflow without depending on the development OCCT installation.
+
+## Scope and known limitations
 
 BeBlog CAM is focused on **3-axis maker CNC machining**.
 
 The project deliberately does not try to become an industrial manufacturing suite. 4/5-axis machining, turning, production planning, cloud services and enterprise workflow management are outside the present product direction.
 
-Surface Carve was explored experimentally and rejected after real-world acceptance. Its research code does not form part of the production feature set.
+For 0.2.0-beta.1:
+
+- the downloadable macOS build is Apple Silicon/arm64
+- the application is not Apple Developer-ID signed or notarized
+- first launch can therefore require manual Gatekeeper approval
+- external Estlcam/machine qualification remains a deliberately manual step
+- Surface Carve was explored experimentally and rejected after real-world acceptance; its research code is not part of the production feature set
 
 The aim is narrower and harder to fake: make common CNC work understandable, inspectable and pleasant without sacrificing the geometry and machining correctness underneath.
 
@@ -156,6 +195,10 @@ Build 008 established the production-readiness baseline and moved BeBlog CAM out
 - **008B — Project & Failure Hardening:** deterministic persistence and fail-closed recovery paths
 - **008C1/008C2 — Estlcam Qualification Baseline:** qualified syntax contract and frozen reference NC
 - **008C3/008C4 — External Qualification:** deliberately deferred manual Estlcam and machine validation
+- **008D — STEP Model Orientation:** one shared oriented-model truth for downstream STEP consumers
+- **008E — Z-Level Roughing Performance:** production profiling, demand-gated calculation and spatial indexing without weakening geometric safety checks
+- **008F — Native macOS Packaging:** self-contained OCCT runtime bundle and portable native STEP application
+- **008G — Release Qualification:** release artifact, checksum, Gatekeeper/signing assessment and public-beta preparation
 
 See [Build 008 — Production Readiness Roadmap](docs/ROADMAP-008-PRODUCTION-READINESS.md).
 
@@ -163,7 +206,7 @@ See [Build 008 — Production Readiness Roadmap](docs/ROADMAP-008-PRODUCTION-REA
 
 **Beta / Production Qualification — 0.2.0-beta.1.**
 
-Build 008 completed the software production-readiness gate. Current work can now focus on controller/machine qualification, release packaging and the next deliberately scoped product increments rather than reopening the validated CAM contracts.
+Build 008 established the software production-readiness baseline. Builds 008D through 008G then qualified model orientation, real-world Z-Level performance, native macOS packaging and the first public-beta release path without reopening the validated CAM contracts.
 
 Features are established only after technical gates and real-world acceptance agree.
 
