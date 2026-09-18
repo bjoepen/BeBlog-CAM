@@ -59,10 +59,10 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", lib.display());
 
-    // macOS: make the development binary self-sufficient. Tauri/Node may not
-    // preserve DYLD_LIBRARY_PATH consistently when spawning the Rust binary,
-    // so embed the OCCT install directory as an rpath in native builds.
-    if cfg!(target_os = "macos") {
+    // macOS development needs the local OCCT prefix because Tauri/Node may not
+    // preserve DYLD_LIBRARY_PATH consistently. Production bundles instead use
+    // Contents/Frameworks and must not retain a machine-local absolute rpath.
+    if cfg!(target_os = "macos") && env::var_os("BEBLOG_OCCT_BUNDLE").is_none() {
         println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib.display());
     }
 
@@ -75,4 +75,5 @@ fn main() {
     println!("cargo:rerun-if-changed=native/occt_bridge.cpp");
     println!("cargo:rerun-if-changed=native/occt_bridge.h");
     println!("cargo:rerun-if-env-changed=BEBLOG_OCCT_PREFIX");
+    println!("cargo:rerun-if-env-changed=BEBLOG_OCCT_BUNDLE");
 }
