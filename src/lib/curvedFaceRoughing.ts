@@ -51,8 +51,8 @@ function safeFlatEndAt(
   for(const offset of offsets){
     if(profile)profile.curvedCutterSurfaceTests++;
     const surfaceZ=curvedFaceTargetZAt(target,x+offset.x,y+offset.y,profile);
-    if(surfaceZ===null)return false;
-    if(levelZ<surfaceZ+allowance-EPS)return false;
+    if(surfaceZ===null){if(profile)profile.curvedRejectOutsideTarget++;return false;}
+    if(levelZ<surfaceZ+allowance-EPS){if(profile)profile.curvedRejectSurfaceAboveLevel++;return false;}
   }
   return true;
 }
