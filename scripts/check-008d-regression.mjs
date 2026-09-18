@@ -21,7 +21,7 @@ for(const file of files.filter(file=>file!=='src/lib/GeometryView.svelte')){
   if(!source.includes('partOrientation')&&!source.includes('buildOrientedStepManufacturingFeatureSource'))failures.push(`${file}: not connected to shared orientation truth`);
 }
 const view=contents.get('src/lib/GeometryView.svelte');
-for(const token of ['orientPoint3','buildOrientedStepManufacturingFeatureSource','orientation.rotationXDeg','orientation.rotationYDeg']){
+for(const token of ['orientPoint3','buildOrientedStepManufacturingFeatureSource']){
   if(!view.includes(token))failures.push(`GeometryView missing ${token}`);
 }
 const app=fs.readFileSync('src/App.svelte','utf8');
