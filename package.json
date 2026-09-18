@@ -71,7 +71,8 @@
     "native:dev": "bash scripts/dev-macos-native.sh",
     "native:build": "bash scripts/build-macos-native-app.sh",
     "native:test": "bash scripts/test-occt-macos.sh",
-    "check:008d": "node scripts/check-008d-orientation-truth.mjs"
+    "check:008d": "node scripts/check-008d-orientation-truth.mjs",
+    "check:008d:source": "node scripts/check-008d-oriented-step-source.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
