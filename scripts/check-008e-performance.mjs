@@ -8,7 +8,7 @@ const required = [
   ['src/lib/modelRoughingOperation.ts', ['profile?:ZLevelPerformanceProfile','profile.accessibilitySamples++','profile.accessibilityRegionTests++','sliceTrianglesAtZ(part,z,profile)']],
   ['src/lib/zLevelOperationState.ts', ['profile?:ZLevelPerformanceProfile','buildModelRoughingOperationState(args)','buildFaceTargetOperationState(args)','buildCurvedFaceRoughingOperationState(args)']],
   ['src/lib/faceTargetToolpath.ts', ['profile?:ZLevelPerformanceProfile','buildPlanarRasterChains(target.loops,toolDiameterMm,stepoverPercent,profile)']],
-  ['src/lib/curvedFaceTarget.ts', ['profile?:ZLevelPerformanceProfile','profile.curvedTargetTriangleTests++']],
+  ['src/lib/curvedFaceTarget.ts', ['profile?:ZLevelPerformanceProfile','profile.curvedTargetTriangleTests++','type CurvedFaceSpatialIndex','buildSpatialIndex','candidateTriangleIndices','spatialIndex=buildSpatialIndex(triangles,bounds)']],
   ['src/lib/curvedFaceRoughing.ts', ['profile?:ZLevelPerformanceProfile','profile.curvedCutterSurfaceTests++']],
   ['src/lib/activeCanonicalToolpath.ts', ['buildActiveCanonicalToolpathProfiled','zLevelPerformanceProfile:profile']],
   ['src/App.svelte', ["import.meta.env.DEV","008E · Performance-Diagnose","createZLevelPerformanceProfile","zLevelPerformanceProfile:profile","zLevel008eProfile","Curved Triangle","Curved Cutter Samples"]],
