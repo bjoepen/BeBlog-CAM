@@ -45,9 +45,9 @@ function safeAt(loops:PlanarRasterLoop[],p:ToolpathPoint2,radius:number,profile?
   return pointInEvenOdd(loops,p)&&clearanceToBoundary(loops,p,profile)>=radius-EPS;
 }
 
-export function isPlanarRasterPointSafe(loops:PlanarRasterLoop[],point:ToolpathPoint2,toolDiameterMm:number){
+export function isPlanarRasterPointSafe(loops:PlanarRasterLoop[],point:ToolpathPoint2,toolDiameterMm:number,profile?:ZLevelPerformanceProfile){
   if(!(toolDiameterMm>0)||!loops.length)return false;
-  return safeAt(loops,point,toolDiameterMm/2);
+  return safeAt(loops,point,toolDiameterMm/2,profile);
 }
 
 function safeSegment(
