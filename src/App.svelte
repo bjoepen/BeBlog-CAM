@@ -25,6 +25,7 @@
   import { activeOperation, addOperation, cloneOperation, dxfTargetIds, operationSummary, removeOperation, replaceOperation, selectOperation } from './lib/operationsProject';
   import { toggleDxfTargetId } from './lib/dxfMultiTargetSelection';
   import { buildActiveCanonicalToolpath } from './lib/activeCanonicalToolpath';
+  import type { ZLevelPerformanceProfile } from './lib/zLevelPerformance';
   import { buildZLevelOperationState, zLevelMode } from './lib/zLevelOperationState';
   import { resolveContourDepth } from './lib/contourDepth';
   import { validateJob, type JobPreflightResult } from './lib/jobPreflight';
@@ -53,17 +54,18 @@
   let error = '';
   let jobPreflight:JobPreflightResult|null=null;
   let faceTargetState:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null=null;
+  let activeCanonicalToolpath:CanonicalToolpath|null=null;
   function receiveFaceTargetState(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null){faceTargetState=state;}
-  function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject){
+  function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject,profile?:ZLevelPerformanceProfile){
     if(!summary)return null;
     const previousToolpaths:CanonicalToolpath[]=[];
     for(const candidate of project.operations){
       if(candidate.enabled===false)continue;
-      if(candidate.id===currentOperation.id)return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths});
+      if(candidate.id===currentOperation.id)return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths,zLevelPerformanceProfile:profile});
       const toolpath=buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:candidate,previousToolpaths});
       if(toolpath)previousToolpaths.push(toolpath);
     }
-    return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths});
+    return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths,zLevelPerformanceProfile:profile});
   }
   function buildOrderedJobCanonicalToolpaths(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,project:OperationsProject){
     if(!summary)return[];
@@ -75,13 +77,15 @@
     }
     return toolpaths;
   }
-  $: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject);
-  $: activeFaceTargetOperationState=importSummary&&operation.kind==='z-level-roughing'?buildZLevelOperationState({summary:importSummary,stock,placement,orientation,wcs,operation}):null;
-  $: preflightFaceTargetStates=importSummary?operationsProject.operations.filter((op):op is ZLevelRoughingOperation=>op.enabled!==false&&op.kind==='z-level-roughing').map(op=>({operationId:op.id,state:buildZLevelOperationState({summary:importSummary!,stock,placement,orientation,wcs,operation:op})})).filter(entry=>entry.state.toolpath!==null&&entry.state.errors.length===0):[];
-  $: preflightStepToolpaths=importSummary?.kind==='step'?buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter(toolpath=>toolpath.operationKind!=='z-level-roughing'):[];
-  $: preflightDxfToolpaths=importSummary?.kind==='dxf'?operationsProject.operations.filter(op=>op.enabled!==false&&op.kind!=='z-level-roughing').map(op=>buildActiveCanonicalToolpath({summary:importSummary!,stock,stockMode,placement,orientation,wcs,operation:op})).filter((toolpath):toolpath is CanonicalToolpath=>toolpath!==null):[];
+  $: activeCanonicalToolpath=buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject);
+  // 008E-C1: Editing must not eagerly rebuild expensive Z-level states that are
+  // only consumed by Prüfen/Fräsen. The active canonical path above remains the
+  // single manufacturing truth while Bearbeiten is active.
+  $: preflightFaceTargetStates=activeStep==='Prüfen'&&importSummary?operationsProject.operations.filter((op):op is ZLevelRoughingOperation=>op.enabled!==false&&op.kind==='z-level-roughing').map(op=>({operationId:op.id,state:buildZLevelOperationState({summary:importSummary!,stock,placement,orientation,wcs,operation:op})})).filter(entry=>entry.state.toolpath!==null&&entry.state.errors.length===0):[];
+  $: preflightStepToolpaths=activeStep==='Prüfen'&&importSummary?.kind==='step'?buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter(toolpath=>toolpath.operationKind!=='z-level-roughing'):[];
+  $: preflightDxfToolpaths=activeStep==='Prüfen'&&importSummary?.kind==='dxf'?operationsProject.operations.filter(op=>op.enabled!==false&&op.kind!=='z-level-roughing').map(op=>buildActiveCanonicalToolpath({summary:importSummary!,stock,stockMode,placement,orientation,wcs,operation:op})).filter((toolpath):toolpath is CanonicalToolpath=>toolpath!==null):[];
   $: contourDepthState=operation.kind==='contour'?resolveContourDepth({operation,stock,stockMode,wcs}):null;
-  $: jobPreflight=importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null}):null;
+  $: jobPreflight=(activeStep==='Prüfen'||activeStep==='Fräsen')&&importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null}):null;
 
   const operationLabel=(kind:OperationKind)=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
   function setOperation(next:CamOperation){operationsProject=replaceOperation(operationsProject,next);const synced=operationsProject.operations.find(op=>op.id===next.id);operation=cloneOperation(synced??next);}
@@ -191,4 +195,5 @@
 <style>
 .operation-list{display:grid;gap:6px}.operation-row{display:grid;grid-template-columns:1fr auto;align-items:stretch;border:1px solid #deded8;border-radius:8px;background:#fafaf8;overflow:hidden}.operation-row.current-operation{border-color:#9aa49e;background:#f1f3ef}.operation-select{display:grid;grid-template-columns:28px 1fr;gap:8px;text-align:left;align-items:start;border:0;background:transparent;padding:9px 10px;cursor:pointer;color:#39413d}.operation-select span:last-child{display:grid;gap:2px}.operation-select strong{font-size:.8rem}.operation-select small{font-size:.7rem;color:#747a76;font-weight:400}.operation-index{font-size:.68rem;color:#8a8f8b;padding-top:2px}.operation-delete{border:0;border-left:1px solid #deded8;background:transparent;padding:0 10px;color:#8b5d58;cursor:pointer;font-size:1rem}.operation-add{display:grid;grid-template-columns:1fr repeat(5,auto);gap:5px;align-items:center;margin-top:8px}.operation-add span{font-size:.76rem;color:#696f6b}.operation-add button{border:1px solid #d5d7d2;border-radius:6px;background:#fff;padding:5px 7px;font-size:.7rem;color:#4e5651;cursor:pointer}
 .project-open-actions{display:grid;gap:12px;margin-top:24px}.project-open-actions .primary,.project-open-actions .secondary{width:100%;min-height:46px;margin:0;padding:11px 14px;border-radius:9px;font-weight:500}.project-open-actions .primary{border-color:#27322c;background:#27322c;color:#fff}.project-open-actions .secondary{border-color:#d2d4cf;background:#fff;color:#28302c}
+.diagnostic-008e{margin-top:12px;padding:10px;border:1px dashed #c6cbc6;border-radius:8px;background:#f7f8f5}.diagnostic-008e dl{display:grid;gap:4px;margin:8px 0}.diagnostic-008e dl div{display:grid;grid-template-columns:1fr auto;gap:12px}.diagnostic-008e dt,.diagnostic-008e dd{font-size:.72rem;margin:0}.diagnostic-008e dd{font-variant-numeric:tabular-nums;font-weight:600}
 </style>

@@ -11,6 +11,7 @@ import { orientPoint3 } from './partOrientation';
 import type { P3 } from './stepView';
 import { buildFaceTargetRoughing } from './faceTargetRoughing';
 import { buildFaceTargetRasterToolpath } from './faceTargetToolpath';
+import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type FaceTargetOperationState={
   toolpath:CanonicalToolpath;
@@ -75,6 +76,7 @@ export function buildFaceTargetOperationState(args:{
   orientation:PartOrientation;
   wcs:WorkCoordinateSystem;
   operation:ZLevelRoughingOperation;
+  profile?:ZLevelPerformanceProfile;
 }):FaceTargetOperationState|null{
   const {summary,stock,placement,orientation,wcs,operation}=args;
   if(summary.kind!=='step'||wcs.z!=='top'||!operation.faceIds.length)return null;
@@ -99,6 +101,7 @@ export function buildFaceTargetOperationState(args:{
     operation.tool.diameterMm,
     operation.stepoverPercent,
     wcsOrigin(stock,wcs),
+    args.profile,
   );
   if(!toolpath)return null;
 

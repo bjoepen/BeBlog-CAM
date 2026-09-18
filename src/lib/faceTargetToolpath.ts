@@ -1,6 +1,7 @@
 import type { FaceTargetRoughing } from './faceTargetRoughing';
 import type { CanonicalToolpath, CanonicalToolpathRun } from './canonicalToolpath';
 import { buildPlanarRasterChains } from './planarRasterKernel';
+import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 const EPS=1e-6;
 
@@ -29,9 +30,10 @@ export function buildFaceTargetRasterToolpath(
   toolDiameterMm:number,
   stepoverPercent:number,
   origin:FaceTargetMachineOrigin,
+  profile?:ZLevelPerformanceProfile,
 ):CanonicalToolpath|null{
   if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!target.levels.length||!target.loops.length)return null;
-  const linkedWorldRuns=buildPlanarRasterChains(target.loops,toolDiameterMm,stepoverPercent);
+  const linkedWorldRuns=buildPlanarRasterChains(target.loops,toolDiameterMm,stepoverPercent,profile);
   if(!linkedWorldRuns.length)return null;
 
   const runs:CanonicalToolpathRun[]=[];

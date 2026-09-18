@@ -1,4 +1,5 @@
 import type { ToolpathPoint2 } from './canonicalToolpath';
+import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type PlanarRasterLoop={points:ToolpathPoint2[]};
 export type PlanarRasterChain={points:ToolpathPoint2[]};
@@ -26,25 +27,27 @@ function distanceToSegment(p:ToolpathPoint2,a:ToolpathPoint2,b:ToolpathPoint2){
   return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));
 }
 
-function clearanceToBoundary(loops:PlanarRasterLoop[],p:ToolpathPoint2){
+function clearanceToBoundary(loops:PlanarRasterLoop[],p:ToolpathPoint2,profile?:ZLevelPerformanceProfile){
   let best=Infinity;
   for(const loop of loops){
     const points=loop.points;
     for(let i=0;i<points.length;i++){
       const a=points[i],b=points[(i+1)%points.length];
+      if(profile)profile.boundarySegmentDistanceTests++;
       best=Math.min(best,distanceToSegment(p,a,b));
     }
   }
   return best;
 }
 
-function safeAt(loops:PlanarRasterLoop[],p:ToolpathPoint2,radius:number){
-  return pointInEvenOdd(loops,p)&&clearanceToBoundary(loops,p)>=radius-EPS;
+function safeAt(loops:PlanarRasterLoop[],p:ToolpathPoint2,radius:number,profile?:ZLevelPerformanceProfile){
+  if(profile)profile.rasterSafetyTests++;
+  return pointInEvenOdd(loops,p)&&clearanceToBoundary(loops,p,profile)>=radius-EPS;
 }
 
-export function isPlanarRasterPointSafe(loops:PlanarRasterLoop[],point:ToolpathPoint2,toolDiameterMm:number){
+export function isPlanarRasterPointSafe(loops:PlanarRasterLoop[],point:ToolpathPoint2,toolDiameterMm:number,profile?:ZLevelPerformanceProfile){
   if(!(toolDiameterMm>0)||!loops.length)return false;
-  return safeAt(loops,point,toolDiameterMm/2);
+  return safeAt(loops,point,toolDiameterMm/2,profile);
 }
 
 function safeSegment(
@@ -53,13 +56,15 @@ function safeSegment(
   b:ToolpathPoint2,
   radius:number,
   sampleStep:number,
+  profile?:ZLevelPerformanceProfile,
 ){
   const distance=Math.hypot(b.x-a.x,b.y-a.y);
-  if(distance<=EPS)return safeAt(loops,a,radius);
+  if(distance<=EPS)return safeAt(loops,a,radius,profile);
   const steps=Math.max(1,Math.ceil(distance/Math.max(.1,sampleStep)));
   for(let i=0;i<=steps;i++){
     const t=i/steps;
-    if(!safeAt(loops,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},radius))return false;
+    if(profile)profile.stayDownSafetyTests++;
+    if(!safeAt(loops,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},radius,profile))return false;
   }
   return true;
 }
@@ -69,9 +74,10 @@ function safePolyline(
   points:ToolpathPoint2[],
   radius:number,
   sampleStep:number,
+  profile?:ZLevelPerformanceProfile,
 ){
   if(points.length<2)return false;
-  for(let i=1;i<points.length;i++)if(!safeSegment(loops,points[i-1],points[i],radius,sampleStep))return false;
+  for(let i=1;i<points.length;i++)if(!safeSegment(loops,points[i-1],points[i],radius,sampleStep,profile))return false;
   return true;
 }
 
@@ -96,6 +102,7 @@ export function buildPlanarRasterStayDownConnector(
   b:ToolpathPoint2,
   toolDiameterMm:number,
   sampleStep?:number,
+  profile?:ZLevelPerformanceProfile,
 ):ToolpathPoint2[]|null{
   if(!(toolDiameterMm>0)||!loops.length)return null;
   const radius=toolDiameterMm/2;
@@ -106,7 +113,7 @@ export function buildPlanarRasterStayDownConnector(
     [a,{x:a.x,y:b.y},b],
   ];
   for(const candidate of candidates){
-    if(safePolyline(loops,candidate,radius,step))return candidate;
+    if(safePolyline(loops,candidate,radius,step,profile))return candidate;
   }
   return null;
 }
@@ -126,6 +133,7 @@ export function buildPlanarRasterChains(
   loops:PlanarRasterLoop[],
   toolDiameterMm:number,
   stepoverPercent:number,
+  profile?:ZLevelPerformanceProfile,
 ):PlanarRasterChain[]{
   if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!loops.length)return[];
   const b=bounds(loops);if(!b)return[];
@@ -141,7 +149,7 @@ export function buildPlanarRasterChains(
     let start:number|null=null,last:number|null=null;
 
     for(let x=b.minX+radius;x<=b.maxX-radius+EPS;x+=sampleStep){
-      if(safeAt(loops,{x,y},radius)){
+      if(safeAt(loops,{x,y},radius,profile)){
         if(start===null)start=x;
         last=x;
       }else if(start!==null&&last!==null){
@@ -169,7 +177,7 @@ export function buildPlanarRasterChains(
       continue;
     }
     const from=current[current.length-1],to=segment.points[0];
-    const connector=buildPlanarRasterStayDownConnector(loops,from,to,toolDiameterMm,sampleStep);
+    const connector=buildPlanarRasterStayDownConnector(loops,from,to,toolDiameterMm,sampleStep,profile);
     if(connector){
       for(const point of connector.slice(1)){
         const previous=current[current.length-1];

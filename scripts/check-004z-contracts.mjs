@@ -44,7 +44,7 @@ requireText(state,'previousToolpaths?:CanonicalToolpath[]','STEP contour accepts
 requireText(active,'previousToolpaths:args.previousToolpaths','Bearbeiten forwards prior toolpaths into STEP contour start resolution');
 requireText(preflight,'previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)','Prüfen resolves STEP contour start from the exact prior canonical job history');
 requireText(app,'let jobPreflight:JobPreflightResult|null=null','App owns one typed canonical job preflight snapshot');
-requireText(app,'$: jobPreflight=importSummary?validateJob','Prüfen and Fräsen share one reactive canonical job snapshot');
+requireText(app,"$: jobPreflight=(activeStep==='Prüfen'||activeStep==='Fräsen')&&importSummary?validateJob",'Prüfen and Fräsen share one demand-gated reactive canonical job snapshot');
 requireText(app,'<JobPreflightPanel result={jobPreflight} summary={importSummary} {stock} {stockMode} {placement} {orientation} {wcs}/>','Prüfen renders the shared canonical snapshot and forwards render-only setup geometry');
 requireText(app,'preflight={jobPreflight}','Fräsen receives the exact same canonical snapshot');
 const jobGcode=read('src/lib/jobGcode.ts');
@@ -103,7 +103,7 @@ requireText(geometryView,'cachedCurvedViewRoughing(curvedCacheContext','Geometry
 rejectText(geometryView,'?buildCurvedFaceRoughing(curvedFaceTarget,stock.thickness','camera updates must not directly rebuild Hohlkehle roughing');
 const planarRaster=read('src/lib/planarRasterKernel.ts');
 requireText(planarRaster,'export function buildPlanarRasterStayDownConnector','004Z-C owns an explicit cutter-safe stay-down connector planner');
-requireText(planarRaster,'safePolyline(loops,candidate,radius,step)','004Z-C validates every stay-down candidate with cutter-radius clearance');
+requireText(planarRaster,'safePolyline(loops,candidate,radius,step,profile)','004Z-C validates every stay-down candidate with cutter-radius clearance while allowing work profiling');
 requireText(planarRaster,"[a,{x:b.x,y:a.y},b]",'004Z-C can route an orthogonal dogleg inside rounded boundaries');
 requireText(planarRaster,"[a,{x:a.x,y:b.y},b]",'004Z-C tries the mirrored orthogonal dogleg before conceding a retract');
 requireText(planarRaster,'const connector=buildPlanarRasterStayDownConnector','raster chaining consumes the 004Z-C safe-link planner');

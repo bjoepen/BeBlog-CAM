@@ -10,8 +10,9 @@ import { buildZLevelOperationState } from './zLevelOperationState';
 import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';
 import { buildDxfMultiTargetContourState, buildDxfMultiTargetPocketState } from './dxfMultiTargetToolpath';
 import type { CamOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
+import { createZLevelPerformanceProfile, type ZLevelPerformanceProfile } from './zLevelPerformance';
 
-export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:CamOperation;previousToolpaths?:CanonicalToolpath[]}):CanonicalToolpath|null{
+export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:CamOperation;previousToolpaths?:CanonicalToolpath[];zLevelPerformanceProfile?:ZLevelPerformanceProfile;}):CanonicalToolpath|null{
   const {summary,stock,stockMode,placement,orientation,wcs,operation}=args;
   if(operation.kind==='facing'){
     if(stockMode==='none')return null;
@@ -41,6 +42,14 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
     const state=buildSurfaceFinishingOperationState({summary,stock,placement,orientation,wcs,operation});
     return state.ok?state.toolpath:null;
   }
-  const state=buildZLevelOperationState({summary,stock,placement,orientation,wcs,operation});
+  const profile=args.zLevelPerformanceProfile;
+  const state=buildZLevelOperationState({summary,stock,placement,orientation,wcs,operation,profile});
   return state.errors.length===0?state.toolpath:null;
+}
+
+/** 008E development helper: runs the exact production path with opt-in counters. */
+export function buildActiveCanonicalToolpathProfiled(args:Omit<Parameters<typeof buildActiveCanonicalToolpath>[0],'zLevelPerformanceProfile'>){
+  const profile=createZLevelPerformanceProfile();
+  const toolpath=buildActiveCanonicalToolpath({...args,zLevelPerformanceProfile:profile});
+  return{toolpath,profile};
 }
