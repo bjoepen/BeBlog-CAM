@@ -14,6 +14,8 @@ export type ZLevelPerformanceProfile = {
   accessibilityRegionTests: number;
   curvedTargetTriangleTests: number;
   curvedCutterSurfaceTests: number;
+  curvedRejectOutsideTarget: number;
+  curvedRejectSurfaceAboveLevel: number;
 };
 
 export function createZLevelPerformanceProfile(): ZLevelPerformanceProfile {
@@ -26,5 +28,7 @@ export function createZLevelPerformanceProfile(): ZLevelPerformanceProfile {
     accessibilityRegionTests: 0,
     curvedTargetTriangleTests: 0,
     curvedCutterSurfaceTests: 0,
+    curvedRejectOutsideTarget: 0,
+    curvedRejectSurfaceAboveLevel: 0,
   };
 }
