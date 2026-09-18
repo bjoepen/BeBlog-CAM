@@ -1,4 +1,5 @@
 import type { P3 } from './stepView';
+import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type CurvedFaceTriangle={
   a:P3;
@@ -36,11 +37,13 @@ export function curvedFaceTargetZAt(
   target:CurvedFaceTarget,
   x:number,
   y:number,
+  profile?:ZLevelPerformanceProfile,
 ):number|null{
   if(!target.valid)return null;
   let hit:number|null=null;
 
   for(const triangle of target.triangles){
+    if(profile)profile.curvedTargetTriangleTests++;
     const bc=barycentricXY(triangle,x,y);
     if(!bc)continue;
     const z=bc.u*triangle.a.z+bc.v*triangle.b.z+bc.w*triangle.c.z;
