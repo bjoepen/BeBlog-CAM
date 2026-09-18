@@ -11,6 +11,7 @@ import { orientPoint3 } from './partOrientation';
 import type { P3 } from './stepView';
 import { buildCurvedFaceTarget } from './curvedFaceTarget';
 import { buildCurvedFaceRoughing } from './curvedFaceRoughing';
+import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type CurvedFaceRoughingOperationState={
   ok:boolean;
@@ -82,6 +83,7 @@ export function buildCurvedFaceRoughingOperationState(args:{
   orientation:PartOrientation;
   wcs:WorkCoordinateSystem;
   operation:ZLevelRoughingOperation;
+  profile?:ZLevelPerformanceProfile;
 }):CurvedFaceRoughingOperationState{
   const {summary,stock,placement,orientation,wcs,operation}=args;
   const errors:string[]=[];
@@ -130,6 +132,7 @@ export function buildCurvedFaceRoughingOperationState(args:{
     operation.stepDownMm,
     operation.stepoverPercent,
     operation.finishAllowanceMm,
+    args.profile,
   );
 
   errors.push(...roughing.errors);
