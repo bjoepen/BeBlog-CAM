@@ -54,6 +54,7 @@
   let error = '';
   let jobPreflight:JobPreflightResult|null=null;
   let faceTargetState:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null=null;
+  let activeCanonicalToolpath:CanonicalToolpath|null=null;
   function receiveFaceTargetState(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null){faceTargetState=state;}
   function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject,profile?:ZLevelPerformanceProfile){
     if(!summary)return null;
