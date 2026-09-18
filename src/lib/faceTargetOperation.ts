@@ -7,6 +7,7 @@ import type {
   ZLevelRoughingOperation,
 } from './types';
 import type { CanonicalToolpath } from './canonicalToolpath';
+import { orientPoint3 } from './partOrientation';
 import type { P3 } from './stepView';
 import { buildFaceTargetRoughing } from './faceTargetRoughing';
 import { buildFaceTargetRasterToolpath } from './faceTargetToolpath';
@@ -19,11 +20,6 @@ export type FaceTargetOperationState={
   islandMode:'preserve'|'clear';
   islandLoopCount:number;
 };
-
-function rotate(point:P3,orientation:PartOrientation):P3{
-  const a=orientation.rotationZDeg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
-  return{x:point.x*c-point.y*s,y:point.x*s+point.y*c,z:point.z};
-}
 
 function bounds(points:P3[]){
   const xs=points.map(p=>p.x),ys=points.map(p=>p.y),zs=points.map(p=>p.z);
@@ -43,7 +39,7 @@ function placedPart(
   if(summary.kind!=='step')return null;
   const values=summary.brep?.displayVertices??[];
   const raw:P3[]=[];
-  for(let i=0;i+2<values.length;i+=3)raw.push(rotate({x:values[i],y:values[i+1],z:values[i+2]},orientation));
+  for(let i=0;i+2<values.length;i+=3)raw.push(orientPoint3({x:values[i],y:values[i+1],z:values[i+2]},orientation));
   if(!raw.length)return null;
 
   const b=bounds(raw),partWidth=b.maxX-b.minX,partHeight=b.maxY-b.minY;
