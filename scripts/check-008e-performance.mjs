@@ -6,6 +6,8 @@ const required = [
   ['src/lib/planarRasterKernel.ts', ['profile?:ZLevelPerformanceProfile','profile.rasterSafetyTests++','profile.boundarySegmentDistanceTests++','profile.stayDownSafetyTests++']],
   ['src/lib/modelRoughingToolpath.ts', ['profile?:ZLevelPerformanceProfile','buildPlanarRasterChains(loops,toolDiameterMm,stepoverPercent,profile)']],
   ['src/lib/modelRoughingOperation.ts', ['profile?:ZLevelPerformanceProfile','profile.accessibilitySamples++','profile.accessibilityRegionTests++','sliceTrianglesAtZ(part,z,profile)']],
+  ['src/lib/zLevelOperationState.ts', ['profile?:ZLevelPerformanceProfile','buildModelRoughingOperationState(args)']],
+  ['src/lib/activeCanonicalToolpath.ts', ['buildActiveCanonicalToolpathProfiled','zLevelPerformanceProfile:profile']],
 ];
 
 for (const [path, needles] of required) {
