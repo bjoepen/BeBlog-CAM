@@ -1,6 +1,7 @@
 import type { ToolpathPoint2 } from './canonicalToolpath';
 import type { CurvedFaceTarget } from './curvedFaceTarget';
 import { curvedFaceTargetZAt } from './curvedFaceTarget';
+import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type CurvedFaceRoughingLevel={
   z:number;
@@ -45,9 +46,11 @@ function safeFlatEndAt(
   radius:number,
   allowance:number,
   offsets:{x:number;y:number}[],
+  profile?:ZLevelPerformanceProfile,
 ){
   for(const offset of offsets){
-    const surfaceZ=curvedFaceTargetZAt(target,x+offset.x,y+offset.y);
+    if(profile)profile.curvedCutterSurfaceTests++;
+    const surfaceZ=curvedFaceTargetZAt(target,x+offset.x,y+offset.y,profile);
     if(surfaceZ===null)return false;
     if(levelZ<surfaceZ+allowance-EPS)return false;
   }
@@ -61,6 +64,7 @@ export function buildCurvedFaceRoughing(
   stepDownMm:number,
   stepoverPercent:number,
   finishAllowanceMm=0,
+  profile?:ZLevelPerformanceProfile,
 ):CurvedFaceRoughingResult{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -99,7 +103,7 @@ export function buildCurvedFaceRoughing(
       let start:number|null=null,last:number|null=null;
 
       for(let x=bounds.minX+radius;x<=bounds.maxX-radius+EPS;x+=sampleStep){
-        const safe=safeFlatEndAt(target,x,y,z,radius,finishAllowanceMm,diskOffsets);
+        const safe=safeFlatEndAt(target,x,y,z,radius,finishAllowanceMm,diskOffsets,profile);
         if(safe){
           safePointCount++;
           if(start===null)start=x;
