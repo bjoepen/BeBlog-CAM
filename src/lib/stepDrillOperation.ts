@@ -1,6 +1,7 @@
 import type { CanonicalMachineMotion, CanonicalToolpath, ToolpathPoint3 } from './canonicalToolpath';
 import { buildCanonicalHelicalDescent } from './helicalMotion';
-import { buildStepManufacturingFeatureSource } from './stepManufacturingFeatures';
+import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
+import { orientPoint3 } from './partOrientation';
 import { recognizeStepHoles, type StepHoleFeature } from './stepHoleRecognition';
 import { sampleStockSurfaceZ, simulateStockHeightfield } from './stockSimulation';
 import type { DrillOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
@@ -16,7 +17,6 @@ export type StepDrillOperationState={
 type P3={x:number;y:number;z:number};
 const EPS=1e-6;
 const DIAMETER_EPS_MM=0.01;
-const rotateZ=(p:P3,deg:number):P3=>{const a=deg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c,z:p.z};};
 const bounds=(points:P3[])=>({
   minX:Math.min(...points.map(p=>p.x)),maxX:Math.max(...points.map(p=>p.x)),
   minY:Math.min(...points.map(p=>p.y)),maxY:Math.max(...points.map(p=>p.y)),
@@ -25,7 +25,7 @@ const bounds=(points:P3[])=>({
 
 function placementTransform(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation){
   const values=summary.brep?.displayVertices??[],raw:P3[]=[];
-  for(let i=0;i+2<values.length;i+=3)raw.push(rotateZ({x:values[i],y:values[i+1],z:values[i+2]},orientation.rotationZDeg));
+  for(let i=0;i+2<values.length;i+=3)raw.push(orientPoint3({x:values[i],y:values[i+1],z:values[i+2]},orientation));
   if(!raw.length)return null;
   const b=bounds(raw),width=b.maxX-b.minX,height=b.maxY-b.minY;
   const tx=placement.horizontal==='left'?0:placement.horizontal==='right'?stock.width-width:(stock.width-width)/2;
@@ -39,9 +39,8 @@ function wcsOrigin(stock:StockDefinition,wcs:WorkCoordinateSystem):P3{return{
   z:wcs.z==='top'?stock.thickness:0,
 };}
 
-function machinePoint(tuple:[number,number,number],orientation:PartOrientation,transform:{dx:number;dy:number;dz:number},origin:P3):P3{
-  const r=rotateZ({x:tuple[0],y:tuple[1],z:tuple[2]},orientation.rotationZDeg);
-  return{x:r.x+transform.dx-origin.x,y:r.y+transform.dy-origin.y,z:r.z+transform.dz-origin.z};
+function machinePoint(tuple:[number,number,number],transform:{dx:number;dy:number;dz:number},origin:P3):P3{
+  return{x:tuple[0]+transform.dx-origin.x,y:tuple[1]+transform.dy-origin.y,z:tuple[2]+transform.dz-origin.z};
 }
 
 function requestedStart(featureTop:P3,operation:DrillOperation,restStockZ:number|null):P3{
@@ -95,14 +94,13 @@ export function buildStepDrillOperationState(args:{
   if(summary.kind!=='step')errors.push('STEP-Bohren benötigt einen STEP/BRep-Import.');
   if(stockMode==='none')errors.push('STEP-Bohren benötigt einen definierten Rohling.');
   if(wcs.z!=='top')errors.push('STEP-Bohren ist aktuell nur mit Z-Null auf der Rohlingoberseite freigegeben.');
-  if(Math.abs(orientation.rotationXDeg)>EPS||Math.abs(orientation.rotationYDeg)>EPS)errors.push('STEP-Bohren unterstützt aktuell nur Bauteilorientierung ohne X/Y-Kippung.');
   if((operation.depthMode??'manual')==='manual'&&operation.totalDepthMm<=0)errors.push('Bohrtiefe muss größer als 0 sein.');
   if((operation.overcutMm??0)<0)errors.push('Bohr-Overcut darf nicht negativ sein.');
   if(operation.stepDownMm<=0||operation.plungeMmMin<=0||operation.safeZMm<=0)errors.push('Zustellung, Eintauchvorschub und Sicherheits-Z müssen größer als 0 sein.');
   if(operation.tool.diameterMm<=0||operation.spindleRpm<=0)errors.push('Werkzeugdurchmesser und Drehzahl müssen größer als 0 sein.');
   if(operation.method==='helical-mill'&&operation.feedMmMin<=0)errors.push('Helixvorschub muss größer als 0 sein.');
 
-  const sourceResult=buildStepManufacturingFeatureSource(summary);
+  const sourceResult=buildOrientedStepManufacturingFeatureSource(summary,orientation);
   if(!sourceResult.ok){errors.push(...sourceResult.errors);return{ok:false,toolpath:null,errors,warnings,holes:[]};}
   const recognized=recognizeStepHoles(sourceResult.source);
   if(!recognized.holes.length)errors.push('Im STEP/BRep wurden keine sicher erkannten Bohrungen gefunden.');
@@ -132,7 +130,7 @@ export function buildStepDrillOperationState(args:{
   let state:ToolpathPoint3={x:0,y:0,z:operation.safeZMm};
   try{
     for(const hole of holes){
-      const a=machinePoint(hole.startCenter,orientation,transform,origin),b=machinePoint(hole.endCenter,orientation,transform,origin);
+      const a=machinePoint(hole.startCenter,transform,origin),b=machinePoint(hole.endCenter,transform,origin);
       const featureTop=a.z>=b.z?a:b,geometricBottom=a.z>=b.z?b:a;
       const centerX=(featureTop.x+geometricBottom.x)/2,centerY=(featureTop.y+geometricBottom.y)/2;
       const restStockZ=restSimulation?sampleStockSurfaceZ({simulation:restSimulation,stock,wcs,x:centerX,y:centerY}):0;

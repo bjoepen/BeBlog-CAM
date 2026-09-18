@@ -32,7 +32,7 @@ requireText(sideFaces,'while(d>Math.PI)d-=Math.PI*2','analytical fallback cannot
 requireText(openMath,'export function offsetOpenPolyline','shared open contour kernel owns polyline offset');
 requireText(openMath,'export function openContourCorrection','shared open contour kernel owns left/right/on-line correction');
 requireText(state,"operation.topology==='closed'",'STEP contour state retains closed topology path');
-requireText(state,"buildStepSideFaceContour(summary,operation.stepContourFaceIds??[])",'STEP open contour consumes side-face targets');
+requireText(state,"buildStepSideFaceContour(summary,operation.stepContourFaceIds??[],orientation)",'STEP open contour consumes oriented side-face targets');
 requireText(state,'stepSideFaceContourAfterExclusions(sideResult.target,excluded)','STEP side-face target supports edge refinement');
 requireText(state,'openContourCorrection(operation.openSide,operation.tool.diameterMm)','STEP open contour consumes shared side correction');
 requireText(state,'offsetOpenPolyline(source,correction)','STEP open contour consumes shared open offset kernel');

@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ZLevelRoughingOperation, SurfaceFinishingOperation, ContourOperation, PocketOperation, DrillOperation } from './types';
   import { projectPoint, projectTriangles, type P2, type P3, type View } from './stepView';
+  import { orientPoint3 } from './partOrientation';
+  import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
   import { decodeStepEdges } from './stepEdgeView';
   import { buildFaceTargetRoughing } from './faceTargetRoughing';
   import { buildFaceTargetRasterToolpath } from './faceTargetToolpath';
@@ -17,7 +19,6 @@
   import { buildSurfaceCarveViewProof } from './surfaceCarveViewProof';
   import { ballnoseContactAt } from './ballnoseSurfaceContact';
   import { buildModelRoughingCanonicalToolpath } from './modelRoughingToolpath';
-  import { buildStepManufacturingFeatureSource } from './stepManufacturingFeatures';
   import { recognizeStepHoles } from './stepHoleRecognition';
   import { buildStepContourOperationState } from './stepContourOperation';
   import { buildStepPocketOperationState } from './stepPocketOperation';
@@ -61,7 +62,7 @@
   $: faceTargetEditing=!!roughingOperation&&(roughingOperation.roughingMode??'face-target')==='face-target';
   $: surfaceFinishingEditing=!!surfaceFinishingOperation;
   $: selectableSurfaceEditing=faceTargetEditing||surfaceFinishingEditing;
-  $: stepFeatureSourceResult=summary.kind==='step'?buildStepManufacturingFeatureSource(summary):null;
+  $: stepFeatureSourceResult=summary.kind==='step'?buildOrientedStepManufacturingFeatureSource(summary,orientation):null;
   $: stepHoleCandidates=stepFeatureSourceResult?.ok?recognizeStepHoles(stepFeatureSourceResult.source).holes:[];
   $: stepContourSelection=stepSelectionOperation?.kind==='contour'?buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation:stepSelectionOperation}):null;
   $: stepPocketSelection=stepSelectionOperation?.kind==='pocket'?buildStepPocketOperationState({summary,stock,stockMode,placement,orientation,wcs,operation:stepSelectionOperation}):null;
@@ -74,8 +75,8 @@
   function fit(points:P2[]){const p=points.filter(finite);if(!p.length)return(q:P2)=>q;const xs=p.map(q=>q.x),ys=p.map(q=>q.y),a=Math.min(...xs),b=Math.max(...xs),c=Math.min(...ys),d=Math.max(...ys),sx=Math.max(b-a,1e-9),sy=Math.max(d-c,1e-9),s=Math.min((width-2*pad)/sx,(height-2*pad)/sy),ox=(width-sx*s)/2,oy=(height-sy*s)/2;return(q:P2)=>({x:ox+(q.x-a)*s,y:height-(oy+(q.y-c)*s)})}
   function sample(c:Curve2):Point2[]{if(c.kind==='line')return[c.start,c.end];if(c.kind==='polyline')return c.points;if(c.kind==='circle')return Array.from({length:65},(_,i)=>{const a=i/64*Math.PI*2;return{x:c.center.x+Math.cos(a)*c.radius,y:c.center.y+Math.sin(a)*c.radius}});if(c.kind==='arc'){let a=c.startAngleDeg,b=c.endAngleDeg;while(b<a)b+=360;return Array.from({length:33},(_,i)=>{const r=(a+(b-a)*i/32)*Math.PI/180;return{x:c.center.x+Math.cos(r)*c.radius,y:c.center.y+Math.sin(r)*c.radius}})}return[]}
   const path=(p:P2[],closed=false)=>p.map((q,i)=>`${i?'L':'M'}${q.x.toFixed(2)},${q.y.toFixed(2)}`).join(' ')+(closed?' Z':'');
-  function rotate2(p:P2):P2{const a=orientation.rotationZDeg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c}}
-  function rotate3(p:P3):P3{const q=rotate2(p);return{x:q.x,y:q.y,z:p.z}}
+  function rotate2(p:P2):P2{const q=orientPoint3({x:p.x,y:p.y,z:0},orientation);return{x:q.x,y:q.y}}
+  function rotate3(p:P3):P3{return orientPoint3(p,orientation)}
   function bounds3(p:P3[]){const x=p.map(q=>q.x),y=p.map(q=>q.y),z=p.map(q=>q.z);return{minX:Math.min(...x),maxX:Math.max(...x),minY:Math.min(...y),maxY:Math.max(...y),minZ:Math.min(...z)}}
   function bounds2(p:P2[]){const x=p.map(q=>q.x),y=p.map(q=>q.y);return{minX:Math.min(...x),maxX:Math.max(...x),minY:Math.min(...y),maxY:Math.max(...y)}}
   function place(a:number,b:number,c:number,d:number){const pw=b-a,ph=d-c,tx=placement.horizontal==='left'?0:placement.horizontal==='right'?stock.width-pw:(stock.width-pw)/2,ty=placement.vertical==='front'?0:placement.vertical==='back'?stock.height-ph:(stock.height-ph)/2;return{dx:tx-a+placement.offsetX,dy:ty-c+placement.offsetY}}
@@ -232,7 +233,7 @@
 
   onMount(()=>{const e=viewport,r=root,cm=(x:MouseEvent)=>x.preventDefault();e.addEventListener('pointerdown',down);window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);r.addEventListener('wheel',wheel,{passive:false});e.addEventListener('contextmenu',cm);applyViewBox();return()=>{e.removeEventListener('pointerdown',down);window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);r.removeEventListener('wheel',wheel);e.removeEventListener('contextmenu',cm)}});
   $: if(summary.fileName!==selectionSource){selectionSource=summary.fileName;onSelectedFaceIdsChange([])}
-  $: s3=(summary.fileName,preflightFaceTargetToolpaths,preflightStepToolpaths,showModelRegions,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget,showCurvedFaceRoughing,showBallnoseContactProof,scene3d({yaw,pitch},showZLevels&&faceTargetEditing,roughingOperation?.stepDownMm??1,selectedFaceIds,roughingOperation?.finishAllowanceMm??0,roughingOperation?.tool.diameterMm??1,roughingOperation?.stepoverPercent??40,((canonicalToolpath?.operationKind==='z-level-roughing'||canonicalToolpath?.operationKind==='surface-finishing'||canonicalToolpath?.operationKind==='drill')?[canonicalToolpath]:[...preflightFaceTargetToolpaths,...preflightStepToolpaths]),showModelRegions||showRoughingRegions||showModelRoughingToolpath,modelRegionSliceStepMm,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget||showCurvedFaceRoughing||showBallnoseContactProof,showCurvedFaceRoughing,showBallnoseContactProof));
+  $: s3=(summary.fileName,orientation.rotationXDeg,orientation.rotationYDeg,orientation.rotationZDeg,placement.horizontal,placement.vertical,placement.offsetX,placement.offsetY,placement.offsetZ,stock.width,stock.height,stock.thickness,preflightFaceTargetToolpaths,preflightStepToolpaths,showModelRegions,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget,showCurvedFaceRoughing,showBallnoseContactProof,scene3d({yaw,pitch},showZLevels&&faceTargetEditing,roughingOperation?.stepDownMm??1,selectedFaceIds,roughingOperation?.finishAllowanceMm??0,roughingOperation?.tool.diameterMm??1,roughingOperation?.stepoverPercent??40,((canonicalToolpath?.operationKind==='z-level-roughing'||canonicalToolpath?.operationKind==='surface-finishing'||canonicalToolpath?.operationKind==='drill')?[canonicalToolpath]:[...preflightFaceTargetToolpaths,...preflightStepToolpaths]),showModelRegions||showRoughingRegions||showModelRoughingToolpath,modelRegionSliceStepMm,showRoughingRegions,showModelRoughingToolpath,showCurvedFaceTarget||showCurvedFaceRoughing||showBallnoseContactProof,showCurvedFaceRoughing,showBallnoseContactProof));
   $: onFaceTargetChange(s3?.canonicalFaceTargetToolpath&&s3.targetZ!==null&&s3.roughBottomZ!==null?{toolpath:s3.canonicalFaceTargetToolpath,targetZ:s3.targetZ,roughBottomZ:s3.roughBottomZ}:null);
   $: onDrillViewModeChange(drillViewMode);
   $: if(!faceTargetEditing&&showZLevels)showZLevels=false;

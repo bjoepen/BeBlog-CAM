@@ -9,6 +9,7 @@ import { applyStepContourTabs } from './stepContourTabs';
 import { applyContourLeads } from './contourLeads';
 import { applyOpenContourRampEntry } from './openContourRampEntry';
 import { simulateStockHeightfield, sampleStockSurfaceZ } from './stockSimulation';
+import { orientPoint3 } from './partOrientation';
 import type { ContourOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 
 export type StepContourCandidate=StepContourTarget;
@@ -18,12 +19,11 @@ type EffectiveTarget={targetKey:string;points:P2[];edgeIds:number[];topology:'cl
 const EPS=1e-6;
 const dist=(a:P2,b:P2)=>Math.hypot(a.x-b.x,a.y-b.y);
 const same=(a:P2,b:P2)=>dist(a,b)<=1e-4;
-const rotateZ=(p:P3,deg:number):P3=>{const a=deg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c,z:p.z};};
 const bounds3=(points:P3[])=>({minX:Math.min(...points.map(p=>p.x)),maxX:Math.max(...points.map(p=>p.x)),minY:Math.min(...points.map(p=>p.y)),maxY:Math.max(...points.map(p=>p.y)),minZ:Math.min(...points.map(p=>p.z)),maxZ:Math.max(...points.map(p=>p.z))});
 
 function placementTransform(summary:ImportSummary,stock:StockDefinition,stockMode:StockMode,placement:PartPlacement,orientation:PartOrientation){
   const values=summary.brep?.displayVertices??[],raw:P3[]=[];
-  for(let i=0;i+2<values.length;i+=3)raw.push(rotateZ({x:values[i],y:values[i+1],z:values[i+2]},orientation.rotationZDeg));
+  for(let i=0;i+2<values.length;i+=3)raw.push(orientPoint3({x:values[i],y:values[i+1],z:values[i+2]},orientation));
   if(!raw.length)return null;
   const b=bounds3(raw),w=b.maxX-b.minX,h=b.maxY-b.minY;
   const tx=stockMode==='none'?0:placement.horizontal==='left'?0:placement.horizontal==='right'?stock.width-w:(stock.width-w)/2;
@@ -60,13 +60,12 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
   const depth=resolveContourDepth({operation,stock,stockMode,wcs});errors.push(...depth.errors);warnings.push(...depth.warnings);
   if(summary.kind!=='step')errors.push('STEP-Kontur benötigt einen STEP/BRep-Import.');
   if(wcs.z!=='top')errors.push('STEP-Kontur ist aktuell nur mit Z-Null oben freigegeben.');
-  if(Math.abs(orientation.rotationXDeg)>EPS||Math.abs(orientation.rotationYDeg)>EPS)errors.push('STEP-Kontur unterstützt aktuell keine X/Y-Kippung.');
   if(operation.stepDownMm<=0)errors.push('Zustellung muss größer als 0 sein.');
   if(operation.tool.diameterMm<=0)errors.push('Werkzeugdurchmesser muss größer als 0 sein.');
 
-  const targetResult=buildStepContourTargets(summary),all=targetResult.targets;errors.push(...targetResult.errors);
+  const targetResult=buildStepContourTargets(summary,orientation),all=targetResult.targets;errors.push(...targetResult.errors);
   const chosen=operation.stepWireId==null?null:all.find(candidate=>candidate.wireId===operation.stepWireId)??null;
-  const sideResult=buildStepSideFaceContour(summary,operation.stepContourFaceIds??[]);
+  const sideResult=buildStepSideFaceContour(summary,operation.stepContourFaceIds??[],orientation);
   const eligibleSideFaceIds=sideResult.eligibleFaceIds;
   const excluded=operation.excludedSegmentIds??[];
   let effective:EffectiveTarget|null=null;
@@ -99,7 +98,7 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
   const t=placementTransform(summary,stock,stockMode,placement,orientation);
   if(!t)return fail(['STEP-Bauteil konnte nicht transformiert werden.'],warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
   const origin=wcsOrigin(stock,stockMode,wcs,t.partBounds);
-  const source=effective.points.map(p=>{const q=rotateZ({x:p.x,y:p.y,z:0},orientation.rotationZDeg);return{x:q.x+t.dx-origin.x,y:q.y+t.dy-origin.y};});
+  const source=effective.points.map(p=>({x:p.x+t.dx-origin.x,y:p.y+t.dy-origin.y}));
   const radius=operation.tool.diameterMm/2;
   let path:P2[];
   if(operation.topology==='closed'){

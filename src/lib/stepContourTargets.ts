@@ -1,6 +1,6 @@
 import { polygonArea, type P2 } from './contourMath';
-import { buildStepManufacturingFeatureSource, type StepManufacturingEdgeSource, type StepManufacturingWireSource } from './stepManufacturingFeatures';
-import type { ImportSummary } from './types';
+import { buildOrientedStepManufacturingFeatureSource, type StepManufacturingEdgeSource, type StepManufacturingWireSource } from './stepManufacturingFeatures';
+import type { ImportSummary, PartOrientation } from './types';
 
 export type StepContourTargetTopology='closed'|'open';
 export type StepContourTargetSegment={edgeId:number;points:P2[]};
@@ -54,8 +54,8 @@ function flattenSegments(segments:StepContourTargetSegment[],closed:boolean):P2[
   return points;
 }
 
-export function buildStepContourTargets(summary:ImportSummary):StepContourTargetResult{
-  const source=buildStepManufacturingFeatureSource(summary);if(!source.ok)return{targets:[],errors:[...source.errors]};
+export function buildStepContourTargets(summary:ImportSummary,orientation?:PartOrientation):StepContourTargetResult{
+  const source=orientation?buildOrientedStepManufacturingFeatureSource(summary,orientation):buildOrientedStepManufacturingFeatureSource(summary,{rotationXDeg:0,rotationYDeg:0,rotationZDeg:0});if(!source.ok)return{targets:[],errors:[...source.errors]};
   const targets:StepContourTarget[]=[];
   for(const face of source.source.planarFaces){
     if(Math.abs(Math.abs(face.normal[2])-1)>1e-5)continue;

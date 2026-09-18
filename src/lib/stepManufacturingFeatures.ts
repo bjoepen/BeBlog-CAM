@@ -1,4 +1,5 @@
-import type { ImportSummary } from './types';
+import type { ImportSummary, PartOrientation } from './types';
+import { orientDirection3, orientTuple3 } from './partOrientation';
 
 export type StepFaceOrientation='forward'|'reversed'|'internal'|'external'|'unknown';
 export type StepManufacturingSurfaceKind='plane'|'cylinder'|'cone'|'sphere'|'torus'|'other';
@@ -69,4 +70,59 @@ export function buildStepManufacturingFeatureSource(summary:ImportSummary):StepM
   if(errors.length)return{ok:false,source:null,errors};
   const wiresByFace=new Map<number,StepManufacturingWireSource[]>();for(const wire of wires)wiresByFace.set(wire.faceId,[...(wiresByFace.get(wire.faceId)??[]),wire]);
   return{ok:true,errors:[],source:{version:2,source:'step-brep',exactBrep:true,faces:[...faces],planarFaces:faces.filter((f):f is StepPlanarFaceSource=>f.kind==='plane'),cylindricalFaces:faces.filter((f):f is StepCylindricalFaceSource=>f.kind==='cylinder'),edges:[...edges],wires:[...wires],wiresByFace}};
+}
+
+
+/**
+ * 008D-B: orientation-aware manufacturing view.
+ *
+ * Native STEP/BRep topology and identities remain the source of truth.
+ * Only geometric coordinates and directions are rotated. No placement,
+ * stock alignment, WCS translation or CAM classification happens here.
+ */
+export function orientStepManufacturingFeatureSource(
+  source:StepManufacturingFeatureSource,
+  orientation:PartOrientation,
+):StepManufacturingFeatureSource{
+  const faces=source.faces.map((face):StepManufacturingFaceSource=>{
+    if(face.kind==='plane')return{
+      ...face,
+      origin:orientTuple3(face.origin,orientation),
+      normal:orientDirection3(face.normal,orientation),
+    };
+    if(face.kind==='cylinder')return{
+      ...face,
+      axisOrigin:orientTuple3(face.axisOrigin,orientation),
+      axisDirection:orientDirection3(face.axisDirection,orientation),
+    };
+    return{...face};
+  });
+  const edges=source.edges.map((edge):StepManufacturingEdgeSource=>({
+    ...edge,
+    start:orientTuple3(edge.start,orientation),
+    end:orientTuple3(edge.end,orientation),
+    ...(edge.center?{center:orientTuple3(edge.center,orientation)}:{}),
+    ...(edge.axisDirection?{axisDirection:orientDirection3(edge.axisDirection,orientation)}:{}),
+  }));
+  const wires=source.wires.map(wire=>({...wire,edgeIds:[...wire.edgeIds]}));
+  const wiresByFace=new Map<number,StepManufacturingWireSource[]>();
+  for(const wire of wires)wiresByFace.set(wire.faceId,[...(wiresByFace.get(wire.faceId)??[]),wire]);
+  return{
+    ...source,
+    faces,
+    planarFaces:faces.filter((face):face is StepPlanarFaceSource=>face.kind==='plane'),
+    cylindricalFaces:faces.filter((face):face is StepCylindricalFaceSource=>face.kind==='cylinder'),
+    edges,
+    wires,
+    wiresByFace,
+  };
+}
+
+export function buildOrientedStepManufacturingFeatureSource(
+  summary:ImportSummary,
+  orientation:PartOrientation,
+):StepManufacturingFeatureSourceResult{
+  const native=buildStepManufacturingFeatureSource(summary);
+  if(!native.ok)return native;
+  return{ok:true,errors:[],source:orientStepManufacturingFeatureSource(native.source,orientation)};
 }

@@ -147,3 +147,33 @@ Ein kontrollierter Maschinen-Dry-Run und eine gegebenenfalls anschließende real
 ### Merge-Interpretation
 
 Die bewusst verschobenen externen 008C3/008C4-Abnahmen stellen keine offene Software-Implementierung dar. Der 008-Softwarestand kann nach finalem read-only Branch-/Merge-Audit abgeschlossen und gemergt werden. Die spätere Estlcam-/Maschinenqualifikation wird gegen das eingefrorene Referenzartefakt durchgeführt und separat dokumentiert.
+
+
+---
+
+## 008D — STEP Model Orientation
+
+- **Kategorie:** STEP Manufacturing View / Model Setup / UX
+- **Status:** PASS / Real-World accepted
+- **Scope:** 3D-Part-Orientation vor CAM; keine Änderung an Canonical Toolpath, 004T Safe Motion, Preview/Preflight Motion Truth oder Postprozessoren.
+
+### Implementierter Contract
+
+1. Eine gemeinsame 3D-Orientation-Truth transformiert Punkte und Richtungen deterministisch in der festen Reihenfolge X → Y → Z.
+2. Der native STEP/BRep-Source bleibt unverändert; die Manufacturing View wird daraus orientiert abgeleitet.
+3. STEP-Feature- und CAM-Consumer verwenden dieselbe orientierte Manufacturing Truth.
+4. Die UX bietet +Z/−Z/+X/−X/+Y/−Y als Modell-oben-Auswahl, Z-Rotation und Reset.
+5. Bauteilabmessungen bei Part-Bounds werden aus der orientierten Geometrie neu bestimmt.
+6. Die bestehende Projekt-Persistenz speichert die Orientation reproduzierbar.
+
+### Regression / Acceptance
+
+`check:008d:all`, `pnpm check` und `pnpm build` sind lokal PASS.
+
+Der Real-World-Test wurde im nativen macOS-Entwicklungspfad mit OCCT durchgeführt. STEP-Geometrie wird über `pnpm native:dev` geladen; `pnpm tauri dev` ist für die vollständige native STEP-/OCCT-Qualifikation nicht der maßgebliche Laufzeitpfad.
+
+Im Native UI wurde die STEP-Darstellung bestätigt und das Modell erfolgreich über die neuen X/Y/Z-Orientierungen in unterschiedliche Fertigungslagen gedreht.
+
+### Abschluss
+
+**008D ist PASS / Real-World accepted.** Der Branch ist für Pull Request und Merge-Review freigegeben.
