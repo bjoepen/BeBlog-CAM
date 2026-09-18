@@ -10,6 +10,7 @@ import type { CanonicalToolpath } from './canonicalToolpath';
 import { buildFaceTargetOperationState } from './faceTargetOperation';
 import { buildModelRoughingOperationState } from './modelRoughingOperation';
 import { buildCurvedFaceRoughingOperationState } from './curvedFaceRoughingOperation';
+import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type ZLevelTargetKind='planar-face'|'curved-face'|'model';
 
@@ -37,6 +38,7 @@ export function buildZLevelOperationState(args:{
   orientation:PartOrientation;
   wcs:WorkCoordinateSystem;
   operation:ZLevelRoughingOperation;
+  profile?:ZLevelPerformanceProfile;
 }):ZLevelOperationState{
   const mode=zLevelMode(args.operation);
 
