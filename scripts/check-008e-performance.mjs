@@ -21,6 +21,13 @@ for (const [path, needles] of required) {
   }
 }
 
+const app = fs.readFileSync('src/App.svelte', 'utf8');
+const editSection = app.slice(app.indexOf("activeCanonicalToolpath=buildOrderedActiveCanonicalToolpath"), app.indexOf("const operationLabel="));
+if (editSection.includes("activeFaceTargetOperationState=")) throw new Error('008E single-calculation contract: eager active face-target reconstruction returned');
+for (const guard of ["activeStep==='Prüfen'&&importSummary?operationsProject.operations", "activeStep==='Prüfen'&&importSummary?.kind==='step'", "(activeStep==='Prüfen'||activeStep==='Fräsen')&&importSummary?validateJob"]) {
+  if (!editSection.includes(guard)) throw new Error(`008E single-calculation contract: missing edit-time guard ${guard}`);
+}
+
 const forbidden = [
   ['src/lib/zLevelPerformance.ts', ['Date.now','performance.now','console.time']],
   ['src/App.svelte', ['buildActiveCanonicalToolpathProfiled']],
