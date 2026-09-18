@@ -7,11 +7,22 @@ export type CurvedFaceTriangle={
   c:P3;
 };
 
+type CurvedFaceSpatialIndex={
+  minX:number;
+  minY:number;
+  cellWidth:number;
+  cellHeight:number;
+  columns:number;
+  rows:number;
+  cells:number[][];
+};
+
 export type CurvedFaceTarget={
   valid:boolean;
   faceIds:number[];
   triangles:CurvedFaceTriangle[];
   bounds:{minX:number;maxX:number;minY:number;maxY:number;minZ:number;maxZ:number}|null;
+  spatialIndex:CurvedFaceSpatialIndex|null;
   errors:string[];
   warnings:string[];
 };
@@ -20,6 +31,37 @@ const EPS=1e-8;
 
 function area2(a:P3,b:P3,c:P3){
   return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+}
+
+function buildSpatialIndex(triangles:CurvedFaceTriangle[],bounds:NonNullable<CurvedFaceTarget['bounds']>):CurvedFaceSpatialIndex{
+  // Uniform XY grid: deterministic acceleration only. Every triangle is
+  // registered in every cell touched by its projected AABB, so lookup cannot
+  // discard a triangle that the previous exhaustive barycentric test could hit.
+  const count=Math.max(1,triangles.length);
+  const aspect=Math.max(1e-6,(bounds.maxX-bounds.minX)/Math.max(1e-6,bounds.maxY-bounds.minY));
+  const columns=Math.max(1,Math.min(128,Math.ceil(Math.sqrt(count*aspect))));
+  const rows=Math.max(1,Math.min(128,Math.ceil(count/columns)));
+  const cellWidth=Math.max(EPS,(bounds.maxX-bounds.minX)/columns);
+  const cellHeight=Math.max(EPS,(bounds.maxY-bounds.minY)/rows);
+  const cells=Array.from({length:columns*rows},()=>[] as number[]);
+  const clamp=(v:number,max:number)=>Math.max(0,Math.min(max,Math.floor(v)));
+  triangles.forEach((triangle,index)=>{
+    const minX=Math.min(triangle.a.x,triangle.b.x,triangle.c.x),maxX=Math.max(triangle.a.x,triangle.b.x,triangle.c.x);
+    const minY=Math.min(triangle.a.y,triangle.b.y,triangle.c.y),maxY=Math.max(triangle.a.y,triangle.b.y,triangle.c.y);
+    const x0=clamp((minX-bounds.minX)/cellWidth,columns-1),x1=clamp((maxX-bounds.minX)/cellWidth,columns-1);
+    const y0=clamp((minY-bounds.minY)/cellHeight,rows-1),y1=clamp((maxY-bounds.minY)/cellHeight,rows-1);
+    for(let row=y0;row<=y1;row++)for(let column=x0;column<=x1;column++)cells[row*columns+column].push(index);
+  });
+  return{minX:bounds.minX,minY:bounds.minY,cellWidth,cellHeight,columns,rows,cells};
+}
+
+function candidateTriangleIndices(target:CurvedFaceTarget,x:number,y:number):number[]|null{
+  const index=target.spatialIndex,bounds=target.bounds;
+  if(!index||!bounds)return null;
+  if(x<bounds.minX-EPS||x>bounds.maxX+EPS||y<bounds.minY-EPS||y>bounds.maxY+EPS)return[];
+  const column=Math.max(0,Math.min(index.columns-1,Math.floor((x-index.minX)/index.cellWidth)));
+  const row=Math.max(0,Math.min(index.rows-1,Math.floor((y-index.minY)/index.cellHeight)));
+  return index.cells[row*index.columns+column];
 }
 
 function barycentricXY(t:CurvedFaceTriangle,x:number,y:number){
@@ -42,7 +84,10 @@ export function curvedFaceTargetZAt(
   if(!target.valid)return null;
   let hit:number|null=null;
 
-  for(const triangle of target.triangles){
+  const candidates=candidateTriangleIndices(target,x,y);
+  const triangleIndices=candidates??target.triangles.map((_,index)=>index);
+  for(const index of triangleIndices){
+    const triangle=target.triangles[index];
     if(profile)profile.curvedTargetTriangleTests++;
     const bc=barycentricXY(triangle,x,y);
     if(!bc)continue;
@@ -95,6 +140,7 @@ export function buildCurvedFaceTarget(
   }
 
   let bounds:CurvedFaceTarget['bounds']=null;
+  let spatialIndex:CurvedFaceSpatialIndex|null=null;
   if(triangles.length){
     const points=triangles.flatMap(t=>[t.a,t.b,t.c]);
     const xs=points.map(p=>p.x),ys=points.map(p=>p.y),zs=points.map(p=>p.z);
@@ -103,6 +149,8 @@ export function buildCurvedFaceTarget(
       minY:Math.min(...ys),maxY:Math.max(...ys),
       minZ:Math.min(...zs),maxZ:Math.max(...zs),
     };
+
+    spatialIndex=buildSpatialIndex(triangles,bounds);
 
     if(bounds.maxZ-bounds.minZ<=1e-4){
       warnings.push('Die ausgewählte Fläche ist praktisch planar; Curved Face Target ist dafür nicht erforderlich.');
@@ -115,7 +163,10 @@ export function buildCurvedFaceTarget(
       for(let ix=0;ix<=nx;ix++){
         const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;
         let hit:number|null=null;
-        for(const triangle of triangles){
+        const candidates=spatialIndex?candidateTriangleIndices({valid:true,faceIds:[],triangles,bounds,spatialIndex,errors:[],warnings:[]},x,y):null;
+        const triangleIndices=candidates??triangles.map((_,index)=>index);
+        for(const triangleIndex of triangleIndices){
+          const triangle=triangles[triangleIndex];
           if(profile)profile.curvedTargetTriangleTests++;
           const bc=barycentricXY(triangle,x,y);
           if(!bc)continue;
@@ -136,6 +187,7 @@ export function buildCurvedFaceTarget(
     faceIds:[...selected],
     triangles,
     bounds,
+    spatialIndex,
     errors:[...new Set(errors)],
     warnings:[...new Set(warnings)],
   };
