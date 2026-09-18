@@ -1,7 +1,7 @@
 import type { P2 } from './contourMath';
 import { decodeStepEdges } from './stepEdgeView';
-import { buildStepManufacturingFeatureSource, type StepManufacturingEdgeSource, type StepManufacturingFaceSource } from './stepManufacturingFeatures';
-import type { ImportSummary } from './types';
+import { buildOrientedStepManufacturingFeatureSource, type StepManufacturingEdgeSource, type StepManufacturingFaceSource } from './stepManufacturingFeatures';
+import type { ImportSummary, PartOrientation } from './types';
 
 export type StepSideFaceContourSegment={edgeId:number;points:P2[]};
 export type StepSideFaceContourTarget={
@@ -91,8 +91,8 @@ function chainSegments(segments:StepSideFaceContourSegment[]){
   return{segments:out,edgeIds:out.map(segment=>segment.edgeId),points};
 }
 
-export function buildStepSideFaceContour(summary:ImportSummary,selectedFaceIds:number[]):StepSideFaceContourResult{
-  const sourceResult=buildStepManufacturingFeatureSource(summary);if(!sourceResult.ok)return{target:null,eligibleFaceIds:[],errors:[...sourceResult.errors]};
+export function buildStepSideFaceContour(summary:ImportSummary,selectedFaceIds:number[],orientation:PartOrientation={rotationXDeg:0,rotationYDeg:0,rotationZDeg:0}):StepSideFaceContourResult{
+  const sourceResult=buildOrientedStepManufacturingFeatureSource(summary,orientation);if(!sourceResult.ok)return{target:null,eligibleFaceIds:[],errors:[...sourceResult.errors]};
   const source=sourceResult.source;
   const eligibleFaceIds=source.faces.filter(isStepContourSideFace).map(face=>face.faceId);
   if(!selectedFaceIds.length)return{target:null,eligibleFaceIds,errors:[]};
