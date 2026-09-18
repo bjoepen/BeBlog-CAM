@@ -65,6 +65,7 @@ export function buildCurvedFaceTarget(
   partTriangles:P3[],
   displayFaceIds:number[],
   selectedFaceIds:number[],
+  profile?:ZLevelPerformanceProfile,
 ):CurvedFaceTarget{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -115,6 +116,7 @@ export function buildCurvedFaceTarget(
         const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;
         let hit:number|null=null;
         for(const triangle of triangles){
+          if(profile)profile.curvedTargetTriangleTests++;
           const bc=barycentricXY(triangle,x,y);
           if(!bc)continue;
           const z=bc.u*triangle.a.z+bc.v*triangle.b.z+bc.w*triangle.c.z;
