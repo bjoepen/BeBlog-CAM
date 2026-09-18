@@ -59,7 +59,7 @@ function safeSegment(
   profile?:ZLevelPerformanceProfile,
 ){
   const distance=Math.hypot(b.x-a.x,b.y-a.y);
-  if(distance<=EPS)return safeAt(loops,a,radius);
+  if(distance<=EPS)return safeAt(loops,a,radius,profile);
   const steps=Math.max(1,Math.ceil(distance/Math.max(.1,sampleStep)));
   for(let i=0;i<=steps;i++){
     const t=i/steps;
