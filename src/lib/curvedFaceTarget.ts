@@ -33,6 +33,38 @@ function area2(a:P3,b:P3,c:P3){
   return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
 }
 
+const EDGE_QUANTIZATION=1e-7;
+
+function pointKey(point:P3){
+  const q=(value:number)=>Math.round(value/EDGE_QUANTIZATION);
+  return `${q(point.x)},${q(point.y)},${q(point.z)}`;
+}
+
+function edgeKey(a:P3,b:P3){
+  const ka=pointKey(a),kb=pointKey(b);
+  return ka<kb?`${ka}|${kb}`:`${kb}|${ka}`;
+}
+
+function triangleEdges(triangle:CurvedFaceTriangle){
+  return[
+    edgeKey(triangle.a,triangle.b),
+    edgeKey(triangle.b,triangle.c),
+    edgeKey(triangle.c,triangle.a),
+  ];
+}
+
+function selectedEdgeUseCounts(triangles:CurvedFaceTriangle[]){
+  const counts=new Map<string,number>();
+  for(const triangle of triangles){
+    for(const edge of triangleEdges(triangle))counts.set(edge,(counts.get(edge)??0)+1);
+  }
+  return counts;
+}
+
+function touchesSelectedFaceBoundary(triangle:CurvedFaceTriangle,edgeUseCounts:Map<string,number>){
+  return triangleEdges(triangle).some(edge=>(edgeUseCounts.get(edge)??0)===1);
+}
+
 function buildSpatialIndex(triangles:CurvedFaceTriangle[],bounds:NonNullable<CurvedFaceTarget['bounds']>):CurvedFaceSpatialIndex{
   // Uniform XY grid: deterministic acceleration only. Every triangle is
   // registered in every cell touched by its projected AABB, so lookup cannot
@@ -121,18 +153,44 @@ export function buildCurvedFaceTarget(
     errors.push('STEP/BRep Face-ID-Zuordnung ist unvollständig.');
   }
 
-  const triangles:CurvedFaceTriangle[]=[];
+  const selectedTriangles:{faceId:number;triangle:CurvedFaceTriangle}[]=[];
   for(let i=0;i+2<partTriangles.length;i+=3){
     const faceId=displayFaceIds[Math.floor(i/3)];
     if(!selected.has(faceId))continue;
-    const a=partTriangles[i],b=partTriangles[i+1],c=partTriangles[i+2];
+    selectedTriangles.push({
+      faceId,
+      triangle:{a:partTriangles[i],b:partTriangles[i+1],c:partTriangles[i+2]},
+    });
+  }
 
-    // For a height field z(x,y), each projected triangle must have non-zero XY area.
-    if(Math.abs(area2(a,b,c))<=EPS){
-      errors.push(`Ausgewählte Fläche ${faceId} enthält eine vertikale oder XY-degenerierte Dreiecksprojektion.`);
+  // 008H: a smooth 3-axis height field may reach a vertical tangent exactly at
+  // its BRep boundary (hemisphere equator, rounded grip edge, fillet, ...).
+  // OCCT can represent that boundary with triangles whose XY projection is
+  // degenerate. Those triangles carry no usable Z(x,y) interpolation anyway.
+  //
+  // They may be excluded only when topology proves that the triangle touches
+  // the boundary of the selected face. An XY-degenerate triangle in the
+  // interior remains fail-closed because it can represent a vertical fold or
+  // other non-height-field geometry.
+  const edgeUseCounts=selectedEdgeUseCounts(selectedTriangles.map(item=>item.triangle));
+  const triangles:CurvedFaceTriangle[]=[];
+  let excludedBoundaryDegenerateCount=0;
+  for(const {faceId,triangle} of selectedTriangles){
+    if(Math.abs(area2(triangle.a,triangle.b,triangle.c))<=EPS){
+      if(touchesSelectedFaceBoundary(triangle,edgeUseCounts)){
+        excludedBoundaryDegenerateCount++;
+        continue;
+      }
+      errors.push(`Ausgewählte Fläche ${faceId} enthält eine innere vertikale oder XY-degenerierte Dreiecksprojektion.`);
       continue;
     }
-    triangles.push({a,b,c});
+    triangles.push(triangle);
+  }
+
+  if(excludedBoundaryDegenerateCount){
+    warnings.push(
+      `${excludedBoundaryDegenerateCount} XY-degenerierte Randdreieck${excludedBoundaryDegenerateCount===1?'':'e'} wurde${excludedBoundaryDegenerateCount===1?'':'n'} als nicht interpolierbare BRep-Grenze ausgeschlossen.`,
+    );
   }
 
   if(!triangles.length&&!errors.length){
