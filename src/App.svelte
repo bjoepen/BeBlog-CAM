@@ -24,7 +24,7 @@
   import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultFacingOperation, defaultContourOperation, defaultPocketOperation, defaultCarveOperation, defaultDrillOperation, defaultZLevelRoughingOperation, defaultSurfaceFinishingOperation, defaultOperationsProject } from './lib/types';
   import { activeOperation, addOperation, cloneOperation, dxfTargetIds, operationSummary, removeOperation, replaceOperation, selectOperation } from './lib/operationsProject';
   import { toggleDxfTargetId } from './lib/dxfMultiTargetSelection';
-  import { buildActiveCanonicalToolpath } from './lib/activeCanonicalToolpath';
+  import { buildActiveCanonicalToolpath, buildActiveCanonicalToolpathProfiled } from './lib/activeCanonicalToolpath';
   import { buildZLevelOperationState, zLevelMode } from './lib/zLevelOperationState';
   import { resolveContourDepth } from './lib/contourDepth';
   import { validateJob, type JobPreflightResult } from './lib/jobPreflight';
@@ -76,6 +76,21 @@
     return toolpaths;
   }
   $: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject);
+  let last008eProfileKey='';
+  $: if(import.meta.env.DEV&&importSummary&&operation.kind==='z-level-roughing'&&zLevelMode(operation)==='model'){
+    const previousToolpaths:CanonicalToolpath[]=[];
+    for(const candidate of operationsProject.operations){
+      if(candidate.enabled===false||candidate.id===operation.id)break;
+      const toolpath=buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation:candidate,previousToolpaths});
+      if(toolpath)previousToolpaths.push(toolpath);
+    }
+    const measured=buildActiveCanonicalToolpathProfiled({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths});
+    const key=JSON.stringify(measured.profile);
+    if(key!==last008eProfileKey){
+      last008eProfileKey=key;
+      console.info('[008E Z-Level Performance]',measured.profile);
+    }
+  }
   $: activeFaceTargetOperationState=importSummary&&operation.kind==='z-level-roughing'?buildZLevelOperationState({summary:importSummary,stock,placement,orientation,wcs,operation}):null;
   $: preflightFaceTargetStates=importSummary?operationsProject.operations.filter((op):op is ZLevelRoughingOperation=>op.enabled!==false&&op.kind==='z-level-roughing').map(op=>({operationId:op.id,state:buildZLevelOperationState({summary:importSummary!,stock,placement,orientation,wcs,operation:op})})).filter(entry=>entry.state.toolpath!==null&&entry.state.errors.length===0):[];
   $: preflightStepToolpaths=importSummary?.kind==='step'?buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter(toolpath=>toolpath.operationKind!=='z-level-roughing'):[];
