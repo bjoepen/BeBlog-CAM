@@ -105,7 +105,7 @@ export function buildCurvedFaceRoughingOperationState(args:{
     };
   }
 
-  const target=buildCurvedFaceTarget(part,faceIds,operation.faceIds);
+  const target=buildCurvedFaceTarget(part,faceIds,operation.faceIds,args.profile);
   errors.push(...target.errors);
   warnings.push(...target.warnings);
   if(!target.valid||!target.bounds){
