@@ -8,7 +8,7 @@ const required = [
   ['src/lib/modelRoughingOperation.ts', ['profile?:ZLevelPerformanceProfile','profile.accessibilitySamples++','profile.accessibilityRegionTests++','sliceTrianglesAtZ(part,z,profile)']],
   ['src/lib/zLevelOperationState.ts', ['profile?:ZLevelPerformanceProfile','buildModelRoughingOperationState(args)']],
   ['src/lib/activeCanonicalToolpath.ts', ['buildActiveCanonicalToolpathProfiled','zLevelPerformanceProfile:profile']],
-  ['src/App.svelte', ["import.meta.env.DEV","[008E Z-Level Performance]","buildActiveCanonicalToolpathProfiled"]],
+  ['src/App.svelte', ["import.meta.env.DEV","008E · Performance-Diagnose","buildActiveCanonicalToolpathProfiled","zLevel008eProfile"]],
 ];
 
 for (const [path, needles] of required) {
