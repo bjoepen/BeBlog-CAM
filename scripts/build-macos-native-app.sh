@@ -41,21 +41,23 @@ for library in "${roots[@]}"; do
   queue+=("$candidate")
 done
 
-declare -A seen
+seen_file="$STAGE/.seen"
+: > "$seen_file"
+
 while [[ ${#queue[@]} -gt 0 ]]; do
   current="${queue[0]}"
   queue=("${queue[@]:1}")
   name="$(basename "$current")"
 
-  if [[ -n "${seen[$name]:-}" ]]; then
+  if grep -Fxq "$name" "$seen_file"; then
     continue
   fi
-  seen["$name"]=1
+  printf '%s\n' "$name" >> "$seen_file"
   cp -L "$current" "$STAGE/$name"
 
   while IFS= read -r dependency; do
     dep_name="${dependency#@rpath/}"
-    if [[ -n "${seen[$dep_name]:-}" ]]; then
+    if grep -Fxq "$dep_name" "$seen_file"; then
       continue
     fi
     dep_path="$PREFIX/lib/$dep_name"
@@ -67,7 +69,8 @@ while [[ ${#queue[@]} -gt 0 ]]; do
   done < <(otool -L "$current" | awk '/@rpath\/libTK/ {print $1}')
 done
 
-framework_count="${#seen[@]}"
+framework_count="$(wc -l < "$seen_file" | tr -d '[:space:]')"
+rm -f "$seen_file"
 
 python3 - "$ROOT/src-tauri" "$STAGE" "$CONFIG" <<'PY'
 import json
