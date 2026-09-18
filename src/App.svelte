@@ -24,7 +24,8 @@
   import { defaultStock, defaultPartPlacement, defaultPartOrientation, defaultWcs, defaultFacingOperation, defaultContourOperation, defaultPocketOperation, defaultCarveOperation, defaultDrillOperation, defaultZLevelRoughingOperation, defaultSurfaceFinishingOperation, defaultOperationsProject } from './lib/types';
   import { activeOperation, addOperation, cloneOperation, dxfTargetIds, operationSummary, removeOperation, replaceOperation, selectOperation } from './lib/operationsProject';
   import { toggleDxfTargetId } from './lib/dxfMultiTargetSelection';
-  import { buildActiveCanonicalToolpath, buildActiveCanonicalToolpathProfiled } from './lib/activeCanonicalToolpath';
+  import { buildActiveCanonicalToolpath } from './lib/activeCanonicalToolpath';
+  import { createZLevelPerformanceProfile, type ZLevelPerformanceProfile } from './lib/zLevelPerformance';
   import { buildZLevelOperationState, zLevelMode } from './lib/zLevelOperationState';
   import { resolveContourDepth } from './lib/contourDepth';
   import { validateJob, type JobPreflightResult } from './lib/jobPreflight';
@@ -54,16 +55,16 @@
   let jobPreflight:JobPreflightResult|null=null;
   let faceTargetState:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null=null;
   function receiveFaceTargetState(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null){faceTargetState=state;}
-  function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject){
+  function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject,profile?:ZLevelPerformanceProfile){
     if(!summary)return null;
     const previousToolpaths:CanonicalToolpath[]=[];
     for(const candidate of project.operations){
       if(candidate.enabled===false)continue;
-      if(candidate.id===currentOperation.id)return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths});
+      if(candidate.id===currentOperation.id)return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths,zLevelPerformanceProfile:profile});
       const toolpath=buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:candidate,previousToolpaths});
       if(toolpath)previousToolpaths.push(toolpath);
     }
-    return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths});
+    return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths,zLevelPerformanceProfile:profile});
   }
   function buildOrderedJobCanonicalToolpaths(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,project:OperationsProject){
     if(!summary)return[];
@@ -75,17 +76,12 @@
     }
     return toolpaths;
   }
-  $: activeCanonicalToolpath = buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject);
-  let zLevel008eProfile:import('./lib/zLevelPerformance').ZLevelPerformanceProfile|null=null;
-  $: if(import.meta.env.DEV&&importSummary&&operation.kind==='z-level-roughing'&&zLevelMode(operation)==='model'){
-    const previousToolpaths:CanonicalToolpath[]=[];
-    for(const candidate of operationsProject.operations){
-      if(candidate.enabled===false||candidate.id===operation.id)break;
-      const toolpath=buildActiveCanonicalToolpath({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation:candidate,previousToolpaths});
-      if(toolpath)previousToolpaths.push(toolpath);
-    }
-    zLevel008eProfile=buildActiveCanonicalToolpathProfiled({summary:importSummary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths}).profile;
-  }else zLevel008eProfile=null;
+  let zLevel008eProfile:ZLevelPerformanceProfile|null=null;
+  $: {
+    const profile=import.meta.env.DEV&&importSummary&&operation.kind==='z-level-roughing'&&zLevelMode(operation)==='model'?createZLevelPerformanceProfile():undefined;
+    activeCanonicalToolpath=buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject,profile);
+    zLevel008eProfile=profile??null;
+  }
   $: activeFaceTargetOperationState=importSummary&&operation.kind==='z-level-roughing'?buildZLevelOperationState({summary:importSummary,stock,placement,orientation,wcs,operation}):null;
   $: preflightFaceTargetStates=importSummary?operationsProject.operations.filter((op):op is ZLevelRoughingOperation=>op.enabled!==false&&op.kind==='z-level-roughing').map(op=>({operationId:op.id,state:buildZLevelOperationState({summary:importSummary!,stock,placement,orientation,wcs,operation:op})})).filter(entry=>entry.state.toolpath!==null&&entry.state.errors.length===0):[];
   $: preflightStepToolpaths=importSummary?.kind==='step'?buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter(toolpath=>toolpath.operationKind!=='z-level-roughing'):[];
