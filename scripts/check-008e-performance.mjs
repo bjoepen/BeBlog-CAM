@@ -11,7 +11,6 @@ const required = [
   ['src/lib/curvedFaceTarget.ts', ['profile?:ZLevelPerformanceProfile','profile.curvedTargetTriangleTests++','type CurvedFaceSpatialIndex','buildSpatialIndex','candidateTriangleIndices','spatialIndex=buildSpatialIndex(triangles,bounds)']],
   ['src/lib/curvedFaceRoughing.ts', ['profile?:ZLevelPerformanceProfile','profile.curvedCutterSurfaceTests++','profile.curvedRejectOutsideTarget++','profile.curvedRejectSurfaceAboveLevel++']],
   ['src/lib/activeCanonicalToolpath.ts', ['buildActiveCanonicalToolpathProfiled','zLevelPerformanceProfile:profile']],
-  ['src/App.svelte', ["import.meta.env.DEV","008E · Performance-Diagnose","createZLevelPerformanceProfile","zLevelPerformanceProfile:profile","zLevel008eProfile","Curved Triangle","Curved Cutter Samples","Reject · Outside Target","Reject · Surface Above Level"]],
 ];
 
 for (const [path, needles] of required) {
@@ -22,6 +21,9 @@ for (const [path, needles] of required) {
 }
 
 const app = fs.readFileSync('src/App.svelte', 'utf8');
+for (const needle of ['008E · Performance-Diagnose','zLevel008eProfile','createZLevelPerformanceProfile']) {
+  if (app.includes(needle)) throw new Error(`008E cleanup contract: App.svelte still contains temporary diagnostic ${needle}`);
+}
 const editSection = app.slice(app.indexOf("activeCanonicalToolpath=buildOrderedActiveCanonicalToolpath"), app.indexOf("const operationLabel="));
 if (editSection.includes("activeFaceTargetOperationState=")) throw new Error('008E single-calculation contract: eager active face-target reconstruction returned');
 for (const guard of ["activeStep==='Prüfen'&&importSummary?operationsProject.operations", "activeStep==='Prüfen'&&importSummary?.kind==='step'", "(activeStep==='Prüfen'||activeStep==='Fräsen')&&importSummary?validateJob"]) {
@@ -30,7 +32,6 @@ for (const guard of ["activeStep==='Prüfen'&&importSummary?operationsProject.op
 
 const forbidden = [
   ['src/lib/zLevelPerformance.ts', ['Date.now','performance.now','console.time']],
-  ['src/App.svelte', ['buildActiveCanonicalToolpathProfiled']],
 ];
 for (const [path, needles] of forbidden) {
   const text = fs.readFileSync(path, 'utf8');
