@@ -1,3 +1,4 @@
+import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 export type ZPoint3 = { x:number; y:number; z:number };
 export type ZPoint2 = { x:number; y:number };
 export type ZLevelChain = { z:number; points:ZPoint2[]; closed:boolean };
@@ -73,9 +74,10 @@ export function zLevelRange(points:ZPoint3[],stepDownMm:number):number[]{
   return levels;
 }
 
-export function sliceTrianglesAtZ(points:ZPoint3[],z:number):ZLevelSlice{
+export function sliceTrianglesAtZ(points:ZPoint3[],z:number,profile?:ZLevelPerformanceProfile):ZLevelSlice{
   const unique=new Map<string,[ZPoint2,ZPoint2]>();
   for(let i=0;i+2<points.length;i+=3){
+    if(profile)profile.triangleTests++;
     const segment=triangleSegment(points[i],points[i+1],points[i+2],z);
     if(segment)unique.set(segmentKey(segment[0],segment[1]),segment);
   }
