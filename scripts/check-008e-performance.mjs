@@ -8,7 +8,7 @@ const required = [
   ['src/lib/modelRoughingOperation.ts', ['profile?:ZLevelPerformanceProfile','profile.accessibilitySamples++','profile.accessibilityRegionTests++','sliceTrianglesAtZ(part,z,profile)']],
   ['src/lib/zLevelOperationState.ts', ['profile?:ZLevelPerformanceProfile','buildModelRoughingOperationState(args)']],
   ['src/lib/activeCanonicalToolpath.ts', ['buildActiveCanonicalToolpathProfiled','zLevelPerformanceProfile:profile']],
-  ['src/App.svelte', ["import.meta.env.DEV","008E · Performance-Diagnose","buildActiveCanonicalToolpathProfiled","zLevel008eProfile"]],
+  ['src/App.svelte', ["import.meta.env.DEV","008E · Performance-Diagnose","createZLevelPerformanceProfile","zLevelPerformanceProfile:profile","zLevel008eProfile"]],
 ];
 
 for (const [path, needles] of required) {
@@ -20,6 +20,7 @@ for (const [path, needles] of required) {
 
 const forbidden = [
   ['src/lib/zLevelPerformance.ts', ['Date.now','performance.now','console.time']],
+  ['src/App.svelte', ['buildActiveCanonicalToolpathProfiled']],
 ];
 for (const [path, needles] of forbidden) {
   const text = fs.readFileSync(path, 'utf8');
