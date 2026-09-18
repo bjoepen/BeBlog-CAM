@@ -1,5 +1,6 @@
 import type { ImportSummary,PartOrientation,PartPlacement,StockDefinition,WorkCoordinateSystem,ZLevelRoughingOperation } from './types';
 import type { CanonicalToolpath } from './canonicalToolpath';
+import { orientPoint3 } from './partOrientation';
 import type { P3 } from './stepView';
 import { sliceTrianglesAtZ } from './zLevelSlice';
 import { buildModelSliceRegions } from './modelSliceRegion';
@@ -9,11 +10,10 @@ import { isPlanarRasterPointSafe } from './planarRasterKernel';
 
 export type ModelRoughingOperationState={ok:boolean;toolpath:CanonicalToolpath|null;levelCount:number;roughingRegionCount:number;errors:string[];warnings:string[]};
 const EPS=1e-6;
-function rotate(p:P3,o:PartOrientation):P3{const a=o.rotationZDeg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:p.x*c-p.y*s,y:p.x*s+p.y*c,z:p.z}}
 function bounds(p:P3[]){const x=p.map(q=>q.x),y=p.map(q=>q.y),z=p.map(q=>q.z);return{minX:Math.min(...x),maxX:Math.max(...x),minY:Math.min(...y),maxY:Math.max(...y),minZ:Math.min(...z),maxZ:Math.max(...z)}}
 function placedPart(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation):P3[]|null{
   if(summary.kind!=='step')return null;const v=summary.brep?.displayVertices??[],raw:P3[]=[];
-  for(let i=0;i+2<v.length;i+=3)raw.push(rotate({x:v[i],y:v[i+1],z:v[i+2]},orientation));if(!raw.length)return null;
+  for(let i=0;i+2<v.length;i+=3)raw.push(orientPoint3({x:v[i],y:v[i+1],z:v[i+2]},orientation));if(!raw.length)return null;
   const b=bounds(raw),pw=b.maxX-b.minX,ph=b.maxY-b.minY,tx=placement.horizontal==='left'?0:placement.horizontal==='right'?stock.width-pw:(stock.width-pw)/2,ty=placement.vertical==='front'?0:placement.vertical==='back'?stock.height-ph:(stock.height-ph)/2,dx=tx-b.minX+placement.offsetX,dy=ty-b.minY+placement.offsetY;
   return raw.map(p=>({x:p.x+dx,y:p.y+dy,z:p.z-b.minZ+placement.offsetZ}));
 }
