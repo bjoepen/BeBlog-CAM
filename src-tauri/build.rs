@@ -68,7 +68,7 @@ fn main() {
 
     for library in [
         "TKernel", "TKMath", "TKG2d", "TKG3d", "TKGeomBase", "TKBRep",
-        "TKGeomAlgo", "TKTopAlgo", "TKMesh", "TKXSBase", "TKDE", "TKDESTEP",
+        "TKGeomAlgo", "TKTopAlgo", "TKBO", "TKMesh", "TKXSBase", "TKDE", "TKDESTEP",
     ] {
         println!("cargo:rustc-link-lib=dylib={library}");
     }
