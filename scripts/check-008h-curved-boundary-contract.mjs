@@ -43,4 +43,23 @@ for(const consumer of ['src/lib/curvedFaceRoughingOperation.ts','src/lib/surface
   }
 }
 
-console.log('PASS 008H: proven selected-face boundary singularities may be excluded; interior degeneracy and multi-Z ambiguity remain fail-closed.');
+const model=fs.readFileSync('src/lib/modelRoughingOperation.ts','utf8');
+for(const token of [
+  'scopeToSelectedFaces?:boolean',
+  'const slices=zs.map(cutZ=>',
+  'cutZ-allowance',
+  'clipToolpathToXY',
+  'operation.tool.diameterMm+2*allowance',
+]){
+  if(!model.includes(token))throw new Error(`008H true Z-level contract missing: ${token}`);
+}
+const state=fs.readFileSync('src/lib/zLevelOperationState.ts','utf8');
+if(!state.includes('buildModelRoughingOperationState({...args,scopeToSelectedFaces:true})')){
+  throw new Error('008H curved targets must consume complete-solid Z-level truth');
+}
+const app=fs.readFileSync('src/App.svelte','utf8');
+for(const token of ['updateZLevelFinishAllowance','Schlichtaufmaß','True Z-Level schneidet den vollständigen STEP-Solid']){
+  if(!app.includes(token))throw new Error(`008H allowance UI contract missing: ${token}`);
+}
+
+console.log('PASS 008H: curved targets use scoped complete-solid Z-level truth; allowance is explicit; legacy boundary safety remains fail-closed.');
