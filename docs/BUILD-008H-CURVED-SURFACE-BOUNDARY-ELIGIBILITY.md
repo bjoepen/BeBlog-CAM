@@ -71,3 +71,25 @@ Real-world acceptance should include:
 - a true interior vertical fold / overhang fixture: rejected,
 - Preview / Preflight / NC consistency for the accepted target.
 
+
+## 008H-B — Adjacent Surface Cutter Support
+
+Real-world testing with the rounded camera-grip face showed a second, distinct
+boundary condition: a valid flat-endmill disk may cross the selected face
+boundary onto an adjacent part face.
+
+For curved-face roughing, 008H-B therefore builds a conservative secondary
+height-field from the complete placed part. A cutter-disk sample is resolved in
+this order:
+
+1. selected curved face,
+2. complete-part top-surface fallback,
+3. unresolved => unsafe / rejected.
+
+The fallback is accepted only when the complete-part target itself passes the
+same CurvedFaceTarget eligibility and single-valued checks. It does not turn an
+unknown area into free space and does not bypass multi-Z ambiguity.
+
+This is intentionally a roughing-only extension. 3D finishing contact remains
+bound to the selected finishing face until a separate real-world need proves
+that contact continuation across face boundaries is required.
