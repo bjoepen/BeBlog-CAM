@@ -117,20 +117,20 @@ export function buildZLevelOperationState(args:{
     };
   }
 
-  // 008H: genuinely non-planar targets use the same solid-slice truth as model
-  // roughing. Selected faces define scope only; the complete STEP solid defines
-  // material, cutter clearance and top accessibility.
-  const solid=buildModelRoughingOperationState({...args,scopeToSelectedFaces:true});
+  // 008H-N3 hard boundary: curved Face targets are asynchronous native OCCT
+  // geometry. This synchronous reconstruction API must never fall back to the
+  // rejected 008H-M TypeScript ownership heuristic. App/preflight inject the
+  // cached native canonical truth; every other caller fails closed.
   return{
     mode,
     targetKind:'curved-face',
-    toolpath:solid.toolpath,
-    levelCount:solid.levelCount,
-    errors:solid.errors,
-    warnings:solid.warnings,
+    toolpath:null,
+    levelCount:0,
+    errors:['008H-N3: Gekrümmtes Face Target benötigt die autoritative native OCCT-Materialregion. Kein TypeScript-Ownership-Fallback zulässig.'],
+    warnings:[],
     targetZ:null,
     roughBottomZ:null,
-    targetMinZ:null,
-    targetMaxZ:null,
+    targetMinZ:curved.targetMinZ,
+    targetMaxZ:curved.targetMaxZ,
   };
 }
