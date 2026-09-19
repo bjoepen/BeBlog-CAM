@@ -105,7 +105,21 @@ export function buildCurvedFaceRoughingOperationState(args:{
     };
   }
 
-  const target=buildCurvedFaceTarget(part,faceIds,operation.faceIds,args.profile);
+  // 008H-B: cutter samples may legitimately cross from the selected fillet /
+  // curved face onto an adjacent top-visible face. Build a second height-field
+  // truth from the complete placed part and use it only when the selected face
+  // has no Z at that XY sample. The fallback remains fail-closed: if the complete
+  // part is not itself single-valued/top-machinable at the sample, it resolves
+  // to null and the cutter position stays rejected.
+  const allFaceIds=[...new Set(faceIds)];
+  const partSurface=buildCurvedFaceTarget(part,faceIds,allFaceIds,args.profile);
+  const target=buildCurvedFaceTarget(
+    part,
+    faceIds,
+    operation.faceIds,
+    args.profile,
+    partSurface.valid?partSurface:null,
+  );
   errors.push(...target.errors);
   warnings.push(...target.warnings);
   if(!target.valid||!target.bounds){
