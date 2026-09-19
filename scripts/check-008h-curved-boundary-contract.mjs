@@ -146,9 +146,9 @@ for(const token of [
 }
 for(const token of [
   'fn build_zlevel_regions(&self, request: &NativeZLevelRegionRequest)',
-  'beBlog'.toLowerCase().replace('blog','blog')
+  'fn beblog_occt_build_zlevel_regions(request_json: *const c_char)',
+  'native::build_zlevel_regions(request)',
 ]){
-  if(token==='beblog')continue;
   if(!rustOcct.includes(token))throw new Error(`008H-N2 Rust backend missing: ${token}`);
 }
 for(const token of [
