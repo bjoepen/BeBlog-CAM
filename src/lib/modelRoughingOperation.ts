@@ -39,59 +39,24 @@ function selectedFaceScopeGroups(part:P3[],faceIds:number[],selectedFaceIds:numb
   }
   return groups;
 }
-function pointSegmentDistance2(p:{x:number;y:number},a:{x:number;y:number},b:{x:number;y:number}){
-  const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
+function pointSegmentDistance(p:{x:number;y:number},segment:ZLevelFaceSegment){
+  const {a,b}=segment,dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
   if(l2<=EPS*EPS)return Math.hypot(p.x-a.x,p.y-a.y);
   const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l2));
   return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));
 }
-function clipSegmentToFaceSlice(a:{x:number;y:number},b:{x:number;y:number},segments:ZLevelFaceSegment[],contactRadius:number){
-  const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
-  if(length<=EPS)return[];
-  const step=Math.max(0.05,Math.min(0.25,contactRadius/6||0.1));
-  const count=Math.max(1,Math.ceil(length/step));
-  const at=(t:number)=>({x:a.x+dx*t,y:a.y+dy*t});
-  const inside=(t:number)=>segments.some(segment=>pointSegmentDistance2(at(t),segment.a,segment.b)<=contactRadius+EPS);
-  const intervals:[number,number][]=[];
-  let t0=0,in0=inside(0),open=in0?0:null as number|null;
-  for(let i=1;i<=count;i++){
-    const t1=i/count,in1=inside(t1);
-    if(in1!==in0){
-      let lo=t0,hi=t1;
-      for(let n=0;n<18;n++){const mid=(lo+hi)/2;if(inside(mid)===in0)lo=mid;else hi=mid}
-      const edge=(lo+hi)/2;
-      if(in0&&open!=null){intervals.push([open,edge]);open=null}else if(in1)open=edge;
-    }
-    t0=t1;in0=in1;
+function faceOwnedMaterialPoint(p:{x:number;y:number},segments:ZLevelFaceSegment[],targetFaceIds:Set<number>){
+  if(!segments.length||!targetFaceIds.size)return false;
+  let nearest=Infinity,nearestTarget=Infinity;
+  for(const segment of segments){
+    const d=pointSegmentDistance(p,segment);
+    if(d<nearest)nearest=d;
+    if(targetFaceIds.has(segment.faceId)&&d<nearestTarget)nearestTarget=d;
   }
-  if(in0&&open!=null)intervals.push([open,1]);
-  return intervals.filter(([u,v])=>v-u>1e-7).map(([u,v])=>[at(u),at(v)] as [{x:number;y:number},{x:number;y:number}]);
-}
-function clipToolpathToSelectedFaceSlices(toolpath:CanonicalToolpath,part:P3[],faceIds:number[],selectedFaceIds:number[],o:P3,contactRadius:number,allowance:number,profile?:ZLevelPerformanceProfile):CanonicalToolpath{
-  const runs:CanonicalToolpath['runs']=[];
-  for(const run of toolpath.runs){
-    // Use the same allowance-shifted Z plane as the solid slice that created
-    // this roughing region. Face ownership and Stock−Model truth therefore
-    // refer to one identical geometric section.
-    const sliceZ=Math.max(0,run.z+o.z-allowance);
-    const segments=sliceFaceSegmentsAtZ(part,faceIds,selectedFaceIds,sliceZ,profile);
-    if(!segments.length)continue;
-    let current:typeof run.points=[];
-    const flush=()=>{if(current.length>=2)runs.push({...run,points:current,retractAfter:true});current=[]};
-    for(let i=1;i<run.points.length;i++){
-      const aw={x:run.points[i-1].x+o.x,y:run.points[i-1].y+o.y};
-      const bw={x:run.points[i].x+o.x,y:run.points[i].y+o.y};
-      const pieces=clipSegmentToFaceSlice(aw,bw,segments,contactRadius);
-      if(!pieces.length){flush();continue}
-      for(const [wa,wb] of pieces){
-        const pa={x:wa.x-o.x,y:wa.y-o.y},pb={x:wb.x-o.x,y:wb.y-o.y},last=current.at(-1);
-        if(!last||Math.hypot(last.x-pa.x,last.y-pa.y)>1e-5){flush();current=[pa]}
-        if(Math.hypot(current.at(-1)!.x-pb.x,current.at(-1)!.y-pb.y)>EPS)current.push(pb);
-      }
-    }
-    flush();
-  }
-  return{...toolpath,runs};
+  // The selected face owns this Stock−Model point when it is one of the
+  // nearest boundaries on the actual Z section. A tiny tie tolerance makes
+  // shared BRep edges deterministic without creating a contact corridor.
+  return Number.isFinite(nearestTarget)&&nearestTarget<=nearest+1e-5;
 }
 function islandLoops(i:RoughingRegion['islands'][number]){return[{points:i.outer},...i.holes.map(points=>({points}))]}
 function safeInRegion(r:RoughingRegion,p:{x:number;y:number},d:number,profile?:ZLevelPerformanceProfile){return r.islands.some(i=>{if(profile)profile.accessibilityRegionTests++;return isPlanarRasterPointSafe(islandLoops(i),p,d,profile)})}
@@ -138,33 +103,45 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   if(invalid.length){errors.push(`${invalid.length} Stock−Model-Ebene${invalid.length===1?' ist':'n sind'} ungültig.`);for(const r of invalid)for(const e of r.errors)errors.push(`Z ${r.z.toFixed(3)}: ${e}`)}
   if(errors.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings};
   const o=origin(stock,wcs);
-  // 008H-K: selected-face ownership comes from actual face/Z intersection
-  // segments on the exact allowance-shifted solid slice plane. No global or
-  // Z-filtered XY face projection participates in CAM scope any more.
-  // The full solid remains the only material/safety truth; face scope only
-  // filters already-safe motion by triangles that can physically participate
-  // at that level. This removes the asymmetric global-XY-shadow behaviour.
-  // 008H-I: finish allowance belongs to the complete-solid safety envelope.
-  // Face selection only expresses cutter-contact intent, so its XY reach is the
-  // physical cutter radius, not cutter radius + allowance. Adding allowance a
-  // second time here displaced accepted paths away from the selected surface.
-  // The generated solid-safe cutter centre is clearanceRadius away from the
-  // nominal model when finish allowance is requested. Face intent must accept
-  // that intentional gap; this radius filters ownership only and cannot create
-  // motion outside the already-safe Stock−Model candidate.
-  const faceContactRadius=clearanceRadius;
-  const buildDirection=(direction:'x'|'y',scope:FaceScope|null=selected,scopeFaceIds:number[]=operation.faceIds)=>{
+  // 008H-L reset: target Faces define ownership of Stock−Model material before
+  // raster generation. They never clip an already generated toolpath.
+  // Every Z level is partitioned by the nearest native BRep boundary segment
+  // from the same solid slice. Selected Faces own the material for which their
+  // boundary is nearest; the full solid still defines cutter clearance/safety.
+  const allFaceIds=[...new Set(faceIds)];
+  const faceSegmentsByLevel=new Map<string,ZLevelFaceSegment[]>();
+  if(selected){
+    for(const region of rough){
+      const sliceZ=Math.max(b.minZ,region.z-allowance);
+      faceSegmentsByLevel.set(region.z.toFixed(6),sliceFaceSegmentsAtZ(part,faceIds,allFaceIds,sliceZ,profile));
+    }
+  }
+  const ownershipFilter=(targetFaceIds:number[])=>{
+    if(!selected)return undefined;
+    const target=new Set(targetFaceIds);
+    return (region:RoughingRegion)=>{
+      const segments=faceSegmentsByLevel.get(region.z.toFixed(6))??[];
+      return (point:{x:number;y:number})=>faceOwnedMaterialPoint(point,segments,target);
+    };
+  };
+  const buildDirection=(direction:'x'|'y',targetFaceIds:number[]=operation.faceIds)=>{
     const candidateWarnings:string[]=[];
     const candidateErrors:string[]=[];
-    const built=buildModelRoughingCanonicalToolpath(rough,operation.tool.diameterMm,operation.stepoverPercent,o,profile,allowance,direction);
+    const built=buildModelRoughingCanonicalToolpath(
+      rough,
+      operation.tool.diameterMm,
+      operation.stepoverPercent,
+      o,
+      profile,
+      allowance,
+      direction,
+      ownershipFilter(targetFaceIds),
+    );
     candidateWarnings.push(...built.warnings);
     candidateErrors.push(...built.errors);
     if(!built.ok||!built.toolpath)return{direction,toolpath:null as CanonicalToolpath|null,errors:candidateErrors,warnings:candidateWarnings};
-    let candidate=built.toolpath;
-    if(scope){
-      candidate=clipToolpathToSelectedFaceSlices(candidate,part,faceIds,scopeFaceIds,o,faceContactRadius,allowance,profile);
-      if(!candidate.runs.length)candidateErrors.push('Im Werkzeugkontakt-Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
-    }
+    const candidate=built.toolpath;
+    if(selected&&!candidate.runs.length)candidateErrors.push('Für die gewählten Ziel-Faces blieb keine sichere Face-owned Stock−Model-Schruppregion übrig.');
     if(candidate.runs.length)candidateErrors.push(...accessErrors(candidate,rough,o,operation.tool.diameterMm+2*allowance,profile));
     return{direction,toolpath:candidateErrors.length?null:candidate,errors:candidateErrors,warnings:candidateWarnings};
   };
@@ -183,15 +160,11 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   const requestedDirection=operation.rasterDirection??'auto';
   let toolpath:CanonicalToolpath|null=null;
   if(requestedDirection==='auto'&&selected){
-    // 008H-H: Auto is local manufacturing strategy. Each selected BRep face
-    // chooses X/Y independently, because one operation may contain orthogonal
-    // long/short fillets. Every local candidate still passes the complete-solid
-    // safety and accessibility chain before it can contribute canonical runs.
     const groups=selectedFaceScopeGroups(part,faceIds,operation.faceIds);
     const combinedRuns:CanonicalToolpath['runs']=[];
     const decisions:string[]=[];
     for(const group of groups){
-      const candidates=[buildDirection('x',group.scope,[group.faceId]),buildDirection('y',group.scope,[group.faceId])];
+      const candidates=[buildDirection('x',[group.faceId]),buildDirection('y',[group.faceId])];
       const chosen=chooseCandidate(candidates);
       if(!chosen||!chosen.toolpath){
         errors.push(`Face ${group.faceId}: keine freigabefähige automatische Rasterrichtung.`);
@@ -205,10 +178,10 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
       decisions.push(`Face ${group.faceId} → ${chosen.direction.toUpperCase()} (${describe(x)}; ${describe(y)})`);
     }
     if(errors.length||!combinedRuns.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
-    const template=[buildDirection('x'),buildDirection('y')].find(candidate=>candidate.toolpath)?.toolpath;
-    if(!template)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:['008H-H: kanonische Z-Level-Metadaten konnten nicht materialisiert werden.'],warnings:[...new Set(warnings)]};
+    const template=combinedRuns.length?buildDirection('x',operation.faceIds).toolpath:null;
+    if(!template)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:['008H-L: kanonische Z-Level-Metadaten konnten nicht materialisiert werden.'],warnings:[...new Set(warnings)]};
     toolpath={...template,runs:combinedRuns};
-    warnings.push(`008H-H: Rasterrichtung Auto lokal pro Ziel-Face gewählt: ${decisions.join(' · ')}.`);
+    warnings.push(`008H-L: Rasterrichtung Auto lokal pro Face-owned Materialregion gewählt: ${decisions.join(' · ')}.`);
   }else{
     const candidates=requestedDirection==='auto'?[buildDirection('x'),buildDirection('y')]:[buildDirection(requestedDirection)];
     const chosen=chooseCandidate(candidates);
@@ -220,6 +193,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     warnings.push(...chosen.warnings);
     if(requestedDirection==='auto')warnings.push(`008H-G: Rasterrichtung Auto → ${chosen.direction.toUpperCase()} gewählt.`);
   }
-  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich über ihren Werkzeugkontakt-Bereich (echte Face/Z-Schnittsegmente auf derselben Solid-Schnittebene + Werkzeug-Clearance; keine projizierte 3D-Face-Geometrie); Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
+  if(selected)warnings.push('008H-L: Ziel-Faces definieren Face-owned Stock−Model-Materialregionen pro echter Z-Schnittebene; Rasterbahnen werden erst innerhalb dieser Regionen erzeugt. Keine nachträgliche Face-Contact- oder XY-Projektionsbeschneidung. Vollständiges STEP-Solid bleibt Kollisions- und Materialwahrheit.');
+
   return{ok:true,toolpath:toolpath!,levelCount:zs.length,roughingRegionCount:rough.length,errors:[],warnings:[...new Set(warnings)]};
 }
