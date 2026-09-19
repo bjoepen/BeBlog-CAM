@@ -135,11 +135,15 @@ for(const token of [
 }
 for(const token of [
   'BRepAlgoAPI_Section',
-  'section_chains',
-  'TopoDS_Compound selected',
-  'builder.Add(selected,faces[id])',
-  'transform_shape(selected,request)',
-  'OCCT Face/Z section did not form a closed planar region; fail-closed',
+  'BRepAlgoAPI_Common',
+  'BRepAlgoAPI_Cut',
+  'projected_face_footprint',
+  'face_target_material_region',
+  'transform_shape(source,request)',
+  'transform_shape(faces[id],request)',
+  'total.PreMultiply(r)',
+  'total.PreMultiply(tr)',
+  'OCCT could not prove a Face-target Stock-model material region; fail-closed',
   'no display triangulation used',
 ]){
   if(!nativeCpp.includes(token))throw new Error(`008H-N2 native geometry kernel missing: ${token}`);
@@ -164,7 +168,7 @@ if(nativeRegionStart<0||nativeRegionEnd<=nativeRegionStart){
   throw new Error('008H-N2 native region builder source boundary missing');
 }
 const nativeRegionBuilder=nativeCpp.slice(nativeRegionStart,nativeRegionEnd);
-if(nativeRegionBuilder.includes('displayVertices')||nativeRegionBuilder.includes('BRepMesh_IncrementalMesh')){
+if(nativeRegionBuilder.includes('displayVertices')||nativeRegionBuilder.includes('BRepMesh_IncrementalMesh')||nativeRegionBuilder.includes('sliceTrianglesAtZ')){
   throw new Error('008H-N2 native region builder must not consume display triangulation geometry');
 }
 // displayFaceIds is permitted only as literal documentation of the stable Face-ID
@@ -175,4 +179,4 @@ if(faceIdMentions>1){
   throw new Error('008H-N2 native region builder contains unexpected displayFaceIds usage beyond Face-ID contract metadata');
 }
 
-console.log('PASS 008H-N2 kernel: native OCCT selected-Face/Z sections are executable through Rust/Tauri, use native Face identity and fail closed when a closed planar region cannot be proven. Production CAM has not yet switched consumers.');
+console.log('PASS 008H-N2 material kernel: native OCCT selected-Face footprints are intersected with stock and exact transformed Model material is subtracted before any raster. Native Face identity is preserved; display triangulation is excluded; unprovable regions fail closed. Production CAM has not yet switched consumers.');
