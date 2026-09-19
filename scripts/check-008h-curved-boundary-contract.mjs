@@ -54,6 +54,9 @@ for(const token of [
   'clipToolpathToFaceScope',
   'operation.tool.diameterMm+2*allowance',
   'actual XY projection of the selected BRep faces',
+  'const clearanceRadius=operation.tool.diameterMm/2+allowance',
+  'minX:-2*clearanceRadius',
+  'maxX:stock.width+2*clearanceRadius',
 ]){
   if(!model.includes(token))throw new Error(`008H true Z-level contract missing: ${token}`);
 }
@@ -67,4 +70,4 @@ for(const token of ['updateZLevelFinishAllowance','Schlichtaufmaß','True Z-Leve
 }
 
 if(model.includes('clipToolpathToXY'))throw new Error('008H must not regress to rectangular selected-face bounds');
-console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by actual selected-face geometry; allowance is explicit; legacy boundary safety remains fail-closed.');
+console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by actual selected-face geometry; stock edges permit cutter overhang; model boundaries and legacy safety remain fail-closed.');
