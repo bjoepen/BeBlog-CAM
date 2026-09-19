@@ -248,7 +248,7 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
   if(materialIslands.empty())out<<"\"OCCT could not prove a Face-target Stock-model material region; fail-closed\"";
   out<<"],\"warnings\":[]}";
  }
- out<<"],\"errors\":[],\"warnings\":[\"008H-N2 native OCCT Face-footprint intersect Stock minus exact Model material-region kernel active; no display triangulation used\"]}";
+ out<<"],\"errors\":[],\"warnings\":[\"008H-N2b FreeCAD-style selected projection minus solid-above projection active; no mixed-dimensional solid subtraction or display triangulation used\"]}";
  return copy_result(out.str());
  }catch(const std::exception& e){std::ostringstream out;out<<"{\"error\":\"OCCT native Z-Level error: ";append_json_string(out,e.what());out<<"\"}";return copy_result("{\"error\":\"OCCT-Fehler bei nativer Z-Level-Region\"}");}catch(...){return copy_result("{\"error\":\"OCCT-Fehler bei nativer Z-Level-Region\"}");}}
 
