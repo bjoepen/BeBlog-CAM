@@ -168,7 +168,14 @@ TopoDS_Shape project_face_outline_to_plane(const TopoDS_Face& face,const TopoDS_
  const double targetZ=targetSurface.Plane().Location().Z();
  gp_Trsf lift;lift.SetTranslation(gp_Vec(0,0,targetZ));
  const TopoDS_Shape lifted=BRepBuilderAPI_Transform(projectedEdges,lift,true).Shape();
- return wires_to_planar_faces(lifted);
+ TopoDS_Shape wires;
+ // HLR returns an edge compound, unlike BRepProj_Projection which returns
+ // projected wires. Connect the exact visible hard/outline edges first, then
+ // build planar Faces. This is the OCCT equivalent of FreeCAD's edgeWalker →
+ // Part.makeFace step and prevents arbitrary edge piles from being interpreted
+ // as already-closed wires.
+ if(BOPAlgo_Tools::EdgesToWires(lifted,wires,false)!=0||wires.IsNull())return TopoDS_Shape();
+ return wires_to_planar_faces(wires);
 }
 TopoDS_Shape project_face_to_plane(const TopoDS_Face& face,const TopoDS_Face& target){
  BRepAdaptor_Surface surface(face,true);
