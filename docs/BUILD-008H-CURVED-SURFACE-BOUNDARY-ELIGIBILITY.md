@@ -743,3 +743,59 @@ the production raster kernel.
 
 The new gate therefore proves the architecture boundary and fail-closed
 behavior, not real-world Hohlkehle correctness.
+
+
+## 008H-N2 — Native Face-target material boolean
+
+Status: **IMPLEMENTED / CI pending / Real-World pending / not yet a CAM consumer**
+
+N2 now advances beyond the diagnostic Face/Z section primitive. The native
+kernel constructs a bounded planar target from the selected OCCT Face topology,
+clips it to the manufacturing stock domain and subtracts the exact transformed
+STEP solid with OCCT Boolean operations:
+
+```text
+selected TopoDS_Face
+        ↓
+native Face wires / BRepTools::OuterWire
+        ↓
+XY manufacturing footprint
+        ↓
+Common(Face footprint, Stock)
+        ↓
+Cut(..., exact transformed STEP solid)
+        ↓
+NativeZLevelRegionIsland { outer, holes }
+```
+
+The selected Face therefore defines the target footprint; the full transformed
+BRep solid remains the protected model/material truth. No nearest-Face,
+outward-normal ownership, post-raster clipping or display triangulation
+participates in this N2 region.
+
+The footprint projection samples **native OCCT BRep edge curves**, not the
+display mesh. This is a bounded geometric approximation of the selected Face
+projection and is intentionally kept inside the native geometry boundary.
+Boolean subtraction itself is performed against the exact transformed BRep
+solid.
+
+Transform order is explicitly aligned with 008D: X → Y → Z, then manufacturing
+translation. The stock planar domain remains 0..width / 0..height, matching the
+existing TypeScript roughing truth. Finish allowance is not applied by this
+native ownership kernel; it retains its existing single downstream owner.
+
+The response preserves OCCT planar outer wires and holes separately. If OCCT
+cannot prove a target material region, the level remains fail-closed.
+
+This increment adds the OCCT Boolean toolkit `TKBO` to the native link set.
+008F native dependency-closure / portable DMG qualification must therefore be
+rerun before a later beta package.
+
+### Acceptance order
+
+1. CI/build contract.
+2. Native debug region for CBG Headstock: selecting only the Hohlkehle must
+   produce a region bounded to that Face footprint, not the broad exterior.
+3. Native debug region for V14 Grip rounded Faces.
+4. Only after native-region acceptance may N3 replace the historical L/M
+   TypeScript ownership predicate in production raster generation.
