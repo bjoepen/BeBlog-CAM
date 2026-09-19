@@ -73,4 +73,16 @@ for(const token of ['updateZLevelFinishAllowance','Schlichtaufmaß','True Z-Leve
 
 if(model.includes('clipToolpathToXY'))throw new Error('008H must not regress to rectangular selected-face bounds');
 if(model.includes('clipToolpathToFaceScope('))throw new Error('008H must not regress to cutter-centre-inside-face scoping');
-console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by cutter-contact envelopes; stock edges permit cutter overhang; model boundaries and legacy safety remain fail-closed.');
+for(const token of ["direction:'x'|'y'='x'","direction==='x'?b.minX:b.minY"]){
+  if(!raster.includes(token))throw new Error(`008H-G raster direction kernel missing: ${token}`);
+}
+for(const token of ["ZLevelRasterDirection='auto'|'x'|'y'","rasterDirection?:ZLevelRasterDirection","rasterDirection:'auto'"]){
+  if(!types.includes(token))throw new Error(`008H-G persisted raster direction missing: ${token}`);
+}
+for(const token of ["requestedDirection=operation.rasterDirection??'auto'","[buildDirection('x'),buildDirection('y')]","toolpath!.runs.length","pathLength(a.toolpath!)","Rasterrichtung Auto"]){
+  if(!model.includes(token))throw new Error(`008H-G auto-selection contract missing: ${token}`);
+}
+for(const token of ["Rasterrichtung","Automatisch","Parallel X","Parallel Y","rasterDirection:'auto'","rasterDirection:'x'","rasterDirection:'y'"]){
+  if(!app.includes(token))throw new Error(`008H-G UI contract missing: ${token}`);
+}
+console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by cutter-contact envelopes; stock edges permit cutter overhang; Auto/X/Y raster direction is explicit and deterministic; model boundaries and legacy safety remain fail-closed.');
