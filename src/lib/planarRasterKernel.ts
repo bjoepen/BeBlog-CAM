@@ -134,6 +134,7 @@ export function buildPlanarRasterChains(
   toolDiameterMm:number,
   stepoverPercent:number,
   profile?:ZLevelPerformanceProfile,
+  direction:'x'|'y'='x',
 ):PlanarRasterChain[]{
   if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!loops.length)return[];
   const b=bounds(loops);if(!b)return[];
@@ -143,15 +144,21 @@ export function buildPlanarRasterChains(
   const sampleStep=Math.max(.15,Math.min(.75,toolDiameterMm/8));
 
   const rasterSegments:PlanarRasterChain[]=[];
+  const primaryMin=direction==='x'?b.minX:b.minY;
+  const primaryMax=direction==='x'?b.maxX:b.maxY;
+  const rowMin=direction==='x'?b.minY:b.minX;
+  const rowMax=direction==='x'?b.maxY:b.maxX;
+  const point=(primary:number,rowValue:number):ToolpathPoint2=>
+    direction==='x'?{x:primary,y:rowValue}:{x:rowValue,y:primary};
   let row=0;
-  for(let y=b.minY+radius;y<=b.maxY-radius+EPS;y+=stepover,row++){
+  for(let rowValue=rowMin+radius;rowValue<=rowMax-radius+EPS;rowValue+=stepover,row++){
     const lineRuns:{a:number;b:number}[]=[];
     let start:number|null=null,last:number|null=null;
 
-    for(let x=b.minX+radius;x<=b.maxX-radius+EPS;x+=sampleStep){
-      if(safeAt(loops,{x,y},radius,profile)){
-        if(start===null)start=x;
-        last=x;
+    for(let primary=primaryMin+radius;primary<=primaryMax-radius+EPS;primary+=sampleStep){
+      if(safeAt(loops,point(primary,rowValue),radius,profile)){
+        if(start===null)start=primary;
+        last=primary;
       }else if(start!==null&&last!==null){
         if(last-start>EPS)lineRuns.push({a:start,b:last});
         start=last=null;
@@ -163,8 +170,8 @@ export function buildPlanarRasterChains(
     for(const segment of ordered){
       rasterSegments.push({
         points:row%2===0
-          ?[{x:segment.a,y},{x:segment.b,y}]
-          :[{x:segment.b,y},{x:segment.a,y}],
+          ?[point(segment.a,rowValue),point(segment.b,rowValue)]
+          :[point(segment.b,rowValue),point(segment.a,rowValue)],
       });
     }
   }
