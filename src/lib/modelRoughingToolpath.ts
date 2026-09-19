@@ -1,5 +1,5 @@
 import type { CanonicalToolpath, CanonicalToolpathRun } from './canonicalToolpath';
-import { buildPlanarRasterChains } from './planarRasterKernel';
+import { buildPlanarRasterChains, type PlanarRasterPointFilter } from './planarRasterKernel';
 import type { RoughingRegion } from './roughingRegion';
 import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
@@ -22,6 +22,7 @@ export function buildModelRoughingCanonicalToolpath(
   profile?:ZLevelPerformanceProfile,
   clearanceAllowanceMm=0,
   rasterDirection:'x'|'y'='x',
+  regionPointFilter?:(region:RoughingRegion)=>PlanarRasterPointFilter|undefined,
 ):ModelRoughingToolpathResult{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -55,7 +56,7 @@ export function buildModelRoughingCanonicalToolpath(
         {points:island.outer},
         ...island.holes.map(points=>({points})),
       ];
-      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection);
+      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection,regionPointFilter?.(region));
       if(!chains.length){
         warnings.push(`Z ${region.z.toFixed(3)} · Schruppinsel ${islandCount}: kein werkzeugradius-sicherer Rasterpfad.`);
         continue;
