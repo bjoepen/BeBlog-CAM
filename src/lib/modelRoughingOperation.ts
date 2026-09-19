@@ -38,39 +38,55 @@ function pointInTriangleXY(p:{x:number;y:number},a:P3,b:P3,c:P3){
   const w=1-u-v;
   return u>=-EPS&&v>=-EPS&&w>=-EPS;
 }
-function faceScopeContainsXY(scope:FaceScope,p:{x:number;y:number}){
+function pointSegmentDistanceXY(p:{x:number;y:number},a:P3,b:P3){
+  const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
+  if(l2<=EPS*EPS)return Math.hypot(p.x-a.x,p.y-a.y);
+  const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l2));
+  return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));
+}
+function faceScopeContainsToolCenter(scope:FaceScope,p:{x:number;y:number},contactRadius:number){
+  const limit=contactRadius+EPS;
   for(let i=0;i+2<scope.triangles.length;i+=3){
-    if(pointInTriangleXY(p,scope.triangles[i],scope.triangles[i+1],scope.triangles[i+2]))return true;
+    const a=scope.triangles[i],b=scope.triangles[i+1],c=scope.triangles[i+2];
+    const minX=Math.min(a.x,b.x,c.x)-limit,maxX=Math.max(a.x,b.x,c.x)+limit;
+    const minY=Math.min(a.y,b.y,c.y)-limit,maxY=Math.max(a.y,b.y,c.y)+limit;
+    if(p.x<minX||p.x>maxX||p.y<minY||p.y>maxY)continue;
+    if(pointInTriangleXY(p,a,b,c)||
+      pointSegmentDistanceXY(p,a,b)<=limit||
+      pointSegmentDistanceXY(p,b,c)<=limit||
+      pointSegmentDistanceXY(p,c,a)<=limit)return true;
   }
   return false;
 }
-function clipSegmentToFaceScope(a:{x:number;y:number},b:{x:number;y:number},scope:FaceScope){
+function clipSegmentToFaceContactScope(a:{x:number;y:number},b:{x:number;y:number},scope:FaceScope,contactRadius:number){
   const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
   if(length<=EPS)return[];
-  // Raster runs are straight. Split them at every projected selected-face
-  // triangle edge, then classify each interval by its midpoint. This preserves
-  // the actual union of selected BRep faces instead of their rectangular bounds.
-  const ts=[0,1];
-  const cross=(ax:number,ay:number,bx:number,by:number)=>ax*by-ay*bx;
-  for(let i=0;i+2<scope.triangles.length;i+=3){
-    const tri=[scope.triangles[i],scope.triangles[i+1],scope.triangles[i+2]];
-    for(let e=0;e<3;e++){
-      const c=tri[e],d=tri[(e+1)%3],ex=d.x-c.x,ey=d.y-c.y,den=cross(dx,dy,ex,ey);
-      if(Math.abs(den)<=EPS)continue;
-      const qx=c.x-a.x,qy=c.y-a.y,t=cross(qx,qy,ex,ey)/den,u=cross(qx,qy,dx,dy)/den;
-      if(t>EPS&&t<1-EPS&&u>=-EPS&&u<=1+EPS)ts.push(t);
+  // 008H-F: selected faces describe cutter CONTACT intent, not cutter-centre
+  // containment. A centre may therefore lie up to cutter radius + allowance
+  // outside the projected face while the cutter still reaches that face.
+  // Scope clipping can only remove already solid-proven-safe motion, so a
+  // finely sampled/bisected contact predicate cannot weaken collision safety.
+  const step=Math.max(0.05,Math.min(0.25,contactRadius/6||0.1));
+  const count=Math.max(1,Math.ceil(length/step));
+  const at=(t:number)=>({x:a.x+dx*t,y:a.y+dy*t});
+  const inside=(t:number)=>faceScopeContainsToolCenter(scope,at(t),contactRadius);
+  const intervals:[number,number][]=[];
+  let t0=0,in0=inside(0),open=in0?0:null as number|null;
+  for(let i=1;i<=count;i++){
+    const t1=i/count,in1=inside(t1);
+    if(in1!==in0){
+      let lo=t0,hi=t1;
+      for(let n=0;n<18;n++){const mid=(lo+hi)/2;if(inside(mid)===in0)lo=mid;else hi=mid}
+      const edge=(lo+hi)/2;
+      if(in0&&open!=null){intervals.push([open,edge]);open=null}
+      else if(in1)open=edge;
     }
+    t0=t1;in0=in1;
   }
-  ts.sort((x,y)=>x-y);
-  const unique=ts.filter((t,i)=>i===0||Math.abs(t-ts[i-1])>1e-7),out:[{x:number;y:number},{x:number;y:number}][]=[];
-  for(let i=1;i<unique.length;i++){
-    const t0=unique[i-1],t1=unique[i],tm=(t0+t1)/2,mid={x:a.x+dx*tm,y:a.y+dy*tm};
-    if(!faceScopeContainsXY(scope,mid))continue;
-    out.push([{x:a.x+dx*t0,y:a.y+dy*t0},{x:a.x+dx*t1,y:a.y+dy*t1}]);
-  }
-  return out;
+  if(in0&&open!=null)intervals.push([open,1]);
+  return intervals.filter(([u,v])=>v-u>1e-7).map(([u,v])=>[at(u),at(v)] as [{x:number;y:number},{x:number;y:number}]);
 }
-function clipToolpathToFaceScope(toolpath:CanonicalToolpath,scope:FaceScope,o:P3):CanonicalToolpath{
+function clipToolpathToFaceContactScope(toolpath:CanonicalToolpath,scope:FaceScope,o:P3,contactRadius:number):CanonicalToolpath{
   const runs:CanonicalToolpath['runs']=[];
   for(const run of toolpath.runs){
     let current:typeof run.points=[];
@@ -78,7 +94,7 @@ function clipToolpathToFaceScope(toolpath:CanonicalToolpath,scope:FaceScope,o:P3
     for(let i=1;i<run.points.length;i++){
       const aw={x:run.points[i-1].x+o.x,y:run.points[i-1].y+o.y};
       const bw={x:run.points[i].x+o.x,y:run.points[i].y+o.y};
-      const pieces=clipSegmentToFaceScope(aw,bw,scope);
+      const pieces=clipSegmentToFaceContactScope(aw,bw,scope,contactRadius);
       if(!pieces.length){flush();continue}
       for(const [wa,wb] of pieces){
         const a={x:wa.x-o.x,y:wa.y-o.y},b={x:wb.x-o.x,y:wb.y-o.y},last=current.at(-1);
@@ -138,13 +154,13 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   let toolpath=built.toolpath;
   if(selected&&toolpath){
     // Canonical paths are first proven safe against the complete solid, then
-    // intersected with the actual XY projection of the selected BRep faces.
+    // intersected with the cutter-contact envelope of the actual selected BRep faces.
     // Selection defines WHERE to machine; the complete solid still defines
     // WHAT is safe to remove.
-    toolpath=clipToolpathToFaceScope(toolpath,selected,o);
-    if(!toolpath.runs.length)errors.push('Im geometrischen Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
+    toolpath=clipToolpathToFaceContactScope(toolpath,selected,o,clearanceRadius);
+    if(!toolpath.runs.length)errors.push('Im Werkzeugkontakt-Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
   }
   if(toolpath)errors.push(...accessErrors(toolpath,rough,o,operation.tool.diameterMm+2*allowance,profile));
-  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich mit ihrer tatsächlichen projizierten Geometrie; Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
+  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich über ihren Werkzeugkontakt-Bereich (projizierte Face-Geometrie + Fräserradius + Aufmaß); Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
   return{ok:errors.length===0,toolpath:errors.length?null:toolpath,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
 }
