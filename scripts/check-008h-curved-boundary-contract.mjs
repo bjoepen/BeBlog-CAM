@@ -162,6 +162,15 @@ for(const token of [
 ]){
   if(!tauriLib.includes(token))throw new Error(`008H-N2 Tauri boundary missing: ${token}`);
 }
+const diagnosticApp=fs.readFileSync('src/App.svelte','utf8');
+for(const token of [
+  'runNativeRegionDiagnostic',
+  "invoke<NativeZLevelRegionSet>('build_native_zlevel_regions'",
+  '008H-N2 · Native Region Diagnose',
+  'Dieser View zeigt nur die N2-Region. Er erzeugt bewusst keinen Werkzeugweg.',
+]){
+  if(!diagnosticApp.includes(token))throw new Error(`008H-N2 diagnostic view missing: ${token}`);
+}
 const nativeRegionStart=nativeCpp.indexOf('extern "C" char* beblog_occt_build_zlevel_regions');
 const nativeRegionEnd=nativeCpp.indexOf('extern "C" void beblog_occt_free_string',nativeRegionStart);
 if(nativeRegionStart<0||nativeRegionEnd<=nativeRegionStart){
@@ -179,4 +188,4 @@ if(faceIdMentions>1){
   throw new Error('008H-N2 native region builder contains unexpected displayFaceIds usage beyond Face-ID contract metadata');
 }
 
-console.log('PASS 008H-N2 material kernel: native OCCT selected-Face footprints are intersected with stock and exact transformed Model material is subtracted before any raster. Native Face identity is preserved; display triangulation is excluded; unprovable regions fail closed. Production CAM has not yet switched consumers.');
+console.log('PASS 008H-N2 diagnostic + material kernel: native OCCT selected-Face footprints are intersected with stock and exact transformed Model material is subtracted before any raster. Native Face identity is preserved; display triangulation is excluded; unprovable regions fail closed. Production CAM has not yet switched consumers.');
