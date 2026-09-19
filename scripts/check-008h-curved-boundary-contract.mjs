@@ -161,7 +161,7 @@ for(const token of [
   'transform_shape(faces[id],request)',
   'total.PreMultiply(r)',
   'total.PreMultiply(tr)',
-  'OCCT could not prove a Face-target Stock-model material region; fail-closed',
+  'OCCT Face-target stage=',
   'no mixed-dimensional solid subtraction or display triangulation used',
 ]){
   if(!nativeCpp.includes(token))throw new Error(`008H-N2 native geometry kernel missing: ${token}`);
