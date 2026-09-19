@@ -97,6 +97,21 @@ TopoDS_Shape transform_shape(const TopoDS_Shape& source,const std::string& json)
 struct SectionChain{std::vector<gp_Pnt> points;};
 
 double d2xy(const gp_Pnt&a,const gp_Pnt&b);
+std::vector<gp_Pnt> sampled_wire_xy(const TopoDS_Wire& wire,double z){
+ std::vector<gp_Pnt> points;
+ for(BRepTools_WireExplorer it(wire);it.More();it.Next()){
+  BRepAdaptor_Curve c(it.Current());const double a=c.FirstParameter(),b=c.LastParameter();
+  if(!std::isfinite(a)||!std::isfinite(b)||b<a)continue;
+  const int samples=c.GetType()==GeomAbs_Line?2:65;
+  for(int i=0;i<samples;++i){
+   if(!points.empty()&&i==0)continue;
+   const double t=a+(b-a)*static_cast<double>(i)/static_cast<double>(samples-1);
+   const gp_Pnt p=c.Value(t);points.emplace_back(p.X(),p.Y(),z);
+  }
+ }
+ if(points.size()>2&&d2xy(points.front(),points.back())>1e-12)points.push_back(points.front());
+ return points;
+}
 TopoDS_Face stock_face(const std::string& json,double z){
  const double width=json_number_field(json,"width"),height=json_number_field(json,"height");
  if(!(width>0)||!(height>0))return TopoDS_Face();
