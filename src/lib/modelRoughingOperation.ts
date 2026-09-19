@@ -21,6 +21,7 @@ function placedPart(summary:ImportSummary,stock:StockDefinition,placement:PartPl
 function origin(stock:StockDefinition,wcs:WorkCoordinateSystem):P3{return{x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2,z:wcs.z==='top'?stock.thickness:0}}
 function levels(top:number,bottom:number,step:number){const out:number[]=[];for(let z=top-step;z>bottom+1e-3;z-=step)out.push(z);const last=bottom+1e-3;if(last<top-EPS&&(out.length===0||Math.abs(out[out.length-1]-last)>1e-4))out.push(last);return out}
 type FaceScope={triangles:P3[];minZ:number;maxZ:number};
+type FaceScopeGroup={faceId:number;scope:FaceScope};
 function selectedFaceScope(part:P3[],faceIds:number[],selectedFaceIds:number[]):FaceScope|null{
   const selected=new Set(selectedFaceIds),triangles:P3[]=[];
   for(let t=0;t<faceIds.length&&t*3+2<part.length;t++){
@@ -29,6 +30,14 @@ function selectedFaceScope(part:P3[],faceIds:number[],selectedFaceIds:number[]):
   if(!triangles.length)return null;
   const b=bounds(triangles);
   return{triangles,minZ:b.minZ,maxZ:b.maxZ};
+}
+function selectedFaceScopeGroups(part:P3[],faceIds:number[],selectedFaceIds:number[]):FaceScopeGroup[]{
+  const groups:FaceScopeGroup[]=[];
+  for(const faceId of [...new Set(selectedFaceIds)]){
+    const scope=selectedFaceScope(part,faceIds,[faceId]);
+    if(scope)groups.push({faceId,scope});
+  }
+  return groups;
 }
 function pointInTriangleXY(p:{x:number;y:number},a:P3,b:P3,c:P3){
   const den=(b.y-c.y)*(a.x-c.x)+(c.x-b.x)*(a.y-c.y);
@@ -150,7 +159,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   if(invalid.length){errors.push(`${invalid.length} Stock−Model-Ebene${invalid.length===1?' ist':'n sind'} ungültig.`);for(const r of invalid)for(const e of r.errors)errors.push(`Z ${r.z.toFixed(3)}: ${e}`)}
   if(errors.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings};
   const o=origin(stock,wcs);
-  const buildDirection=(direction:'x'|'y')=>{
+  const buildDirection=(direction:'x'|'y',scope:FaceScope|null=selected)=>{
     const candidateWarnings:string[]=[];
     const candidateErrors:string[]=[];
     const built=buildModelRoughingCanonicalToolpath(rough,operation.tool.diameterMm,operation.stepoverPercent,o,profile,allowance,direction);
@@ -158,40 +167,63 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     candidateErrors.push(...built.errors);
     if(!built.ok||!built.toolpath)return{direction,toolpath:null as CanonicalToolpath|null,errors:candidateErrors,warnings:candidateWarnings};
     let candidate=built.toolpath;
-    if(selected){
-      // Canonical paths are first proven safe against the complete solid, then
-      // intersected with the cutter-contact envelope of the actual selected BRep faces.
-      // Selection defines WHERE to machine; the complete solid still defines
-      // WHAT is safe to remove.
-      candidate=clipToolpathToFaceContactScope(candidate,selected,o,clearanceRadius);
+    if(scope){
+      candidate=clipToolpathToFaceContactScope(candidate,scope,o,clearanceRadius);
       if(!candidate.runs.length)candidateErrors.push('Im Werkzeugkontakt-Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
     }
     if(candidate.runs.length)candidateErrors.push(...accessErrors(candidate,rough,o,operation.tool.diameterMm+2*allowance,profile));
     return{direction,toolpath:candidateErrors.length?null:candidate,errors:candidateErrors,warnings:candidateWarnings};
   };
-  const requestedDirection=operation.rasterDirection??'auto';
-  const candidates=requestedDirection==='auto'?[buildDirection('x'),buildDirection('y')]:[buildDirection(requestedDirection)];
-  const valid=candidates.filter(candidate=>candidate.toolpath&&!candidate.errors.length);
-  if(!valid.length){
-    for(const candidate of candidates){errors.push(...candidate.errors);warnings.push(...candidate.warnings)}
-    return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
-  }
   const pathLength=(toolpath:CanonicalToolpath)=>toolpath.runs.reduce((sum,run)=>sum+run.points.slice(1).reduce((runSum,p,i)=>runSum+Math.hypot(p.x-run.points[i].x,p.y-run.points[i].y),0),0);
-  valid.sort((a,b)=>{
-    const ar=a.toolpath!.runs.length,br=b.toolpath!.runs.length;
-    if(ar!==br)return ar-br;
-    const aa=pathLength(a.toolpath!)/Math.max(1,ar),ba=pathLength(b.toolpath!)/Math.max(1,br);
-    if(Math.abs(aa-ba)>1e-6)return ba-aa;
-    return a.direction.localeCompare(b.direction);
-  });
-  const chosen=valid[0];
-  let toolpath=chosen.toolpath!;
-  warnings.push(...chosen.warnings);
-  if(requestedDirection==='auto'){
-    const x=candidates.find(candidate=>candidate.direction==='x'),y=candidates.find(candidate=>candidate.direction==='y');
-    const describe=(candidate:typeof chosen)=>candidate.toolpath?`${candidate.direction.toUpperCase()}: ${candidate.toolpath.runs.length} Bahnen · Ø ${(pathLength(candidate.toolpath)/Math.max(1,candidate.toolpath.runs.length)).toFixed(1)} mm zusammenhängende Schnittlänge`:`${candidate.direction.toUpperCase()}: nicht freigabefähig`;
-    warnings.push(`008H-G: Rasterrichtung Auto → ${chosen.direction.toUpperCase()} gewählt (${describe(x!)}; ${describe(y!)}).`);
+  const chooseCandidate=(candidates:ReturnType<typeof buildDirection>[])=>{
+    const valid=candidates.filter(candidate=>candidate.toolpath&&!candidate.errors.length);
+    valid.sort((a,b)=>{
+      const ar=a.toolpath!.runs.length,br=b.toolpath!.runs.length;
+      if(ar!==br)return ar-br;
+      const aa=pathLength(a.toolpath!)/Math.max(1,ar),ba=pathLength(b.toolpath!)/Math.max(1,br);
+      if(Math.abs(aa-ba)>1e-6)return ba-aa;
+      return a.direction.localeCompare(b.direction);
+    });
+    return valid[0]??null;
+  };
+  const requestedDirection=operation.rasterDirection??'auto';
+  let toolpath:CanonicalToolpath|null=null;
+  if(requestedDirection==='auto'&&selected){
+    // 008H-H: Auto is local manufacturing strategy. Each selected BRep face
+    // chooses X/Y independently, because one operation may contain orthogonal
+    // long/short fillets. Every local candidate still passes the complete-solid
+    // safety and accessibility chain before it can contribute canonical runs.
+    const groups=selectedFaceScopeGroups(part,faceIds,operation.faceIds);
+    const combinedRuns:CanonicalToolpath['runs']=[];
+    const decisions:string[]=[];
+    for(const group of groups){
+      const candidates=[buildDirection('x',group.scope),buildDirection('y',group.scope)];
+      const chosen=chooseCandidate(candidates);
+      if(!chosen||!chosen.toolpath){
+        errors.push(`Face ${group.faceId}: keine freigabefähige automatische Rasterrichtung.`);
+        for(const candidate of candidates)errors.push(...candidate.errors);
+        continue;
+      }
+      combinedRuns.push(...chosen.toolpath.runs);
+      warnings.push(...chosen.warnings);
+      const x=candidates[0],y=candidates[1];
+      const describe=(candidate:typeof chosen)=>candidate.toolpath?`${candidate.direction.toUpperCase()}: ${candidate.toolpath.runs.length} Bahnen · Ø ${(pathLength(candidate.toolpath)/Math.max(1,candidate.toolpath.runs.length)).toFixed(1)} mm`:`${candidate.direction.toUpperCase()}: nicht freigabefähig`;
+      decisions.push(`Face ${group.faceId} → ${chosen.direction.toUpperCase()} (${describe(x)}; ${describe(y)})`);
+    }
+    if(errors.length||!combinedRuns.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
+    toolpath={kind:'raster',runs:combinedRuns};
+    warnings.push(`008H-H: Rasterrichtung Auto lokal pro Ziel-Face gewählt: ${decisions.join(' · ')}.`);
+  }else{
+    const candidates=requestedDirection==='auto'?[buildDirection('x'),buildDirection('y')]:[buildDirection(requestedDirection)];
+    const chosen=chooseCandidate(candidates);
+    if(!chosen||!chosen.toolpath){
+      for(const candidate of candidates){errors.push(...candidate.errors);warnings.push(...candidate.warnings)}
+      return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
+    }
+    toolpath=chosen.toolpath;
+    warnings.push(...chosen.warnings);
+    if(requestedDirection==='auto')warnings.push(`008H-G: Rasterrichtung Auto → ${chosen.direction.toUpperCase()} gewählt.`);
   }
   if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich über ihren Werkzeugkontakt-Bereich (projizierte Face-Geometrie + Fräserradius + Aufmaß); Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
-  return{ok:true,toolpath,levelCount:zs.length,roughingRegionCount:rough.length,errors:[],warnings:[...new Set(warnings)]};
+  return{ok:true,toolpath:toolpath!,levelCount:zs.length,roughingRegionCount:rough.length,errors:[],warnings:[...new Set(warnings)]};
 }
