@@ -226,3 +226,34 @@ Safety ordering remains unchanged:
 Thus expanding face intent cannot legalize a collision. It only prevents valid
 convex-surface cutter positions from being discarded because the cutter centre
 is not geometrically inside the selected CAD face.
+
+
+## 008H-G — Raster Direction: Auto / X / Y
+
+The rounded-grip acceptance fixture showed that a geometrically valid Z-Level
+path can still be a poor manufacturing strategy when the raster is fixed to one
+axis. Across the long grip fillets, the wrong axis creates many short,
+fragmented cuts instead of long continuous passes.
+
+Z-Level roughing therefore exposes three persisted choices:
+
+- **Auto** (default)
+- **Parallel X**
+- **Parallel Y**
+
+X and Y are deterministic user overrides. Auto does not infer direction merely
+from the stock or model bounding-box aspect ratio. It builds both complete
+candidates through the same solid safety, selected-face cutter-contact scope,
+and top-accessibility checks.
+
+Auto then chooses:
+
+1. a valid candidate over an invalid candidate,
+2. fewer canonical runs (less fragmentation),
+3. if run counts tie, greater mean connected cutting length,
+4. X only as the final deterministic tie-break.
+
+The chosen direction and both candidate metrics are emitted as an 008H-G
+diagnostic warning in Preflight. Direction changes only raster strategy; it does
+not alter Stock−Model truth, cutter clearance, allowance, face-contact scope or
+004T/004Q safety contracts.
