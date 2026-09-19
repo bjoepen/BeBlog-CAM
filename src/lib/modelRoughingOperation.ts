@@ -114,7 +114,23 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   // the enlarged XY clearance disk this forms a conservative 3D envelope around
   // the nominal model instead of a mere Z offset.
   const slices=zs.map(cutZ=>{const slice=sliceTrianglesAtZ(part,Math.max(b.minZ,cutZ-allowance),profile);return{...slice,z:cutZ}});
-  const model=buildModelSliceRegions(slices),rough=buildRoughingRegions(model,{minX:0,minY:0,maxX:stock.width,maxY:stock.height}),invalid=rough.filter(r=>!r.valid);
+  const model=buildModelSliceRegions(slices);
+  // 008H-E: the stock boundary is a material boundary, not a collision wall.
+  // A flat endmill must be allowed to overhang a stock edge by its clearance
+  // radius in order to machine model geometry that reaches that edge. The
+  // planar raster kernel subsequently erodes the roughing region by the same
+  // clearance radius. Expanding the temporary stock-domain by twice that radius
+  // leaves one clearance radius of legal cutter-centre overhang beyond the real
+  // stock. Model boundaries remain untouched and therefore retain the full
+  // cutter-radius + allowance protection.
+  const clearanceRadius=operation.tool.diameterMm/2+allowance;
+  const rasterStock={
+    minX:-2*clearanceRadius,
+    minY:-2*clearanceRadius,
+    maxX:stock.width+2*clearanceRadius,
+    maxY:stock.height+2*clearanceRadius,
+  };
+  const rough=buildRoughingRegions(model,rasterStock),invalid=rough.filter(r=>!r.valid);
   if(invalid.length){errors.push(`${invalid.length} Stock−Model-Ebene${invalid.length===1?' ist':'n sind'} ungültig.`);for(const r of invalid)for(const e of r.errors)errors.push(`Z ${r.z.toFixed(3)}: ${e}`)}
   if(errors.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings};
   const o=origin(stock,wcs),built=buildModelRoughingCanonicalToolpath(rough,operation.tool.diameterMm,operation.stepoverPercent,o,profile,allowance);warnings.push(...built.warnings);errors.push(...built.errors);
@@ -129,6 +145,6 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     if(!toolpath.runs.length)errors.push('Im geometrischen Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
   }
   if(toolpath)errors.push(...accessErrors(toolpath,rough,o,operation.tool.diameterMm+2*allowance,profile));
-  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich mit ihrer tatsächlichen projizierten Geometrie; Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid.');
+  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich mit ihrer tatsächlichen projizierten Geometrie; Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
   return{ok:errors.length===0,toolpath:errors.length?null:toolpath,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
 }
