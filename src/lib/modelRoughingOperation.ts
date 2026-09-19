@@ -28,14 +28,27 @@ function selectedFaceBounds(part:P3[],faceIds:number[],selectedFaceIds:number[])
   const b=bounds(points);
   return{xy:{minX:b.minX,minY:b.minY,maxX:b.maxX,maxY:b.maxY},minZ:b.minZ,maxZ:b.maxZ};
 }
-function insideXY(b:XYBounds,p:{x:number;y:number}){return p.x>=b.minX-EPS&&p.x<=b.maxX+EPS&&p.y>=b.minY-EPS&&p.y<=b.maxY+EPS}
+function clipSegmentToXY(a:{x:number;y:number},b:{x:number;y:number},r:XYBounds){
+  const dx=b.x-a.x,dy=b.y-a.y,p=[-dx,dx,-dy,dy],q=[a.x-r.minX,r.maxX-a.x,a.y-r.minY,r.maxY-a.y];
+  let u0=0,u1=1;
+  for(let i=0;i<4;i++){
+    if(Math.abs(p[i])<=EPS){if(q[i]<0)return null;continue}
+    const t=q[i]/p[i];
+    if(p[i]<0){if(t>u1)return null;u0=Math.max(u0,t)}else{if(t<u0)return null;u1=Math.min(u1,t)}
+  }
+  return[{x:a.x+u0*dx,y:a.y+u0*dy},{x:a.x+u1*dx,y:a.y+u1*dy}] as const;
+}
 function clipToolpathToXY(toolpath:CanonicalToolpath,b:XYBounds):CanonicalToolpath{
   const runs:CanonicalToolpath['runs']=[];
   for(const run of toolpath.runs){
     let current:typeof run.points=[];
     const flush=()=>{if(current.length>=2)runs.push({...run,points:current,retractAfter:true});current=[]};
-    for(const point of run.points){
-      if(insideXY(b,point)){current.push(point)}else flush();
+    for(let i=1;i<run.points.length;i++){
+      const clipped=clipSegmentToXY(run.points[i-1],run.points[i],b);
+      if(!clipped){flush();continue}
+      const [a,c]=clipped,last=current.at(-1);
+      if(!last||Math.hypot(last.x-a.x,last.y-a.y)>1e-5){flush();current=[a]}
+      if(Math.hypot(current.at(-1)!.x-c.x,current.at(-1)!.y-c.y)>EPS)current.push(c);
     }
     flush();
   }
