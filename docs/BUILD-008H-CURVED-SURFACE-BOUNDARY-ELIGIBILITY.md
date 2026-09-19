@@ -681,3 +681,30 @@ is wrong, raster, Canonical Toolpath and 004T are not investigated.
 008H-N does not redesign Canonical Toolpath, 004T, 004Q, the postprocessors or
 the general raster kernel. It moves BRep manufacturing-region construction back
 to the geometry kernel where it belongs.
+
+
+## 008H-N1 — Native Contract
+
+Status: **IMPLEMENTED — contract only**
+
+N1 freezes the wire boundary before any native geometry algorithm is introduced.
+
+Contract version: `008H-N1-v1`.
+
+The request contains source path + source fingerprint, native Face IDs,
+manufacturing transform, stock, requested Z levels and finish allowance. The
+response contains only per-Z planar manufacturing regions (outer loops + holes),
+errors and warnings.
+
+Face IDs are explicitly defined as the zero-based
+`TopExp_Explorer(shape, TopAbs_FACE)` enumeration order. This is the same
+identity already exported by `manufacturingFaces.faceId` and
+`displayFaceIds`.
+
+The C ABI now reserves `beblog_occt_build_zlevel_regions(request_json)`, and
+Rust/TypeScript mirror the request/response schema. There is intentionally no
+Tauri command and no production CAM consumer yet: N1 must not make an
+unimplemented/stub native geometry path executable.
+
+N2 is responsible for the actual OCCT region construction and may only then
+expose the command after fail-closed native validation exists.
