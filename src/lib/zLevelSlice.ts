@@ -3,6 +3,7 @@ export type ZPoint3 = { x:number; y:number; z:number };
 export type ZPoint2 = { x:number; y:number };
 export type ZLevelChain = { z:number; points:ZPoint2[]; closed:boolean };
 export type ZLevelSlice = { z:number; chains:ZLevelChain[] };
+export type ZLevelFaceSegment = { z:number; faceId:number; a:ZPoint2; b:ZPoint2 };
 
 const EPS=1e-7;
 const KEY_SCALE=1e5;
@@ -82,6 +83,34 @@ export function sliceTrianglesAtZ(points:ZPoint3[],z:number,profile?:ZLevelPerfo
     if(segment)unique.set(segmentKey(segment[0],segment[1]),segment);
   }
   return{z,chains:chainSegments([...unique.values()],z)};
+}
+
+
+/**
+ * Slice the display triangulation while preserving native BRep face ownership.
+ * Unlike ZLevelSlice this intentionally does not chain/deduplicate across faces:
+ * selected-face CAM needs the exact per-face intersection segments on this Z
+ * plane, not the global XY projection of the complete 3D face.
+ */
+export function sliceFaceSegmentsAtZ(
+  points:ZPoint3[],
+  faceIds:number[],
+  selectedFaceIds:number[],
+  z:number,
+  profile?:ZLevelPerformanceProfile,
+):ZLevelFaceSegment[]{
+  const selected=new Set(selectedFaceIds);
+  const unique=new Map<string,ZLevelFaceSegment>();
+  for(let i=0,triangleIndex=0;i+2<points.length;i+=3,triangleIndex++){
+    const faceId=faceIds[triangleIndex];
+    if(faceId==null||!selected.has(faceId))continue;
+    if(profile)profile.triangleTests++;
+    const segment=triangleSegment(points[i],points[i+1],points[i+2],z);
+    if(!segment)continue;
+    const key=`${faceId}|${segmentKey(segment[0],segment[1])}`;
+    unique.set(key,{z,faceId,a:segment[0],b:segment[1]});
+  }
+  return[...unique.values()];
 }
 
 export function sliceTrianglesByStep(points:ZPoint3[],stepDownMm:number):ZLevelSlice[]{
