@@ -62,7 +62,11 @@ for(const token of [
   'minX:-2*clearanceRadius',
   'maxX:stock.width+2*clearanceRadius',
   'const faceContactRadius=toolRadius' ,
-  'clipToolpathToFaceContactScope(candidate,scope,o,faceContactRadius)',
+  'selectedFaceSliceScope',
+  'clipToolpathToZLocalFaceContactScope',
+  'run.z+o.z',
+  "buildDirection('x',group.scope,[group.faceId])",
+  "buildDirection('y',group.scope,[group.faceId])",
 ]){
   if(!model.includes(token))throw new Error(`008H true Z-level contract missing: ${token}`);
 }
