@@ -402,3 +402,35 @@ The V14 grip remains the primary real-world acceptance fixture. Corresponding
 opposite rounded Faces must own corresponding Stock−Model regions and produce
 corresponding safe roughing paths. One-sided disappearance, isolated contact
 fragments or projected-Face behaviour are FAIL.
+
+
+## 008H-M — Native bounded outward ownership
+
+The Headstock single-Hohlkehle fixture disproved the nearest-Face partition used
+by 008H-L: a selected concave Face could become the nearest boundary for large,
+unrelated Stock−Model areas.
+
+008H-M therefore removes nearest-Face/Voronoi ownership.
+
+For every selected Face/Z section segment the CAM now retains the outward
+direction derived from the OCCT Face orientation and the oriented triangle that
+produced that section. A removable Stock−Model sample belongs to that Face only
+when:
+
+- its orthogonal projection lies between the native section endpoints; and
+- it lies on the Face's outward/material side.
+
+The section endpoints are ownership boundaries. Material beyond them belongs to
+adjacent BRep geometry and cannot leak into the selected Face merely because it
+is geometrically nearer.
+
+The complete STEP solid remains the clearance and accessibility truth. This
+ownership rule only restricts which already-removable Stock−Model material may
+be rastered; it never post-clips a canonical toolpath.
+
+Acceptance fixtures are deliberately complementary:
+
+- V14 grip: selected outer fillets must retain the material strip from each
+  fillet toward the stock boundary.
+- Headstock: selecting only the Hohlkehle must not claim the broad headstock
+  exterior.
