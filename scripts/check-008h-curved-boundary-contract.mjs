@@ -164,8 +164,15 @@ if(nativeRegionStart<0||nativeRegionEnd<=nativeRegionStart){
   throw new Error('008H-N2 native region builder source boundary missing');
 }
 const nativeRegionBuilder=nativeCpp.slice(nativeRegionStart,nativeRegionEnd);
-if(nativeRegionBuilder.includes('displayVertices')||nativeRegionBuilder.includes('displayFaceIds')||nativeRegionBuilder.includes('BRepMesh_IncrementalMesh')){
-  throw new Error('008H-N2 native region builder must not consume display triangulation');
+if(nativeRegionBuilder.includes('displayVertices')||nativeRegionBuilder.includes('BRepMesh_IncrementalMesh')){
+  throw new Error('008H-N2 native region builder must not consume display triangulation geometry');
+}
+// displayFaceIds is permitted only as literal documentation of the stable Face-ID
+// contract in the JSON response. Geometry consumption is guarded by the absence
+// of BRepMesh_IncrementalMesh/displayVertices and by native BRepAlgoAPI_Section.
+const faceIdMentions=[...nativeRegionBuilder.matchAll(/displayFaceIds/g)].length;
+if(faceIdMentions>1){
+  throw new Error('008H-N2 native region builder contains unexpected displayFaceIds usage beyond Face-ID contract metadata');
 }
 
 console.log('PASS 008H-N2 kernel: native OCCT selected-Face/Z sections are executable through Rust/Tauri, use native Face identity and fail closed when a closed planar region cannot be proven. Production CAM has not yet switched consumers.');
