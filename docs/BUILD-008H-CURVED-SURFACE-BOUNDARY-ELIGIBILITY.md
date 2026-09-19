@@ -93,3 +93,51 @@ unknown area into free space and does not bypass multi-Z ambiguity.
 This is intentionally a roughing-only extension. 3D finishing contact remains
 bound to the selected finishing face until a separate real-world need proves
 that contact continuation across face boundaries is required.
+
+
+## 008H-C — True 3D Z-Level Roughing
+
+Real-world acceptance of 008H-A/B showed that making a selected curved face more
+permissive was the wrong abstraction for ordinary 3-axis waterline roughing.
+A hemisphere and the rounded camera-grip edges require the complete solid to be
+the material/collision truth.
+
+For non-planar face targets the manufacturing pipeline is now:
+
+```
+placed STEP/BRep solid
+→ cutting Z level
+→ solid slice (allowance-aware)
+→ Stock − Model region
+→ cutter-radius-safe planar raster
+→ selected-face XY manufacturing scope
+→ top-accessibility proof
+→ Canonical Toolpath
+→ 004T / Preflight / NC
+```
+
+Selected faces no longer act as an isolated collision surface. They define the
+manufacturing scope and target depth. The complete placed STEP solid determines
+where material exists and where the cutter may safely pass.
+
+### Stock allowance
+
+`finishAllowanceMm` is now explicit in the Z-Level UI. For true solid Z-level
+roughing it is applied conservatively in three dimensions:
+
+- cutting levels stop above the selected/model bottom by the allowance,
+- solid slices are sampled lower by the allowance,
+- XY cutter clearance uses the physical cutter diameter plus twice the allowance.
+
+This deliberately leaves at least the requested stock envelope for a later
+finishing operation; it does not reinterpret allowance as a simple display-only
+or Z-only value.
+
+### Acceptance fixtures
+
+- hemisphere Ø20: plausible descending waterline roughing toward the reachable equator,
+- Z-CAM wood grip V14: rounded multi-face transitions rough from complete-solid truth,
+- allowance 0.00 / 0.50 / 1.00 mm changes remaining stock predictably,
+- Ø3 / Ø6 changes reachability without weakening collision proof,
+- overhang/undercut remains top-accessibility fail-closed,
+- Preview / Preflight / NC consume the same canonical toolpath.
