@@ -168,3 +168,29 @@ Selection can reduce a proven-safe path, never make an unsafe path legal.
 
 The 008H contract gate explicitly rejects a return to rectangular
 `clipToolpathToXY` face scoping.
+
+
+## 008H-E — Stock Edge Is Not a Collision Wall
+
+A stock-to-part-size real-world test exposed a second boundary-classification
+error. The planar raster kernel correctly keeps a cutter radius away from every
+roughing-region boundary, but the temporary Stock−Model region also used the
+physical stock rectangle as its outer boundary. That incorrectly treated a
+stock edge like protected model geometry.
+
+For 3-axis roughing this is too strict: the cutter may safely overhang the
+physical stock edge when machining model geometry that reaches that edge.
+
+008H-E therefore distinguishes the two meanings:
+
+- **model boundary**: protected by cutter radius plus finishing allowance,
+- **stock boundary**: material ends here; it is not itself a collision wall.
+
+The temporary raster domain is extended beyond the physical stock before the
+existing cutter-radius erosion. This permits up to one clearance radius of
+cutter-centre overhang beyond the real stock while leaving the model-side
+clearance proof unchanged.
+
+This specifically covers the acceptance case where stock XY dimensions equal
+the part XY dimensions. Such a setup must not suppress an otherwise reachable
+rounded edge merely because the tool centre has to pass outside the stock.
