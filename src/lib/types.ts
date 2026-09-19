@@ -6,7 +6,8 @@ export interface Bounds2 { min:Point2;max:Point2; }
 export type Curve2=|{kind:'line';start:Point2;end:Point2}|{kind:'circle';center:Point2;radius:number}|{kind:'arc';center:Point2;radius:number;startAngleDeg:number;endAngleDeg:number}|{kind:'polyline';points:Point2[];bulges?:number[];closed:boolean}|{kind:'unsupported';sourceKind:string};
 export interface PlanarGeometry { curves:Curve2[];curveLayers?:string[];layerNames?:string[];bounds?:Bounds2; }
 export interface SurfaceTypeSummary {kind:string;count:number;}
-export interface BrepSummary {backend:string;nativeBrep:boolean;faces:number;edges:number;vertices:number;solids:number;surfaceTypes:SurfaceTypeSummary[];cylinderRadiiMm:number[];displayTriangles:number;displayVertices:number[];displayFaceIds?:number[];displayEdges?:number[][];note:string;}
+export interface ManufacturingFaceSummary {faceId:number;kind:string;orientation:string;origin?:[number,number,number];normal?:[number,number,number];axisOrigin?:[number,number,number];axisDirection?:[number,number,number];radiusMm?:number;}
+export interface BrepSummary {backend:string;nativeBrep:boolean;faces:number;edges:number;vertices:number;solids:number;surfaceTypes:SurfaceTypeSummary[];cylinderRadiiMm:number[];manufacturingFaces?:ManufacturingFaceSummary[];displayTriangles:number;displayVertices:number[];displayFaceIds?:number[];displayEdges?:number[][];note:string;}
 export interface ImportSummary {kind:ImportKind;fileName:string;backend:string;status:'ready'|'native-adapter-pending';entities:Record<string,number>;planarGeometry?:PlanarGeometry;brep?:BrepSummary;note?:string;}
 
 export type StockMode='manual'|'part-bounds'|'none';
