@@ -3,6 +3,7 @@ import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type PlanarRasterLoop={points:ToolpathPoint2[]};
 export type PlanarRasterChain={points:ToolpathPoint2[]};
+export type PlanarRasterPointFilter=(point:ToolpathPoint2)=>boolean;
 
 const EPS=1e-6;
 
@@ -40,9 +41,9 @@ function clearanceToBoundary(loops:PlanarRasterLoop[],p:ToolpathPoint2,profile?:
   return best;
 }
 
-function safeAt(loops:PlanarRasterLoop[],p:ToolpathPoint2,radius:number,profile?:ZLevelPerformanceProfile){
+function safeAt(loops:PlanarRasterLoop[],p:ToolpathPoint2,radius:number,profile?:ZLevelPerformanceProfile,pointFilter?:PlanarRasterPointFilter){
   if(profile)profile.rasterSafetyTests++;
-  return pointInEvenOdd(loops,p)&&clearanceToBoundary(loops,p,profile)>=radius-EPS;
+  return pointInEvenOdd(loops,p)&&clearanceToBoundary(loops,p,profile)>=radius-EPS&&(!pointFilter||pointFilter(p));
 }
 
 export function isPlanarRasterPointSafe(loops:PlanarRasterLoop[],point:ToolpathPoint2,toolDiameterMm:number,profile?:ZLevelPerformanceProfile){
@@ -57,14 +58,15 @@ function safeSegment(
   radius:number,
   sampleStep:number,
   profile?:ZLevelPerformanceProfile,
+  pointFilter?:PlanarRasterPointFilter,
 ){
   const distance=Math.hypot(b.x-a.x,b.y-a.y);
-  if(distance<=EPS)return safeAt(loops,a,radius,profile);
+  if(distance<=EPS)return safeAt(loops,a,radius,profile,pointFilter);
   const steps=Math.max(1,Math.ceil(distance/Math.max(.1,sampleStep)));
   for(let i=0;i<=steps;i++){
     const t=i/steps;
     if(profile)profile.stayDownSafetyTests++;
-    if(!safeAt(loops,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},radius,profile))return false;
+    if(!safeAt(loops,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},radius,profile,pointFilter))return false;
   }
   return true;
 }
@@ -75,9 +77,10 @@ function safePolyline(
   radius:number,
   sampleStep:number,
   profile?:ZLevelPerformanceProfile,
+  pointFilter?:PlanarRasterPointFilter,
 ){
   if(points.length<2)return false;
-  for(let i=1;i<points.length;i++)if(!safeSegment(loops,points[i-1],points[i],radius,sampleStep,profile))return false;
+  for(let i=1;i<points.length;i++)if(!safeSegment(loops,points[i-1],points[i],radius,sampleStep,profile,pointFilter))return false;
   return true;
 }
 
@@ -103,6 +106,7 @@ export function buildPlanarRasterStayDownConnector(
   toolDiameterMm:number,
   sampleStep?:number,
   profile?:ZLevelPerformanceProfile,
+  pointFilter?:PlanarRasterPointFilter,
 ):ToolpathPoint2[]|null{
   if(!(toolDiameterMm>0)||!loops.length)return null;
   const radius=toolDiameterMm/2;
@@ -113,7 +117,7 @@ export function buildPlanarRasterStayDownConnector(
     [a,{x:a.x,y:b.y},b],
   ];
   for(const candidate of candidates){
-    if(safePolyline(loops,candidate,radius,step,profile))return candidate;
+    if(safePolyline(loops,candidate,radius,step,profile,pointFilter))return candidate;
   }
   return null;
 }
@@ -135,6 +139,7 @@ export function buildPlanarRasterChains(
   stepoverPercent:number,
   profile?:ZLevelPerformanceProfile,
   direction:'x'|'y'='x',
+  pointFilter?:PlanarRasterPointFilter,
 ):PlanarRasterChain[]{
   if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!loops.length)return[];
   const b=bounds(loops);if(!b)return[];
@@ -156,7 +161,7 @@ export function buildPlanarRasterChains(
     let start:number|null=null,last:number|null=null;
 
     for(let primary=primaryMin+radius;primary<=primaryMax-radius+EPS;primary+=sampleStep){
-      if(safeAt(loops,point(primary,rowValue),radius,profile)){
+      if(safeAt(loops,point(primary,rowValue),radius,profile,pointFilter)){
         if(start===null)start=primary;
         last=primary;
       }else if(start!==null&&last!==null){
@@ -184,7 +189,7 @@ export function buildPlanarRasterChains(
       continue;
     }
     const from=current[current.length-1],to=segment.points[0];
-    const connector=buildPlanarRasterStayDownConnector(loops,from,to,toolDiameterMm,sampleStep,profile);
+    const connector=buildPlanarRasterStayDownConnector(loops,from,to,toolDiameterMm,sampleStep,profile,pointFilter);
     if(connector){
       for(const point of connector.slice(1)){
         const previous=current[current.length-1];
