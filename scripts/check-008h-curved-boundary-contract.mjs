@@ -246,3 +246,7 @@ for(const token of ['FaceTargetRegionProbe','failedStage','selectedProjectionFac
 for(const token of ['case GeomAbs_Cylinder:','case GeomAbs_Cone:','case GeomAbs_Sphere:','default:\n   return project_face_wires_to_plane(face,target);']){
   if(!nativeCpp.includes(token))throw new Error(`008H-N2 FreeCAD surface-aware projection dispatch missing: ${token}`);
 }
+
+for(const token of ['surfaceType','projectionDispatch','sourceWires','closedSourceWires','sourceEdges','projectedShapes','surface=','dispatch=']){
+  if(!nativeCpp.includes(token))throw new Error(`008H-N2 selected Face projection probe missing: ${token}`);
+}
