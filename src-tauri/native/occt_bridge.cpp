@@ -217,16 +217,38 @@ TopoDS_Shape solid_above_projection(const TopoDS_Shape& fullModel,const std::str
  BRepAlgoAPI_Common common(fullModel,upperBox);common.Build();if(!common.IsDone()||common.Shape().IsNull())return TopoDS_Shape();
  return project_shape_to_stock_plane(common.Shape(),target);
 }
-TopoDS_Shape face_target_material_region(const TopoDS_Face& selected,const TopoDS_Shape& fullModel,const std::string& json,double z){
- const TopoDS_Face stock=stock_face(json,z);if(stock.IsNull())return TopoDS_Shape();
- const TopoDS_Shape selectedProjection=selected_face_projection(selected,stock);if(selectedProjection.IsNull())return TopoDS_Shape();
+struct FaceTargetRegionProbe{
+ TopoDS_Shape material;
+ std::string failedStage;
+ std::size_t selectedProjectionFaces=0;
+ std::size_t selectedInStockFaces=0;
+ std::size_t aboveProjectionFaces=0;
+ std::size_t materialFaces=0;
+};
+std::size_t planar_face_count(const TopoDS_Shape& shape){
+ if(shape.IsNull())return 0;
+ std::size_t count=0;for(TopExp_Explorer it(shape,TopAbs_FACE);it.More();it.Next())++count;return count;
+}
+FaceTargetRegionProbe face_target_material_region(const TopoDS_Face& selected,const TopoDS_Shape& fullModel,const std::string& json,double z){
+ FaceTargetRegionProbe probe;
+ const TopoDS_Face stock=stock_face(json,z);if(stock.IsNull()){probe.failedStage="stock";return probe;}
+ const TopoDS_Shape selectedProjection=selected_face_projection(selected,stock);
+ probe.selectedProjectionFaces=planar_face_count(selectedProjection);
+ if(selectedProjection.IsNull()||probe.selectedProjectionFaces==0){probe.failedStage="selectedProjection";return probe;}
  BRepAlgoAPI_Common selectedInStock(selectedProjection,stock);selectedInStock.Build();
- if(!selectedInStock.IsDone()||selectedInStock.Shape().IsNull())return TopoDS_Shape();
+ if(!selectedInStock.IsDone()||selectedInStock.Shape().IsNull()){probe.failedStage="selectedInStock";return probe;}
+ probe.selectedInStockFaces=planar_face_count(selectedInStock.Shape());
+ if(probe.selectedInStockFaces==0){probe.failedStage="selectedInStock";return probe;}
  const TopoDS_Shape aboveProjection=solid_above_projection(fullModel,json,z,stock);
- if(aboveProjection.IsNull())return selectedInStock.Shape();
+ probe.aboveProjectionFaces=planar_face_count(aboveProjection);
+ if(aboveProjection.IsNull()||probe.aboveProjectionFaces==0){
+  probe.material=selectedInStock.Shape();probe.materialFaces=probe.selectedInStockFaces;return probe;
+ }
  BRepAlgoAPI_Cut material(selectedInStock.Shape(),aboveProjection);material.Build();
- if(!material.IsDone()||material.Shape().IsNull())return TopoDS_Shape();
- return material.Shape();
+ if(!material.IsDone()||material.Shape().IsNull()){probe.failedStage="materialCut";return probe;}
+ probe.material=material.Shape();probe.materialFaces=planar_face_count(probe.material);
+ if(probe.materialFaces==0)probe.failedStage="material";
+ return probe;
 }
 struct PlanarIsland{SectionChain outer;std::vector<SectionChain> holes;};
 std::vector<PlanarIsland> planar_shape_islands(const TopoDS_Shape& shape){
@@ -306,8 +328,8 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
  out<<",\"faceIdContract\":\"zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds\",\"regions\":[";
  bool first_region=true;
  for(double z:levels){if(!first_region)out<<',';first_region=false;
-  std::vector<PlanarIsland> materialIslands;
-  for(const auto& selectedFace:transformedFaces){const TopoDS_Shape material=face_target_material_region(selectedFace,transformedModel,request,z);if(material.IsNull())continue;auto islands=planar_shape_islands(material);materialIslands.insert(materialIslands.end(),std::make_move_iterator(islands.begin()),std::make_move_iterator(islands.end()));}
+  std::vector<PlanarIsland> materialIslands;std::vector<FaceTargetRegionProbe> probes;
+  for(const auto& selectedFace:transformedFaces){auto probe=face_target_material_region(selectedFace,transformedModel,request,z);if(!probe.material.IsNull()){auto islands=planar_shape_islands(probe.material);materialIslands.insert(materialIslands.end(),std::make_move_iterator(islands.begin()),std::make_move_iterator(islands.end()));}probes.push_back(std::move(probe));}
   out<<"{\"z\":"<<std::setprecision(12)<<z<<",\"valid\":"<<(!materialIslands.empty()?"true":"false")<<",\"islands\":[";
   bool first_island=true;for(const auto& island:materialIslands){const auto& chain=island.outer;if(chain.points.size()<4||d2xy(chain.points.front(),chain.points.back())>=1e-10)continue;if(!first_island)out<<',';first_island=false;
    out<<"{\"outer\":[";bool fp=true;for(const auto&p:chain.points){if(!fp)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';fp=false;}out<<"],\"holes\":[";
@@ -315,7 +337,7 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
    out<<"]}";
   }
   out<<"],\"errors\":[";
-  if(materialIslands.empty())out<<"\"OCCT could not prove a Face-target Stock-model material region; fail-closed\"";
+  if(materialIslands.empty()){bool first_error=true;for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(!first_error)out<<',';first_error=false;std::ostringstream detail;detail<<"OCCT Face-target stage="<<(probe.failedStage.empty()?"planarIslands":probe.failedStage)<<" faceIndex="<<i<<" selectedProjectionFaces="<<probe.selectedProjectionFaces<<" selectedInStockFaces="<<probe.selectedInStockFaces<<" aboveProjectionFaces="<<probe.aboveProjectionFaces<<" materialFaces="<<probe.materialFaces<<" islands=0; fail-closed";append_json_string(out,detail.str());}}
   out<<"],\"warnings\":[]}";
  }
  out<<"],\"errors\":[],\"warnings\":[\"008H-N2c surface-aware Face projection plus solid-above projection active; no mixed-dimensional solid subtraction or display triangulation used\"]}";
