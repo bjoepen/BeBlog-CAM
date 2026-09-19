@@ -39,6 +39,30 @@ function selectedFaceScopeGroups(part:P3[],faceIds:number[],selectedFaceIds:numb
   }
   return groups;
 }
+function selectedFaceSliceScope(part:P3[],faceIds:number[],selectedFaceIds:number[],z:number,contactRadius:number):FaceScope|null{
+  const selected=new Set(selectedFaceIds),triangles:P3[]=[];
+  for(let t=0;t<faceIds.length&&t*3+2<part.length;t++){
+    if(!selected.has(faceIds[t]))continue;
+    const a=part[t*3],b=part[t*3+1],c=part[t*3+2];
+    // A cutter at this Z can only contact triangles whose vertical extent is
+    // within one physical cutter radius. This prevents a steep face's entire
+    // global XY shadow from owning unrelated Z-level motion.
+    if(z<Math.min(a.z,b.z,c.z)-contactRadius-EPS||z>Math.max(a.z,b.z,c.z)+contactRadius+EPS)continue;
+    triangles.push(a,b,c);
+  }
+  if(!triangles.length)return null;
+  const b=bounds(triangles);
+  return{triangles,minZ:b.minZ,maxZ:b.maxZ};
+}
+function clipToolpathToZLocalFaceContactScope(toolpath:CanonicalToolpath,part:P3[],faceIds:number[],selectedFaceIds:number[],o:P3,contactRadius:number):CanonicalToolpath{
+  const runs:CanonicalToolpath['runs']=[];
+  for(const run of toolpath.runs){
+    const scope=selectedFaceSliceScope(part,faceIds,selectedFaceIds,run.z+o.z,contactRadius);
+    if(!scope)continue;
+    runs.push(...clipToolpathToFaceContactScope({...toolpath,runs:[run]},scope,o,contactRadius).runs);
+  }
+  return{...toolpath,runs};
+}
 function pointInTriangleXY(p:{x:number;y:number},a:P3,b:P3,c:P3){
   const den=(b.y-c.y)*(a.x-c.x)+(c.x-b.x)*(a.y-c.y);
   if(Math.abs(den)<=EPS)return false;
@@ -160,12 +184,16 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   if(invalid.length){errors.push(`${invalid.length} Stock−Model-Ebene${invalid.length===1?' ist':'n sind'} ungültig.`);for(const r of invalid)for(const e of r.errors)errors.push(`Z ${r.z.toFixed(3)}: ${e}`)}
   if(errors.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings};
   const o=origin(stock,wcs);
+  // 008H-J: selected-face ownership is evaluated locally on every cutting Z.
+  // The full solid remains the only material/safety truth; face scope only
+  // filters already-safe motion by triangles that can physically participate
+  // at that level. This removes the asymmetric global-XY-shadow behaviour.
   // 008H-I: finish allowance belongs to the complete-solid safety envelope.
   // Face selection only expresses cutter-contact intent, so its XY reach is the
   // physical cutter radius, not cutter radius + allowance. Adding allowance a
   // second time here displaced accepted paths away from the selected surface.
   const faceContactRadius=toolRadius;
-  const buildDirection=(direction:'x'|'y',scope:FaceScope|null=selected)=>{
+  const buildDirection=(direction:'x'|'y',scope:FaceScope|null=selected,scopeFaceIds:number[]=operation.faceIds)=>{
     const candidateWarnings:string[]=[];
     const candidateErrors:string[]=[];
     const built=buildModelRoughingCanonicalToolpath(rough,operation.tool.diameterMm,operation.stepoverPercent,o,profile,allowance,direction);
@@ -174,7 +202,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     if(!built.ok||!built.toolpath)return{direction,toolpath:null as CanonicalToolpath|null,errors:candidateErrors,warnings:candidateWarnings};
     let candidate=built.toolpath;
     if(scope){
-      candidate=clipToolpathToFaceContactScope(candidate,scope,o,faceContactRadius);
+      candidate=clipToolpathToZLocalFaceContactScope(candidate,part,faceIds,scopeFaceIds,o,faceContactRadius);
       if(!candidate.runs.length)candidateErrors.push('Im Werkzeugkontakt-Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
     }
     if(candidate.runs.length)candidateErrors.push(...accessErrors(candidate,rough,o,operation.tool.diameterMm+2*allowance,profile));
@@ -203,7 +231,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     const combinedRuns:CanonicalToolpath['runs']=[];
     const decisions:string[]=[];
     for(const group of groups){
-      const candidates=[buildDirection('x',group.scope),buildDirection('y',group.scope)];
+      const candidates=[buildDirection('x',group.scope,[group.faceId]),buildDirection('y',group.scope,[group.faceId])];
       const chosen=chooseCandidate(candidates);
       if(!chosen||!chosen.toolpath){
         errors.push(`Face ${group.faceId}: keine freigabefähige automatische Rasterrichtung.`);
