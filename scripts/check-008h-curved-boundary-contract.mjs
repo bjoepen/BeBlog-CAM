@@ -87,8 +87,15 @@ for(const forbidden of [
 if(!model.includes('operation.tool.diameterMm+2*allowance'))throw new Error('008H-L complete-solid accessibility clearance missing');
 if(!model.includes('minX:-2*clearanceRadius')||!model.includes('maxX:stock.width+2*clearanceRadius'))throw new Error('008H-L stock-edge overhang contract missing');
 const state=fs.readFileSync('src/lib/zLevelOperationState.ts','utf8');
-if(!state.includes('buildModelRoughingOperationState({...args,scopeToSelectedFaces:true})')){
-  throw new Error('008H curved targets must consume complete-solid Z-level truth');
+// 008H-N3 supersedes the historical L/M curved-target assertion above.
+// Whole-model roughing still owns complete-solid Z-level truth; curved Face
+// targets must now fail closed here and consume native OCCT regions through
+// the asynchronous production adapter in App/preflight.
+if(state.includes('buildModelRoughingOperationState({...args,scopeToSelectedFaces:true})')){
+  throw new Error('008H-N3 forbids the rejected TypeScript curved Face ownership fallback');
+}
+if(!state.includes('Kein TypeScript-Ownership-Fallback zulässig')){
+  throw new Error('008H-N3 curved Face targets must fail closed without native OCCT truth');
 }
 const app=fs.readFileSync('src/App.svelte','utf8');
 for(const token of ['updateZLevelFinishAllowance','Schlichtaufmaß','True Z-Level schneidet den vollständigen STEP-Solid']){
