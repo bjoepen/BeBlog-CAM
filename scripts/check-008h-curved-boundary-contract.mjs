@@ -49,14 +49,16 @@ for(const token of [
   'const slices=zs.map(cutZ=>',
   'cutZ-allowance',
   'selectedFaceScope',
-  'faceScopeContainsXY',
-  'clipSegmentToFaceScope',
-  'clipToolpathToFaceScope',
+  'faceScopeContainsToolCenter',
+  'pointSegmentDistanceXY',
+  'clipSegmentToFaceContactScope',
+  'clipToolpathToFaceContactScope',
   'operation.tool.diameterMm+2*allowance',
   'actual XY projection of the selected BRep faces',
   'const clearanceRadius=operation.tool.diameterMm/2+allowance',
   'minX:-2*clearanceRadius',
   'maxX:stock.width+2*clearanceRadius',
+  'clipToolpathToFaceContactScope(toolpath,selected,o,clearanceRadius)',
 ]){
   if(!model.includes(token))throw new Error(`008H true Z-level contract missing: ${token}`);
 }
@@ -70,4 +72,5 @@ for(const token of ['updateZLevelFinishAllowance','Schlichtaufmaß','True Z-Leve
 }
 
 if(model.includes('clipToolpathToXY'))throw new Error('008H must not regress to rectangular selected-face bounds');
-console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by actual selected-face geometry; stock edges permit cutter overhang; model boundaries and legacy safety remain fail-closed.');
+if(model.includes('clipToolpathToFaceScope('))throw new Error('008H must not regress to cutter-centre-inside-face scoping');
+console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by cutter-contact envelopes; stock edges permit cutter overhang; model boundaries and legacy safety remain fail-closed.');
