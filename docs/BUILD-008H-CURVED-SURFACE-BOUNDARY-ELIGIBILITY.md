@@ -819,3 +819,77 @@ downstream cutter/allowance semantics.
 Real-World acceptance remains the CBG Headstock Hohlkehle first: select only
 that Face and verify the rendered native regions are bounded to its target
 footprint. N3 remains blocked until this native-region view passes.
+
+
+## 008H-N2a — Projected Face footprint
+
+Status: **REJECTED / CI PASS / Native build PASS / Real-World FAIL**
+
+The Headstock Hohlkehle fixture disproved N2a. N2a projected sampled native
+Face wires to XY, built a planar footprint, and subtracted the full transformed
+3D model directly from that planar Face. Selecting only the Hohlkehle still
+claimed a broad exterior region.
+
+N2a is frozen as a rejected architecture. The production/native region kernel
+must not use `projected_face_footprint` and must not perform a mixed-dimensional
+`2D selected footprint - 3D full model` Boolean.
+
+## 008H-N2b — FreeCAD Adaptive manual-region semantics
+
+Status: **IMPLEMENTED / CI pending / Native build pending / Real-World pending**
+
+A fresh audit of current FreeCAD CAM `Path/Op/Adaptive.py` corrected an
+important interpretation error in our earlier audit. FreeCAD manual Face
+selection *does* first project the selected Face(s) to the XY machining plane.
+The crucial second operand, however, is not the full 3D model.
+
+For every cutting depth FreeCAD computes a projection of the **solid portion
+above that depth** and, for an inside/manual selected region, computes:
+
+```
+selectedRefined = projectFacesToXY(selectedRegions)
+aboveRefined    = _getSolidProjection(model, depth)
+finalCut        = selectedRefined.cut(aboveRefined)
+```
+
+N2a had implemented the materially different operation:
+
+```
+sampledSelectedXY - full3DSolid
+```
+
+That was not the audited FreeCAD algorithm.
+
+N2b now mirrors the FreeCAD data flow natively in OCCT:
+
+```
+selected TopoDS_Face
+        ↓ exact BRep wire projection (BRepProj_Projection)
+selected planar Face(s)
+        ↓
+Common with stock plane
+
+full transformed TopoDS_Shape
+        ↓ Common with stock-aligned box from Z to stock top
+solid ABOVE requested Z
+        ↓ exact BRep wire projection (BRepProj_Projection)
+above-model planar Face(s)
+
+selected planar region - above-model planar region
+        ↓
+NativeZLevelRegionIsland { outer, holes }
+```
+
+Projected wires are converted to planar Faces with
+`BOPAlgo_Tools::WiresToFaces`; display triangulation and sampled Face-footprint
+ownership are excluded. The old mixed-dimensional 2D-minus-3D Boolean is
+forbidden by the 008H gate.
+
+This is still not accepted from source/CI alone. Qualification order is strict:
+
+1. native compile/link with OCCT 8;
+2. Headstock: one Hohlkehle selected, native diagnostic region must remain local;
+3. V14 Grip rounded Face fixture;
+4. only then N3 may consume native regions.
+
+If step 2 fails, N2b is rejected before raster/Canonical/004T are investigated.
