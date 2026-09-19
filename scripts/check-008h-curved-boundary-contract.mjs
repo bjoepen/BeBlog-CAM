@@ -100,25 +100,6 @@ for(const token of ["direction:'x'|'y'='x'","direction==='x'?b.minX:b.minY"]){
 for(const token of ["ZLevelRasterDirection='auto'|'x'|'y'","rasterDirection?:ZLevelRasterDirection","rasterDirection:'auto'"]){
   if(!types.includes(token))throw new Error(`008H-G persisted raster direction missing: ${token}`);
 }
-const app=fs.readFileSync('src/App.svelte','utf8');
-for(const token of ['updateZLevelFinishAllowance','Schlichtaufmaß','True Z-Level schneidet den vollständigen STEP-Solid']){
-  if(!app.includes(token))throw new Error(`008H allowance UI contract missing: ${token}`);
-}
-
-if(model.includes('clipToolpathToXY'))throw new Error('008H must not regress to rectangular selected-face bounds');
-if(model.includes('clipToolpathToFaceScope('))throw new Error('008H must not regress to cutter-centre-inside-face scoping');
-for(const token of ["direction:'x'|'y'='x'","direction==='x'?b.minX:b.minY"]){
-  if(!raster.includes(token))throw new Error(`008H-G raster direction kernel missing: ${token}`);
-}
-for(const token of ["ZLevelRasterDirection='auto'|'x'|'y'","rasterDirection?:ZLevelRasterDirection","rasterDirection:'auto'"]){
-  if(!types.includes(token))throw new Error(`008H-G persisted raster direction missing: ${token}`);
-}
-for(const token of ["requestedDirection=operation.rasterDirection??'auto'","[buildDirection('x'),buildDirection('y')]","pathLength(a.toolpath!)","Rasterrichtung Auto"]){
-  if(!model.includes(token))throw new Error(`008H-G auto-selection contract missing: ${token}`);
-}
-for(const token of ["selectedFaceScopeGroups","for(const group of groups)","buildDirection('x',group.scope,[group.faceId])","buildDirection('y',group.scope,[group.faceId])","combinedRuns.push(...chosen.toolpath.runs)","Rasterrichtung Auto lokal pro Ziel-Face gewählt"]){
-  if(!model.includes(token))throw new Error(`008H-H per-face Auto contract missing: ${token}`);
-}
 for(const token of ["Rasterrichtung","Automatisch","Parallel X","Parallel Y","rasterDirection:'auto'","rasterDirection:'x'","rasterDirection:'y'"]){
   if(!app.includes(token))throw new Error(`008H-G UI contract missing: ${token}`);
 }
