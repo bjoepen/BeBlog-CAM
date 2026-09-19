@@ -326,3 +326,34 @@ Acceptance fixture: the two opposite long and two opposite short rounded faces
 of the Z-CAM V14 grip must produce geometrically symmetric machining where the
 STEP geometry is symmetric. A single remote fragment on one opposite face is a
 Real-World FAIL.
+
+
+## 008H-K — Native Face/Z Slice Ownership
+
+A read-only audit after the V14 real-world failure found that 008H-J still fed a
+Z-filtered subset of whole 3D face triangles into the old projected-XY clipping
+kernel. It therefore improved the input without removing the wrong geometric
+model.
+
+008H-K removes that CAM path. The existing solid slicer now exposes a second,
+face-aware primitive: triangle/plane intersections retain their native
+`displayFaceIds` ownership. Selected-face roughing consumes those actual 2D
+intersection segments on the **same allowance-shifted Z plane** used to create
+the Stock−Model region.
+
+Contract:
+
+- complete-solid Z slice remains material and collision truth;
+- selected-face scope is derived from native face/Z intersection segments, not
+  projected 3D triangles;
+- finish allowance remains part of the solid clearance envelope;
+- because the safe cutter centre intentionally remains one allowance away from
+  nominal geometry, ownership accepts `tool radius + allowance` around the
+  true face/Z segment; this filter can only remove already-safe motion;
+- the old projected-face contact functions are forbidden by the 008H gate;
+- manual X/Y and per-face Auto consume the same face/Z ownership truth;
+- 004T and 004Q remain unchanged downstream.
+
+The V14 opposite-face fixture remains the acceptance test: corresponding
+opposite faces must yield corresponding machining regions. Remote fragments,
+one-sided disappearance or ownership based on a global XY shadow are FAIL.
