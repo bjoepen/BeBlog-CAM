@@ -799,3 +799,23 @@ rerun before a later beta package.
 3. Native debug region for V14 Grip rounded Faces.
 4. Only after native-region acceptance may N3 replace the historical L/M
    TypeScript ownership predicate in production raster generation.
+
+
+## 008H-N2 diagnostic qualification view
+
+Status: **IMPLEMENTED / CI pending / Real-World pending**
+
+A deliberately isolated diagnostic control is available under Bearbeiten →
+Z-Level Schruppen → Ziel-Fläche. `Native Region prüfen` invokes only
+`build_native_zlevel_regions` and renders the returned per-Z planar
+outer/hole regions. It does **not** feed the production raster, Canonical
+Toolpath, 004T/004Q, Preview or NC.
+
+The diagnostic reconstructs the same 008D manufacturing transform and the same
+Z-level schedule used by the current roughing setup, but requests
+`finishAllowanceMm: 0` so N2 ownership is inspected independently from
+downstream cutter/allowance semantics.
+
+Real-World acceptance remains the CBG Headstock Hohlkehle first: select only
+that Face and verify the rendered native regions are bounded to its target
+footprint. N3 remains blocked until this native-region view passes.
