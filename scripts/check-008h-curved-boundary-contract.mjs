@@ -44,6 +44,8 @@ for(const consumer of ['src/lib/curvedFaceRoughingOperation.ts','src/lib/surface
 }
 
 const model=fs.readFileSync('src/lib/modelRoughingOperation.ts','utf8');
+const raster=fs.readFileSync('src/lib/planarRasterKernel.ts','utf8');
+const types=fs.readFileSync('src/lib/types.ts','utf8');
 for(const token of [
   'scopeToSelectedFaces?:boolean',
   'const slices=zs.map(cutZ=>',
@@ -58,7 +60,7 @@ for(const token of [
   'const clearanceRadius=operation.tool.diameterMm/2+allowance',
   'minX:-2*clearanceRadius',
   'maxX:stock.width+2*clearanceRadius',
-  'clipToolpathToFaceContactScope(toolpath,selected,o,clearanceRadius)',
+  'clipToolpathToFaceContactScope(candidate,selected,o,clearanceRadius)',
 ]){
   if(!model.includes(token))throw new Error(`008H true Z-level contract missing: ${token}`);
 }
