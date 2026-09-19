@@ -228,6 +228,12 @@ TopoDS_Shape solid_above_projection(const TopoDS_Shape& fullModel,const std::str
 struct FaceTargetRegionProbe{
  TopoDS_Shape material;
  std::string failedStage;
+ std::string surfaceType;
+ std::string projectionDispatch;
+ std::size_t sourceWires=0;
+ std::size_t closedSourceWires=0;
+ std::size_t sourceEdges=0;
+ std::size_t projectedShapes=0;
  std::size_t selectedProjectionFaces=0;
  std::size_t selectedInStockFaces=0;
  std::size_t aboveProjectionFaces=0;
@@ -239,8 +245,13 @@ std::size_t planar_face_count(const TopoDS_Shape& shape){
 }
 FaceTargetRegionProbe face_target_material_region(const TopoDS_Face& selected,const TopoDS_Shape& fullModel,const std::string& json,double z){
  FaceTargetRegionProbe probe;
+ BRepAdaptor_Surface selectedSurface(selected,true);
+ probe.surfaceType=surface_name(selectedSurface.GetType());
+ probe.projectionDispatch=(selectedSurface.GetType()==GeomAbs_Cylinder||selectedSurface.GetType()==GeomAbs_Cone||selectedSurface.GetType()==GeomAbs_Sphere)?"hlr":"wires";
+ for(TopExp_Explorer wit(selected,TopAbs_WIRE);wit.More();wit.Next()){++probe.sourceWires;const TopoDS_Wire wire=TopoDS::Wire(wit.Current());if(wire.Closed())++probe.closedSourceWires;for(TopExp_Explorer eit(wire,TopAbs_EDGE);eit.More();eit.Next())++probe.sourceEdges;}
  const TopoDS_Face stock=stock_face(json,z);if(stock.IsNull()){probe.failedStage="stock";return probe;}
  const TopoDS_Shape selectedProjection=selected_face_projection(selected,stock);
+ probe.projectedShapes=selectedProjection.IsNull()?0:count_subshapes(selectedProjection,TopAbs_SHAPE);
  probe.selectedProjectionFaces=planar_face_count(selectedProjection);
  if(selectedProjection.IsNull()||probe.selectedProjectionFaces==0){probe.failedStage="selectedProjection";return probe;}
  BRepAlgoAPI_Common selectedInStock(selectedProjection,stock);selectedInStock.Build();
@@ -345,7 +356,7 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
    out<<"]}";
   }
   out<<"],\"errors\":[";
-  if(materialIslands.empty()){bool first_error=true;for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(!first_error)out<<',';first_error=false;std::ostringstream detail;detail<<"OCCT Face-target stage="<<(probe.failedStage.empty()?"planarIslands":probe.failedStage)<<" faceIndex="<<i<<" selectedProjectionFaces="<<probe.selectedProjectionFaces<<" selectedInStockFaces="<<probe.selectedInStockFaces<<" aboveProjectionFaces="<<probe.aboveProjectionFaces<<" materialFaces="<<probe.materialFaces<<" islands=0; fail-closed";append_json_string(out,detail.str());}}
+  if(materialIslands.empty()){bool first_error=true;for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(!first_error)out<<',';first_error=false;std::ostringstream detail;detail<<"OCCT Face-target stage="<<(probe.failedStage.empty()?"planarIslands":probe.failedStage)<<" faceIndex="<<i<<" surface="<<probe.surfaceType<<" dispatch="<<probe.projectionDispatch<<" sourceWires="<<probe.sourceWires<<" closedSourceWires="<<probe.closedSourceWires<<" sourceEdges="<<probe.sourceEdges<<" projectedShapes="<<probe.projectedShapes<<" selectedProjectionFaces="<<probe.selectedProjectionFaces<<" selectedInStockFaces="<<probe.selectedInStockFaces<<" aboveProjectionFaces="<<probe.aboveProjectionFaces<<" materialFaces="<<probe.materialFaces<<" islands=0; fail-closed";append_json_string(out,detail.str());}}
   out<<"],\"warnings\":[]}";
  }
  out<<"],\"errors\":[],\"warnings\":[\"008H-N2c surface-aware Face projection plus solid-above projection active; no mixed-dimensional solid subtraction or display triangulation used\"]}";
