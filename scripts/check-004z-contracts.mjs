@@ -103,7 +103,7 @@ requireText(geometryView,'cachedCurvedViewRoughing(curvedCacheContext','Geometry
 rejectText(geometryView,'?buildCurvedFaceRoughing(curvedFaceTarget,stock.thickness','camera updates must not directly rebuild Hohlkehle roughing');
 const planarRaster=read('src/lib/planarRasterKernel.ts');
 requireText(planarRaster,'export function buildPlanarRasterStayDownConnector','004Z-C owns an explicit cutter-safe stay-down connector planner');
-requireText(planarRaster,'safePolyline(loops,candidate,radius,step,profile)','004Z-C validates every stay-down candidate with cutter-radius clearance while allowing work profiling');
+requireText(planarRaster,'safePolyline(scopeLoops,safetyLoops,candidate,radius,step,profile,pointFilter)','004Z-C validates every stay-down candidate with cutter-radius clearance while allowing optional stricter region ownership');
 requireText(planarRaster,"[a,{x:b.x,y:a.y},b]",'004Z-C can route an orthogonal dogleg inside rounded boundaries');
 requireText(planarRaster,"[a,{x:a.x,y:b.y},b]",'004Z-C tries the mirrored orthogonal dogleg before conceding a retract');
 requireText(planarRaster,'const connector=buildPlanarRasterStayDownConnector','raster chaining consumes the 004Z-C safe-link planner');

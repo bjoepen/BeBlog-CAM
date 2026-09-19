@@ -1,5 +1,5 @@
 import type { CanonicalToolpath, CanonicalToolpathRun } from './canonicalToolpath';
-import { buildPlanarRasterChains } from './planarRasterKernel';
+import { buildPlanarRasterChains, type PlanarRasterLoop, type PlanarRasterPointFilter } from './planarRasterKernel';
 import type { RoughingRegion } from './roughingRegion';
 import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
@@ -20,12 +20,17 @@ export function buildModelRoughingCanonicalToolpath(
   stepoverPercent:number,
   origin:ModelRoughingOrigin,
   profile?:ZLevelPerformanceProfile,
+  clearanceAllowanceMm=0,
+  rasterDirection:'x'|'y'='x',
+  regionPointFilter?:(region:RoughingRegion)=>PlanarRasterPointFilter|undefined,
+  regionSafetyLoops?:(region:RoughingRegion)=>PlanarRasterLoop[]|undefined,
 ):ModelRoughingToolpathResult{
   const errors:string[]=[];
   const warnings:string[]=[];
 
   if(!(toolDiameterMm>0))errors.push('Werkzeugdurchmesser muss größer als 0 sein.');
   if(!(stepoverPercent>0&&stepoverPercent<=100))errors.push('Stepover muss größer als 0 und höchstens 100 % sein.');
+  if(!(clearanceAllowanceMm>=0))errors.push('Schlichtaufmaß darf nicht negativ sein.');
   if(!regions.length)errors.push('Keine Stock−Model-Schruppregionen vorhanden.');
 
   const invalid=regions.filter(region=>!region.valid);
@@ -39,6 +44,9 @@ export function buildModelRoughingCanonicalToolpath(
   };
 
   const ordered=[...regions].sort((a,b)=>b.z-a.z);
+  // 008H: use an enlarged clearance disk for conservative XY stock allowance,
+  // while canonical tool identity remains the physical cutter diameter.
+  const clearanceDiameterMm=toolDiameterMm+2*clearanceAllowanceMm;
   const runs:CanonicalToolpathRun[]=[];
   let islandCount=0;
 
@@ -49,7 +57,8 @@ export function buildModelRoughingCanonicalToolpath(
         {points:island.outer},
         ...island.holes.map(points=>({points})),
       ];
-      const chains=buildPlanarRasterChains(loops,toolDiameterMm,stepoverPercent,profile);
+      const safetyLoops=regionSafetyLoops?.(region)??loops;
+      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection,regionPointFilter?.(region),safetyLoops);
       if(!chains.length){
         warnings.push(`Z ${region.z.toFixed(3)} · Schruppinsel ${islandCount}: kein werkzeugradius-sicherer Rasterpfad.`);
         continue;

@@ -81,6 +81,8 @@ jobs:
         run: pnpm check:008b7
       - name: Estlcam qualification baseline
         run: pnpm check:008c1
+      - name: Curved surface boundary eligibility contract
+        run: pnpm check:008h
       - name: Frontend build
         run: pnpm build
       - name: Rust check

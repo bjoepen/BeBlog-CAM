@@ -93,14 +93,10 @@ export function buildZLevelOperationState(args:{
     };
   }
 
+  // 004Z invariant: if the selected face is planar, a failed planar Face
+  // Target must stay planar. It must never masquerade as a curved target.
+  // 008H only replaces the genuinely non-planar path below.
   const curved=buildCurvedFaceRoughingOperationState(args);
-
-  // 004Z: A planar face that cannot produce a Face-Target toolpath must stay
-  // classified as planar. Previously we fell through into the curved-face path,
-  // which produced the contradictory message "planar ... belongs to planar path".
-  // The most common valid reason is a selected top face at stock-top Z: there is
-  // no material above that face to remove with Face Target. Clearing stock around
-  // the part is a Stock−Model operation instead.
   const planarFallback=curved.errors.includes('Die Zielfläche ist planar und gehört zum planaren Face-Target-Pfad.');
   if(planarFallback){
     const targetZ=curved.targetMaxZ;
@@ -121,30 +117,17 @@ export function buildZLevelOperationState(args:{
     };
   }
 
-  if(curved.ok&&curved.toolpath){
-    return{
-      mode,
-      targetKind:'curved-face',
-      toolpath:curved.toolpath,
-      levelCount:curved.levelCount,
-      errors:[],
-      warnings:curved.warnings,
-      targetZ:null,
-      roughBottomZ:null,
-      targetMinZ:curved.targetMinZ,
-      targetMaxZ:curved.targetMaxZ,
-    };
-  }
-
+  // 008H-N3 hard boundary: curved Face targets are asynchronous native OCCT
+  // geometry. This synchronous reconstruction API must never fall back to the
+  // rejected 008H-M TypeScript ownership heuristic. App/preflight inject the
+  // cached native canonical truth; every other caller fails closed.
   return{
     mode,
     targetKind:'curved-face',
     toolpath:null,
-    levelCount:curved.levelCount,
-    errors:curved.errors.length
-      ?curved.errors
-      :['Die gewählte STEP/BRep-Zielfläche ist weder als planares noch als gekrümmtes Face Target rekonstruierbar.'],
-    warnings:curved.warnings,
+    levelCount:0,
+    errors:['008H-N3: Gekrümmtes Face Target benötigt die autoritative native OCCT-Materialregion. Kein TypeScript-Ownership-Fallback zulässig.'],
+    warnings:[],
     targetZ:null,
     roughBottomZ:null,
     targetMinZ:curved.targetMinZ,

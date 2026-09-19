@@ -6,10 +6,16 @@ mod project_file;
 
 use domain::Project;
 use import::ImportSummary;
+use occt::{BrepBackend, NativeZLevelRegionRequest, NativeZLevelRegionSet, Occt8Backend};
 
 #[tauri::command]
 fn inspect_import(path: String) -> Result<ImportSummary, String> {
     import::inspect(&path)
+}
+
+#[tauri::command]
+fn build_native_zlevel_regions(request: NativeZLevelRegionRequest) -> Result<NativeZLevelRegionSet, String> {
+    Occt8Backend.build_zlevel_regions(&request)
 }
 
 #[tauri::command]
@@ -64,7 +70,7 @@ fn load_project_file(path: String) -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![inspect_import, new_project, save_nc_file, save_project_file, load_project_file])
+        .invoke_handler(tauri::generate_handler![inspect_import, build_native_zlevel_regions, new_project, save_nc_file, save_project_file, load_project_file])
         .run(tauri::generate_context!())
         .expect("error while running BeBlog CAM");
 }
