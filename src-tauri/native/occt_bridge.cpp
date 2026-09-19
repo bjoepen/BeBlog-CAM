@@ -207,7 +207,8 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
  if(json_string_field(request,"contractVersion")!="008H-N1-v1")return copy_result("{\"error\":\"Unbekannte Native-Z-Level-Contract-Version\"}");
  const std::string path=json_string_field(request,"sourcePath"),fingerprint=json_string_field(request,"sourceFingerprint");
  if(path.empty()||fingerprint.empty())return copy_result("{\"error\":\"Native Z-Level-Anfrage benötigt sourcePath und sourceFingerprint\"}");
- const auto face_ids=json_size_array(request,"faceIds"),levels=json_number_array(request,"zLevelsMm");
+ const auto face_ids=json_size_array(request,"faceIds");
+ const auto levels=json_number_array(request,"zLevelsMm");
  if(face_ids.empty()||levels.empty())return copy_result("{\"error\":\"Native Z-Level-Anfrage benötigt Face-IDs und Z-Level\"}");
  STEPControl_Reader reader;if(reader.ReadFile(path.c_str())!=IFSelect_RetDone)return copy_result("{\"error\":\"STEP-Datei konnte von OCCT nicht gelesen werden\"}");
  if(reader.TransferRoots()<=0)return copy_result("{\"error\":\"STEP-Datei enthält keine übertragbare BRep-Geometrie\"}");
