@@ -54,7 +54,7 @@ for(const token of [
   'clipSegmentToFaceContactScope',
   'clipToolpathToFaceContactScope',
   'operation.tool.diameterMm+2*allowance',
-  'actual XY projection of the selected BRep faces',
+  'cutter CONTACT intent',
   'const clearanceRadius=operation.tool.diameterMm/2+allowance',
   'minX:-2*clearanceRadius',
   'maxX:stock.width+2*clearanceRadius',
