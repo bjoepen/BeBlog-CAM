@@ -39,24 +39,22 @@ function selectedFaceScopeGroups(part:P3[],faceIds:number[],selectedFaceIds:numb
   }
   return groups;
 }
-function pointSegmentDistance(p:{x:number;y:number},segment:ZLevelFaceSegment){
-  const {a,b}=segment,dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
-  if(l2<=EPS*EPS)return Math.hypot(p.x-a.x,p.y-a.y);
-  const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l2));
-  return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));
+function faceExtrudesToMaterial(p:{x:number;y:number},segment:ZLevelFaceSegment){
+  const {a,b,outward}=segment,dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
+  if(l2<=EPS*EPS)return false;
+  const t=((p.x-a.x)*dx+(p.y-a.y)*dy)/l2;
+  // Face ownership ends at the native section endpoints. Adjacent BRep faces
+  // own the material beyond those boundaries; no nearest-face Voronoi leakage.
+  if(t<-1e-5||t>1+1e-5)return false;
+  const q={x:a.x+dx*t,y:a.y+dy*t};
+  const ox=p.x-q.x,oy=p.y-q.y;
+  // The material side is the OCCT face's outward side. A face whose normal is
+  // vertical at this Z section cannot claim an unbounded lateral strip.
+  const lateral=Math.hypot(outward.x,outward.y);
+  return lateral>0.5&&ox*outward.x+oy*outward.y>=-1e-5;
 }
 function faceOwnedMaterialPoint(p:{x:number;y:number},segments:ZLevelFaceSegment[],targetFaceIds:Set<number>){
-  if(!segments.length||!targetFaceIds.size)return false;
-  let nearest=Infinity,nearestTarget=Infinity;
-  for(const segment of segments){
-    const d=pointSegmentDistance(p,segment);
-    if(d<nearest)nearest=d;
-    if(targetFaceIds.has(segment.faceId)&&d<nearestTarget)nearestTarget=d;
-  }
-  // The selected face owns this Stock−Model point when it is one of the
-  // nearest boundaries on the actual Z section. A tiny tie tolerance makes
-  // shared BRep edges deterministic without creating a contact corridor.
-  return Number.isFinite(nearestTarget)&&nearestTarget<=nearest+1e-5;
+  return segments.some(segment=>targetFaceIds.has(segment.faceId)&&faceExtrudesToMaterial(p,segment));
 }
 function islandLoops(i:RoughingRegion['islands'][number]){return[{points:i.outer},...i.holes.map(points=>({points}))]}
 function safeInRegion(r:RoughingRegion,p:{x:number;y:number},d:number,profile?:ZLevelPerformanceProfile){return r.islands.some(i=>{if(profile)profile.accessibilityRegionTests++;return isPlanarRasterPointSafe(islandLoops(i),p,d,profile)})}
@@ -105,15 +103,16 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   const o=origin(stock,wcs);
   // 008H-L reset: target Faces define ownership of Stock−Model material before
   // raster generation. They never clip an already generated toolpath.
-  // Every Z level is partitioned by the nearest native BRep boundary segment
-  // from the same solid slice. Selected Faces own the material for which their
-  // boundary is nearest; the full solid still defines cutter clearance/safety.
-  const allFaceIds=[...new Set(faceIds)];
+  // Every Z level uses the selected native BRep Face section itself as the target
+  // boundary. Material ownership extends only from that bounded section in the
+  // OCCT outward direction; it stops at the section endpoints where adjacent
+  // Faces take over. The full solid still defines cutter clearance/safety.
+  const faceOrientations=new Map((summary.brep?.manufacturingFaces??[]).map(face=>[face.faceId,face.orientation] as const));
   const faceSegmentsByLevel=new Map<string,ZLevelFaceSegment[]>();
   if(selected){
     for(const region of rough){
       const sliceZ=Math.max(b.minZ,region.z-allowance);
-      faceSegmentsByLevel.set(region.z.toFixed(6),sliceFaceSegmentsAtZ(part,faceIds,allFaceIds,sliceZ,profile));
+      faceSegmentsByLevel.set(region.z.toFixed(6),sliceFaceSegmentsAtZ(part,faceIds,operation.faceIds,sliceZ,profile,faceOrientations));
     }
   }
   const ownershipFilter=(targetFaceIds:number[])=>{
@@ -194,7 +193,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     warnings.push(...chosen.warnings);
     if(requestedDirection==='auto')warnings.push(`008H-G: Rasterrichtung Auto → ${chosen.direction.toUpperCase()} gewählt.`);
   }
-  if(selected)warnings.push('008H-L: Ziel-Faces definieren Face-owned Stock−Model-Materialregionen pro echter Z-Schnittebene; Rasterbahnen werden erst innerhalb dieser Regionen erzeugt. Keine nachträgliche Face-Contact- oder XY-Projektionsbeschneidung. Vollständiges STEP-Solid bleibt Kollisions- und Materialwahrheit.');
+  if(selected)warnings.push('008H-M: Ziel-Faces definieren begrenzte Stock−Model-Materialregionen aus ihrem echten Z-Schnitt und der nativen OCCT-Außenseite. Face-Endpunkte begrenzen die Zuständigkeit gegenüber Nachbarflächen; Rasterbahnen entstehen erst innerhalb dieser Regionen. Vollständiges STEP-Solid bleibt Kollisions- und Materialwahrheit.');
 
   return{ok:true,toolpath:toolpath!,levelCount:zs.length,roughingRegionCount:rough.length,errors:[],warnings:[...new Set(warnings)]};
 }
