@@ -12,6 +12,10 @@ fn inspect_import(path: String) -> Result<ImportSummary, String> {
     import::inspect(&path)
 }
 
+// 008H-N1 deliberately exposes no Tauri CAM-region command yet. N2 will add
+// the executable native geometry implementation; N1 freezes only the wire
+// contract so no production consumer can accidentally switch to a stub.
+
 #[tauri::command]
 fn new_project() -> Project {
     Project::default()
