@@ -71,6 +71,74 @@ pub struct ManufacturingWireSummary {
     pub edge_ids: Vec<usize>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeVec2 { pub x: f64, pub y: f64 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeStockDefinition {
+    pub width: f64, pub height: f64, pub thickness: f64,
+    pub offset_x: f64, pub offset_y: f64, pub offset_z: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePartOrientation {
+    pub rotation_x_deg: f64, pub rotation_y_deg: f64, pub rotation_z_deg: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativePartTransform {
+    pub orientation: NativePartOrientation,
+    pub translation_mm: [f64; 3],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeZLevelRegionRequest {
+    pub contract_version: String,
+    pub source_path: String,
+    pub source_fingerprint: String,
+    pub face_ids: Vec<usize>,
+    pub transform: NativePartTransform,
+    pub stock: NativeStockDefinition,
+    pub z_levels_mm: Vec<f64>,
+    pub finish_allowance_mm: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeZLevelRegionIsland {
+    pub outer: Vec<NativeVec2>,
+    #[serde(default)] pub holes: Vec<Vec<NativeVec2>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeZLevelRegion {
+    pub z: f64,
+    pub valid: bool,
+    #[serde(default)] pub islands: Vec<NativeZLevelRegionIsland>,
+    #[serde(default)] pub errors: Vec<String>,
+    #[serde(default)] pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeZLevelRegionSet {
+    pub contract_version: String,
+    pub source_fingerprint: String,
+    pub face_id_contract: String,
+    #[serde(default)] pub regions: Vec<NativeZLevelRegion>,
+    #[serde(default)] pub errors: Vec<String>,
+    #[serde(default)] pub warnings: Vec<String>,
+}
+
+pub const NATIVE_ZLEVEL_REGION_CONTRACT_VERSION: &str = "008H-N1-v1";
+pub const NATIVE_FACE_ID_CONTRACT: &str = "zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds";
+
 pub trait BrepBackend { fn inspect_step(&self, path: &Path) -> Result<BrepSummary, String>; }
 pub struct Occt8Backend;
 
