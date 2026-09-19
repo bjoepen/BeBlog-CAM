@@ -3,7 +3,7 @@ export type ZPoint3 = { x:number; y:number; z:number };
 export type ZPoint2 = { x:number; y:number };
 export type ZLevelChain = { z:number; points:ZPoint2[]; closed:boolean };
 export type ZLevelSlice = { z:number; chains:ZLevelChain[] };
-export type ZLevelFaceSegment = { z:number; faceId:number; a:ZPoint2; b:ZPoint2 };
+export type ZLevelFaceSegment = { z:number; faceId:number; a:ZPoint2; b:ZPoint2; outward:ZPoint2 };
 
 const EPS=1e-7;
 const KEY_SCALE=1e5;
@@ -21,6 +21,14 @@ function edgeIntersection(a:ZPoint3,b:ZPoint3,z:number):ZPoint2|null{
   const t=(z-a.z)/(b.z-a.z);
   if(t<-EPS||t>1+EPS)return null;
   return{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};
+}
+
+function triangleNormal(a:ZPoint3,b:ZPoint3,c:ZPoint3,reversed:boolean):ZPoint3{
+  const ux=b.x-a.x,uy=b.y-a.y,uz=b.z-a.z,vx=c.x-a.x,vy=c.y-a.y,vz=c.z-a.z;
+  let x=uy*vz-uz*vy,y=uz*vx-ux*vz,z=ux*vy-uy*vx;
+  if(reversed){x=-x;y=-y;z=-z}
+  const length=Math.hypot(x,y,z)||1;
+  return{x:x/length,y:y/length,z:z/length};
 }
 
 function triangleSegment(a:ZPoint3,b:ZPoint3,c:ZPoint3,z:number):[ZPoint2,ZPoint2]|null{
@@ -98,6 +106,7 @@ export function sliceFaceSegmentsAtZ(
   selectedFaceIds:number[],
   z:number,
   profile?:ZLevelPerformanceProfile,
+  faceOrientations:Map<number,string>=new Map(),
 ):ZLevelFaceSegment[]{
   const selected=new Set(selectedFaceIds);
   const unique=new Map<string,ZLevelFaceSegment>();
@@ -108,7 +117,9 @@ export function sliceFaceSegmentsAtZ(
     const segment=triangleSegment(points[i],points[i+1],points[i+2],z);
     if(!segment)continue;
     const key=`${faceId}|${segmentKey(segment[0],segment[1])}`;
-    unique.set(key,{z,faceId,a:segment[0],b:segment[1]});
+    const normal=triangleNormal(points[i],points[i+1],points[i+2],faceOrientations.get(faceId)==='reversed');
+    const xyLength=Math.hypot(normal.x,normal.y);
+    unique.set(key,{z,faceId,a:segment[0],b:segment[1],outward:xyLength>EPS?{x:normal.x/xyLength,y:normal.y/xyLength}:{x:0,y:0}});
   }
   return[...unique.values()];
 }
