@@ -179,12 +179,20 @@ TopoDS_Shape project_face_outline_to_plane(const TopoDS_Face& face,const TopoDS_
 }
 TopoDS_Shape project_face_to_plane(const TopoDS_Face& face,const TopoDS_Face& target){
  BRepAdaptor_Surface surface(face,true);
- // Planar Faces have unambiguous closed BRep wires. Curved Faces require an
- // actual top-view silhouette: projecting their seam/boundary wires directly
- // is the rejected N2b shortcut that made a single Hohlkehle claim the broad
- // Headstock exterior.
- if(surface.GetType()==GeomAbs_Plane)return project_face_wires_to_plane(face,target);
- return project_face_outline_to_plane(face,target);
+ // FreeCAD CAM projectFacesToXY is surface-aware. Only seam-heavy analytic
+ // surfaces (cylinder/cone/sphere) use the TechDraw/HLR outline path. Ordinary
+ // curved Faces, including a non-seam Hohlkehle represented as BSpline/other,
+ // keep their actual closed BRep boundary and project those wires to XY.
+ // This distinction is essential: forcing every curved Face through HLR can
+ // yield only open visible edges, so no selected Face region can be rebuilt.
+ switch(surface.GetType()){
+  case GeomAbs_Cylinder:
+  case GeomAbs_Cone:
+  case GeomAbs_Sphere:
+   return project_face_outline_to_plane(face,target);
+  default:
+   return project_face_wires_to_plane(face,target);
+ }
 }
 TopoDS_Shape fuse_planar_faces(const TopoDS_Shape& source){
  TopoDS_Shape fused;
