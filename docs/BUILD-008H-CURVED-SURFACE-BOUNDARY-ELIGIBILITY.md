@@ -278,3 +278,24 @@ for every target face.
 Manual **Parallel X** and **Parallel Y** intentionally remain global overrides.
 No local decision can bypass Stock−Model truth, cutter clearance, allowance,
 004T motion truth or 004Q assembly checks.
+
+
+## 008H-I — Face Contact Radius vs. Solid Allowance
+
+Real-world testing with the Z-CAM grip exposed a semantic overlap: the solid
+roughing geometry already applies finish allowance conservatively, while the
+selected-face contact scope also used `tool radius + allowance`. That enlarged
+the selection envelope a second time and could retain paths visibly displaced
+from the intended rounded surface.
+
+The contracts are now separated:
+
+- **complete STEP solid** owns material truth, collision clearance and finish allowance;
+- **selected BRep face** owns only cutter-contact intent;
+- the face-contact envelope therefore uses the **physical cutter radius only**;
+- stock-edge overhang and downstream 004T/004Q safety remain unchanged.
+
+This is intentionally a narrow correction. It does not weaken solid safety and
+does not invent additional toolpath geometry; it can only reject portions of an
+already solid-safe canonical candidate that do not physically reach a selected
+face.
