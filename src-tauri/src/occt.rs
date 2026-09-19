@@ -139,16 +139,23 @@ pub struct NativeZLevelRegionSet {
 pub const NATIVE_ZLEVEL_REGION_CONTRACT_VERSION: &str = "008H-N1-v1";
 pub const NATIVE_FACE_ID_CONTRACT: &str = "zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds";
 
-pub trait BrepBackend { fn inspect_step(&self, path: &Path) -> Result<BrepSummary, String>; }
+pub trait BrepBackend {
+    fn inspect_step(&self, path: &Path) -> Result<BrepSummary, String>;
+    fn build_zlevel_regions(&self, request: &NativeZLevelRegionRequest) -> Result<NativeZLevelRegionSet, String>;
+}
 pub struct Occt8Backend;
 
 #[cfg(feature = "occt-native")]
 mod native {
-    use super::BrepSummary;
+    use super::{BrepSummary, NativeZLevelRegionRequest, NativeZLevelRegionSet};
     use serde::Deserialize;
     use std::ffi::{c_char, CStr, CString};
     use std::path::Path;
-    unsafe extern "C" { fn beblog_occt_inspect_step(path: *const c_char) -> *mut c_char; fn beblog_occt_free_string(value: *mut c_char); }
+    unsafe extern "C" {
+        fn beblog_occt_inspect_step(path: *const c_char) -> *mut c_char;
+        fn beblog_occt_build_zlevel_regions(request_json: *const c_char) -> *mut c_char;
+        fn beblog_occt_free_string(value: *mut c_char);
+    }
     #[derive(Deserialize)] struct NativeError { error: String }
     pub fn inspect(path: &Path) -> Result<BrepSummary, String> {
         let path = path.to_str().ok_or("STEP-Pfad ist nicht als UTF-8 darstellbar")?;
@@ -160,12 +167,28 @@ mod native {
         if let Ok(error) = serde_json::from_str::<NativeError>(&text) { return Err(error.error); }
         serde_json::from_str::<BrepSummary>(&text).map_err(|e| format!("OCCT-Bridge lieferte ungültige Geometriedaten: {e}"))
     }
+
+    pub fn build_zlevel_regions(request: &NativeZLevelRegionRequest) -> Result<NativeZLevelRegionSet, String> {
+        let encoded = serde_json::to_string(request).map_err(|e| format!("Native Z-Level-Anfrage konnte nicht serialisiert werden: {e}"))?;
+        let encoded = CString::new(encoded).map_err(|_| "Native Z-Level-Anfrage enthält ein ungültiges Nullbyte")?;
+        let raw = unsafe { beblog_occt_build_zlevel_regions(encoded.as_ptr()) };
+        if raw.is_null() { return Err("OCCT-Bridge konnte kein Z-Level-Ergebnis reservieren".into()); }
+        let text = unsafe { CStr::from_ptr(raw) }.to_string_lossy().into_owned();
+        unsafe { beblog_occt_free_string(raw) }
+        if let Ok(error) = serde_json::from_str::<NativeError>(&text) { return Err(error.error); }
+        serde_json::from_str::<NativeZLevelRegionSet>(&text).map_err(|e| format!("OCCT-Bridge lieferte ungültige Z-Level-Regionen: {e}"))
+    }
 }
 
 impl BrepBackend for Occt8Backend {
     fn inspect_step(&self, path: &Path) -> Result<BrepSummary, String> {
         #[cfg(feature = "occt-native")] { return native::inspect(path); }
         #[cfg(not(feature = "occt-native"))] { let _ = path; Err("Native OCCT-Unterstützung ist in diesem Build nicht aktiviert. Für STEP/BRep mit Feature `occt-native` und OCCT 8 bauen.".into()) }
+    }
+
+    fn build_zlevel_regions(&self, request: &NativeZLevelRegionRequest) -> Result<NativeZLevelRegionSet, String> {
+        #[cfg(feature = "occt-native")] { return native::build_zlevel_regions(request); }
+        #[cfg(not(feature = "occt-native"))] { let _ = request; Err("Native OCCT-Unterstützung ist in diesem Build nicht aktiviert. Z-Level-Regionen benötigen OCCT 8.".into()) }
     }
 }
 
