@@ -51,7 +51,13 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
   const errors=[...native.errors];
   const warnings=[...native.warnings];
   if(wcs.z!=='top')errors.push('Native Face Target benötigt WCS Z auf der Rohlingoberseite.');
-  if(native.regions.some(region=>!region.valid))errors.push('Mindestens eine native Face-Target-Z-Ebene ist ungültig.');
+  for(const region of native.regions){
+    warnings.push(...region.warnings.map(message=>`Z=${region.z.toFixed(3)} mm: ${message}`));
+    if(!region.valid){
+      if(region.errors.length)errors.push(...region.errors.map(message=>`Z=${region.z.toFixed(3)} mm: ${message}`));
+      else errors.push(`Z=${region.z.toFixed(3)} mm: Native Face-Target-Region ist ungültig und enthält keine konkrete OCCT-Ursache.`);
+    }
+  }
   if(errors.length)return{ok:false,toolpath:null,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
 
   const regions=regionsFromNative(native,stock);
