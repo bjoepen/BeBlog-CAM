@@ -143,14 +143,19 @@ TopoDS_Shape face_target_material_region(const TopoDS_Face& selected,const TopoD
  BRepAlgoAPI_Cut material(inStock.Shape(),fullModel);material.Build();if(!material.IsDone())return TopoDS_Shape();
  return material.Shape();
 }
-std::vector<SectionChain> planar_shape_chains(const TopoDS_Shape& shape){
- std::vector<SectionChain> out;
+struct PlanarIsland{SectionChain outer;std::vector<SectionChain> holes;};
+std::vector<PlanarIsland> planar_shape_islands(const TopoDS_Shape& shape){
+ std::vector<PlanarIsland> out;
  for(TopExp_Explorer fit(shape,TopAbs_FACE);fit.More();fit.Next()){
-  const TopoDS_Face face=TopoDS::Face(fit.Current());
+  const TopoDS_Face face=TopoDS::Face(fit.Current());BRepAdaptor_Surface surface(face,true);if(surface.GetType()!=GeomAbs_Plane)continue;
+  const double z=surface.Plane().Location().Z();const TopoDS_Wire outerWire=BRepTools::OuterWire(face);if(outerWire.IsNull())continue;
+  auto outerPoints=sampled_wire_xy(outerWire,z);if(outerPoints.size()<4)continue;
+  PlanarIsland island{{std::move(outerPoints)},{}};
   for(TopExp_Explorer wit(face,TopAbs_WIRE);wit.More();wit.Next()){
-   auto points=sampled_wire_xy(TopoDS::Wire(wit.Current()),BRepAdaptor_Surface(face,true).Plane().Location().Z());
-   if(points.size()>3)out.push_back({std::move(points)});
+   const TopoDS_Wire wire=TopoDS::Wire(wit.Current());if(wire.IsSame(outerWire))continue;
+   auto holePoints=sampled_wire_xy(wire,z);if(holePoints.size()>3)island.holes.push_back({std::move(holePoints)});
   }
+  out.push_back(std::move(island));
  }
  return out;
 }
@@ -215,14 +220,16 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
  out<<",\"faceIdContract\":\"zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds\",\"regions\":[";
  bool first_region=true;
  for(double z:levels){if(!first_region)out<<',';first_region=false;
-  std::vector<SectionChain> materialChains;
-  for(const auto& selectedFace:transformedFaces){const TopoDS_Shape material=face_target_material_region(selectedFace,transformedModel,request,z);if(material.IsNull())continue;auto chains=planar_shape_chains(material);materialChains.insert(materialChains.end(),chains.begin(),chains.end());}
-  out<<"{\"z\":"<<std::setprecision(12)<<z<<",\"valid\":"<<(!materialChains.empty()?"true":"false")<<",\"islands\":[";
-  bool first_island=true;for(const auto& chain:materialChains){if(chain.points.size()<4||d2xy(chain.points.front(),chain.points.back())>=1e-10)continue;if(!first_island)out<<',';first_island=false;
-   out<<"{\"outer\":[";bool fp=true;for(const auto&p:chain.points){if(!fp)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';fp=false;}out<<"],\"holes\":[]}";
+  std::vector<PlanarIsland> materialIslands;
+  for(const auto& selectedFace:transformedFaces){const TopoDS_Shape material=face_target_material_region(selectedFace,transformedModel,request,z);if(material.IsNull())continue;auto islands=planar_shape_islands(material);materialIslands.insert(materialIslands.end(),std::make_move_iterator(islands.begin()),std::make_move_iterator(islands.end()));}
+  out<<"{\"z\":"<<std::setprecision(12)<<z<<",\"valid\":"<<(!materialIslands.empty()?"true":"false")<<",\"islands\":[";
+  bool first_island=true;for(const auto& island:materialIslands){const auto& chain=island.outer;if(chain.points.size()<4||d2xy(chain.points.front(),chain.points.back())>=1e-10)continue;if(!first_island)out<<',';first_island=false;
+   out<<"{\"outer\":[";bool fp=true;for(const auto&p:chain.points){if(!fp)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';fp=false;}out<<"],\"holes\":[";
+   bool first_hole=true;for(const auto& hole:island.holes){if(!first_hole)out<<',';first_hole=false;out<<'[';bool hp=true;for(const auto&p:hole.points){if(!hp)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';hp=false;}out<<']';}
+   out<<"]}";
   }
   out<<"],\"errors\":[";
-  if(materialChains.empty())out<<"\"OCCT could not prove a Face-target Stock-model material region; fail-closed\"";
+  if(materialIslands.empty())out<<"\"OCCT could not prove a Face-target Stock-model material region; fail-closed\"";
   out<<"],\"warnings\":[]}";
  }
  out<<"],\"errors\":[],\"warnings\":[\"008H-N2 native OCCT Face-footprint intersect Stock minus exact Model material-region kernel active; no display triangulation used\"]}";
