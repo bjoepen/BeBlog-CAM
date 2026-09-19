@@ -9,6 +9,7 @@ import type {
 import type { CanonicalToolpath } from './canonicalToolpath';
 import { buildFaceTargetOperationState } from './faceTargetOperation';
 import { buildModelRoughingOperationState } from './modelRoughingOperation';
+import { buildCurvedFaceRoughingOperationState } from './curvedFaceRoughingOperation';
 import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type ZLevelTargetKind='planar-face'|'curved-face'|'model';
@@ -92,7 +93,31 @@ export function buildZLevelOperationState(args:{
     };
   }
 
-  // 008H: non-planar face targets use the same solid-slice truth as model
+  // 004Z invariant: if the selected face is planar, a failed planar Face
+  // Target must stay planar. It must never masquerade as a curved target.
+  // 008H only replaces the genuinely non-planar path below.
+  const curved=buildCurvedFaceRoughingOperationState(args);
+  const planarFallback=curved.errors.includes('Die Zielfläche ist planar und gehört zum planaren Face-Target-Pfad.');
+  if(planarFallback){
+    const targetZ=curved.targetMaxZ;
+    const atStockTop=targetZ!=null&&Math.abs(targetZ-args.stock.thickness)<=1e-4;
+    return{
+      mode,
+      targetKind:'planar-face',
+      toolpath:null,
+      levelCount:0,
+      errors:[atStockTop
+        ?'Die gewählte obere STEP-Fläche liegt auf Rohlingoberkante. Face Target hat dort keinen vertikalen Abtrag; zum Freiräumen des Materials um das Modell „Stock – Model“ verwenden.'
+        :'Die gewählte STEP-Fläche ist planar, konnte aber nicht als zusammenhängendes planares Face Target rekonstruiert werden.'],
+      warnings:curved.warnings,
+      targetZ,
+      roughBottomZ:null,
+      targetMinZ:curved.targetMinZ,
+      targetMaxZ:curved.targetMaxZ,
+    };
+  }
+
+  // 008H: genuinely non-planar targets use the same solid-slice truth as model
   // roughing. Selected faces define scope only; the complete STEP solid defines
   // material, cutter clearance and top accessibility.
   const solid=buildModelRoughingOperationState({...args,scopeToSelectedFaces:true});
