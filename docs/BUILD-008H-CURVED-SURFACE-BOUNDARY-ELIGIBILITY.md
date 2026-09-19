@@ -141,3 +141,30 @@ or Z-only value.
 - Ø3 / Ø6 changes reachability without weakening collision proof,
 - overhang/undercut remains top-accessibility fail-closed,
 - Preview / Preflight / NC consume the same canonical toolpath.
+
+
+## 008H-D — Geometric Selected-Face Scope
+
+A stock-height real-world test exposed that the first True-Z-Level implementation
+used the rectangular XY bounds of all selected faces as manufacturing scope.
+That can include unrelated material between disjoint fillets and is not an
+acceptable interpretation of face selection.
+
+008H-D removes the rectangular scope. Safe complete-solid raster segments are
+now intersected with the actual XY projection of the selected BRep-face
+triangulation. Each straight raster segment is split at projected selected-face
+triangle edges and every resulting interval is classified against the union of
+the selected face projections.
+
+The responsibility split is therefore explicit:
+
+- **Stock**: where removable material exists.
+- **Complete STEP/BRep solid**: what is collision-safe and must remain.
+- **Selected BRep faces**: where this face-target Z-Level operation is allowed to
+  machine.
+
+The complete-solid safety proof remains upstream of selection clipping.
+Selection can reduce a proven-safe path, never make an unsafe path legal.
+
+The 008H contract gate explicitly rejects a return to rectangular
+`clipToolpathToXY` face scoping.
