@@ -357,3 +357,48 @@ Contract:
 The V14 opposite-face fixture remains the acceptance test: corresponding
 opposite faces must yield corresponding machining regions. Remote fragments,
 one-sided disappearance or ownership based on a global XY shadow are FAIL.
+
+
+## 008H-L — Contract Reset: Face-owned Roughing Regions
+
+**This section supersedes the Face-target scoping assumptions from 008H-F
+through 008H-K.** Those iterations treated a selected Face as a contact envelope
+used to clip an already generated whole-model toolpath. Real-world testing with
+the V14 grip proved that abstraction wrong and it is no longer part of the
+Z-Level Face-target implementation.
+
+New invariant:
+
+> A selected Face owns Stock−Model material on each Z section. It does not clip
+> an already generated canonical toolpath.
+
+For every allowance-shifted solid Z slice:
+
+1. the complete STEP solid creates the ordinary Stock−Model roughing region;
+2. the same native BRep triangulation is sliced with `displayFaceIds` retained;
+3. every safe Stock−Model sample is assigned to its nearest native boundary
+   segment on that Z section;
+4. material whose nearest boundary belongs to a selected Face is the Face-owned
+   roughing region;
+5. raster X/Y is generated **inside that owned material region**;
+6. cutter clearance, finish allowance, top accessibility, 004T and 004Q remain
+   independent safety truths.
+
+This is a partition of removable material, not a cutter-contact corridor.
+Therefore material may extend from the selected model boundary all the way to
+the stock boundary when that Face remains the nearest target boundary.
+
+Implementation consequences:
+
+- no generated canonical toolpath is post-clipped by selected Faces;
+- projected 3D Face envelopes and cutter-contact radii are not CAM scope;
+- the raster kernel accepts a region predicate and applies it to both raster
+  samples and stay-down connectors;
+- Auto may still choose X/Y per selected Face, but both candidates are generated
+  from that Face's owned material region;
+- manual X/Y over multiple selected Faces uses the union of their ownership.
+
+The V14 grip remains the primary real-world acceptance fixture. Corresponding
+opposite rounded Faces must own corresponding Stock−Model regions and produce
+corresponding safe roughing paths. One-sided disappearance, isolated contact
+fragments or projected-Face behaviour are FAIL.
