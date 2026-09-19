@@ -6,7 +6,10 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
-#include <BRepProj_Projection.hxx>
+#include <HLRBRep_Algo.hxx>
+#include <HLRBRep_HLRToShape.hxx>
+#include <HLRAlgo_Projector.hxx>
+#include <gp_Ax2.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BOPAlgo_Tools.hxx>
 #include <BRepAlgoAPI_Common.hxx>
@@ -125,17 +128,56 @@ TopoDS_Face stock_face(const std::string& json,double z){
 // Z level and that clipped solid is projected separately. The removable target
 // is selectedProjection - aboveModelProjection. Never subtract a 3D solid
 // directly from a 2D Face and never infer Face ownership from display geometry.
-TopoDS_Shape project_wires_to_plane(const TopoDS_Shape& source,const TopoDS_Face& target){
+TopoDS_Shape wires_to_planar_faces(const TopoDS_Shape& wires){
+ if(wires.IsNull())return TopoDS_Shape();
+ TopoDS_Shape faces;if(!BOPAlgo_Tools::WiresToFaces(wires,faces)||faces.IsNull())return TopoDS_Shape();
+ return faces;
+}
+TopoDS_Shape project_face_wires_to_plane(const TopoDS_Face& face,const TopoDS_Face& target){
  BRep_Builder builder;TopoDS_Compound projectedWires;builder.MakeCompound(projectedWires);bool any=false;
- for(TopExp_Explorer wit(source,TopAbs_WIRE);wit.More();wit.Next()){
+ for(TopExp_Explorer wit(face,TopAbs_WIRE);wit.More();wit.Next()){
   const TopoDS_Wire wire=TopoDS::Wire(wit.Current());
   BRepProj_Projection projection(wire,target,gp_Dir(0,0,-1));
   if(!projection.IsDone())continue;
   for(;projection.More();projection.Next()){const TopoDS_Shape p=projection.Current();if(!p.IsNull()){builder.Add(projectedWires,p);any=true;}}
  }
+ return any?wires_to_planar_faces(projectedWires):TopoDS_Shape();
+}
+TopoDS_Shape project_face_outline_to_plane(const TopoDS_Face& face,const TopoDS_Face& target){
+ // FreeCAD projectFacesToXY does not project seam-heavy curved Face wires
+ // naively. Its TechDraw.findShapeOutline path is based on exact OCCT HLR.
+ // Reproduce that geometry-kernel boundary here: visible hard edges + visible
+ // silhouette, seams excluded, then reconstruct the closed planar Face(s).
+ occ::handle<HLRBRep_Algo> algo=new HLRBRep_Algo();
+ algo->Add(face,0);
+ const gp_Ax2 view(gp_Pnt(0,0,0),gp_Dir(0,0,1),gp_Dir(1,0,0));
+ algo->Projector(HLRAlgo_Projector(view));
+ algo->Update();
+ algo->Hide();
+ HLRBRep_HLRToShape result(algo);
+ BRep_Builder builder;TopoDS_Compound projectedEdges;builder.MakeCompound(projectedEdges);bool any=false;
+ const TopoDS_Shape hard=result.VCompound();
+ const TopoDS_Shape outline=result.OutLineVCompound();
+ if(!hard.IsNull()){builder.Add(projectedEdges,hard);any=true;}
+ if(!outline.IsNull()){builder.Add(projectedEdges,outline);any=true;}
  if(!any)return TopoDS_Shape();
- TopoDS_Shape faces;if(!BOPAlgo_Tools::WiresToFaces(projectedWires,faces)||faces.IsNull())return TopoDS_Shape();
- return faces;
+ // HLR geometry is expressed on its projection plane (Z=0). Native CAM
+ // regions live on the requested manufacturing Z plane.
+ BRepAdaptor_Surface targetSurface(target,true);
+ if(targetSurface.GetType()!=GeomAbs_Plane)return TopoDS_Shape();
+ const double targetZ=targetSurface.Plane().Location().Z();
+ gp_Trsf lift;lift.SetTranslation(gp_Vec(0,0,targetZ));
+ const TopoDS_Shape lifted=BRepBuilderAPI_Transform(projectedEdges,lift,true).Shape();
+ return wires_to_planar_faces(lifted);
+}
+TopoDS_Shape project_face_to_plane(const TopoDS_Face& face,const TopoDS_Face& target){
+ BRepAdaptor_Surface surface(face,true);
+ // Planar Faces have unambiguous closed BRep wires. Curved Faces require an
+ // actual top-view silhouette: projecting their seam/boundary wires directly
+ // is the rejected N2b shortcut that made a single Hohlkehle claim the broad
+ // Headstock exterior.
+ if(surface.GetType()==GeomAbs_Plane)return project_face_wires_to_plane(face,target);
+ return project_face_outline_to_plane(face,target);
 }
 TopoDS_Shape fuse_planar_faces(const TopoDS_Shape& source){
  TopoDS_Shape fused;
@@ -148,11 +190,17 @@ TopoDS_Shape fuse_planar_faces(const TopoDS_Shape& source){
 }
 TopoDS_Shape project_shape_to_stock_plane(const TopoDS_Shape& source,const TopoDS_Face& target){
  if(source.IsNull())return TopoDS_Shape();
- const TopoDS_Shape projected=project_wires_to_plane(source,target);if(projected.IsNull())return TopoDS_Shape();
- return fuse_planar_faces(projected);
+ TopoDS_Shape projected;
+ for(TopExp_Explorer fit(source,TopAbs_FACE);fit.More();fit.Next()){
+  const TopoDS_Shape faceProjection=project_face_to_plane(TopoDS::Face(fit.Current()),target);
+  if(faceProjection.IsNull())continue;
+  if(projected.IsNull()){projected=faceProjection;continue;}
+  BRepAlgoAPI_Fuse op(projected,faceProjection);op.Build();if(!op.IsDone()||op.Shape().IsNull())return TopoDS_Shape();projected=op.Shape();
+ }
+ return projected.IsNull()?TopoDS_Shape():fuse_planar_faces(projected);
 }
 TopoDS_Shape selected_face_projection(const TopoDS_Face& selected,const TopoDS_Face& target){
- return project_shape_to_stock_plane(selected,target);
+ return project_face_to_plane(selected,target);
 }
 TopoDS_Shape solid_above_projection(const TopoDS_Shape& fullModel,const std::string& json,double z,const TopoDS_Face& target){
  const double width=json_number_field(json,"width"),height=json_number_field(json,"height"),top=json_number_field(json,"thickness");
