@@ -5,6 +5,10 @@
 #include <BRepBuilderAPI_MakePolygon.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepProj_Projection.hxx>
+#include <BRepPrimAPI_MakeBox.hxx>
+#include <BOPAlgo_Tools.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepAlgoAPI_Section.hxx>
@@ -93,55 +97,65 @@ TopoDS_Shape transform_shape(const TopoDS_Shape& source,const std::string& json)
 struct SectionChain{std::vector<gp_Pnt> points;};
 
 double d2xy(const gp_Pnt&a,const gp_Pnt&b);
-struct ProjectedFaceRegion{TopoDS_Face face;bool valid=false;};
-std::vector<gp_Pnt> sampled_wire_xy(const TopoDS_Wire& wire,double z){
- std::vector<gp_Pnt> points;
- for(BRepTools_WireExplorer wit(wire);wit.More();wit.Next()){
-  const TopoDS_Edge edge=wit.Current();BRepAdaptor_Curve c(edge);double a=c.FirstParameter(),b=c.LastParameter();
-  if(!std::isfinite(a)||!std::isfinite(b))continue;
-  const int samples=c.GetType()==GeomAbs_Line?2:65;
-  for(int i=0;i<samples;++i){
-   if(!points.empty()&&i==0)continue;
-   const double t=a+(b-a)*double(i)/double(samples-1);const gp_Pnt p=c.Value(t);
-   gp_Pnt q(p.X(),p.Y(),z);if(points.empty()||d2xy(points.back(),q)>1e-16)points.push_back(q);
-  }
- }
- if(points.size()>2&&d2xy(points.front(),points.back())>1e-12)points.push_back(points.front());
- return points;
-}
-TopoDS_Wire polygon_wire(const std::vector<gp_Pnt>& points){
- BRepBuilderAPI_MakePolygon polygon;for(const auto&p:points)polygon.Add(p);if(points.size()>2)polygon.Close();
- return polygon.IsDone()?polygon.Wire():TopoDS_Wire();
-}
-ProjectedFaceRegion projected_face_footprint(const TopoDS_Face& face,double z){
- ProjectedFaceRegion result;const TopoDS_Wire outer3d=BRepTools::OuterWire(face);if(outer3d.IsNull())return result;
- const auto outerPoints=sampled_wire_xy(outer3d,z);if(outerPoints.size()<4)return result;
- const TopoDS_Wire outer=polygon_wire(outerPoints);if(outer.IsNull())return result;
- BRepBuilderAPI_MakeFace maker(gp_Pln(gp_Pnt(0,0,z),gp_Dir(0,0,1)),outer,true);if(!maker.IsDone())return result;
- for(TopExp_Explorer it(face,TopAbs_WIRE);it.More();it.Next()){
-  const TopoDS_Wire sourceWire=TopoDS::Wire(it.Current());if(sourceWire.IsSame(outer3d))continue;
-  const auto holePoints=sampled_wire_xy(sourceWire,z);if(holePoints.size()<4)continue;const TopoDS_Wire hole=polygon_wire(holePoints);if(!hole.IsNull())maker.Add(hole);
- }
- if(!maker.IsDone())return result;result.face=maker.Face();result.valid=!result.face.IsNull();return result;
-}
 TopoDS_Face stock_face(const std::string& json,double z){
  const double width=json_number_field(json,"width"),height=json_number_field(json,"height");
  if(!(width>0)||!(height>0))return TopoDS_Face();
- // Manufacturing stock coordinates match the existing TS roughing truth:
- // XY stock domain is 0..width / 0..height. Stock offset fields describe
- // setup/import semantics and are not an XY translation of this CAM domain.
  BRepBuilderAPI_MakePolygon p;p.Add(gp_Pnt(0,0,z));p.Add(gp_Pnt(width,0,z));p.Add(gp_Pnt(width,height,z));p.Add(gp_Pnt(0,height,z));p.Close();
  if(!p.IsDone())return TopoDS_Face();BRepBuilderAPI_MakeFace f(gp_Pln(gp_Pnt(0,0,z),gp_Dir(0,0,1)),p.Wire(),true);return f.IsDone()?f.Face():TopoDS_Face();
 }
+
+// 008H-N2b follows FreeCAD Adaptive manual-region semantics:
+// selected BRep Faces are projected exactly onto the manufacturing plane,
+// while the protected model is first clipped to the solid ABOVE the requested
+// Z level and that clipped solid is projected separately. The removable target
+// is selectedProjection - aboveModelProjection. Never subtract a 3D solid
+// directly from a 2D Face and never infer Face ownership from display geometry.
+TopoDS_Shape project_wires_to_plane(const TopoDS_Shape& source,const TopoDS_Face& target){
+ BRep_Builder builder;TopoDS_Compound projectedWires;builder.MakeCompound(projectedWires);bool any=false;
+ for(TopExp_Explorer wit(source,TopAbs_WIRE);wit.More();wit.Next()){
+  const TopoDS_Wire wire=TopoDS::Wire(wit.Current());
+  BRepProj_Projection projection(wire,target,gp_Dir(0,0,-1));
+  if(!projection.IsDone())continue;
+  for(;projection.More();projection.Next()){const TopoDS_Shape p=projection.Current();if(!p.IsNull()){builder.Add(projectedWires,p);any=true;}}
+ }
+ if(!any)return TopoDS_Shape();
+ TopoDS_Shape faces;if(!BOPAlgo_Tools::WiresToFaces(projectedWires,faces)||faces.IsNull())return TopoDS_Shape();
+ return faces;
+}
+TopoDS_Shape fuse_planar_faces(const TopoDS_Shape& source){
+ TopoDS_Shape fused;
+ for(TopExp_Explorer fit(source,TopAbs_FACE);fit.More();fit.Next()){
+  const TopoDS_Shape face=fit.Current();
+  if(fused.IsNull()){fused=face;continue;}
+  BRepAlgoAPI_Fuse op(fused,face);op.Build();if(!op.IsDone()||op.Shape().IsNull())return TopoDS_Shape();fused=op.Shape();
+ }
+ return fused;
+}
+TopoDS_Shape project_shape_to_stock_plane(const TopoDS_Shape& source,const TopoDS_Face& target){
+ if(source.IsNull())return TopoDS_Shape();
+ const TopoDS_Shape projected=project_wires_to_plane(source,target);if(projected.IsNull())return TopoDS_Shape();
+ return fuse_planar_faces(projected);
+}
+TopoDS_Shape selected_face_projection(const TopoDS_Face& selected,const TopoDS_Face& target){
+ return project_shape_to_stock_plane(selected,target);
+}
+TopoDS_Shape solid_above_projection(const TopoDS_Shape& fullModel,const std::string& json,double z,const TopoDS_Face& target){
+ const double width=json_number_field(json,"width"),height=json_number_field(json,"height"),top=json_number_field(json,"thickness");
+ if(!(width>0)||!(height>0)||!(top>z+1e-9))return TopoDS_Shape();
+ const double dz=top-z+1e-6;
+ const TopoDS_Shape upperBox=BRepPrimAPI_MakeBox(gp_Pnt(0,0,z),width,height,dz).Shape();
+ BRepAlgoAPI_Common common(fullModel,upperBox);common.Build();if(!common.IsDone()||common.Shape().IsNull())return TopoDS_Shape();
+ return project_shape_to_stock_plane(common.Shape(),target);
+}
 TopoDS_Shape face_target_material_region(const TopoDS_Face& selected,const TopoDS_Shape& fullModel,const std::string& json,double z){
- const auto footprint=projected_face_footprint(selected,z);if(!footprint.valid)return TopoDS_Shape();
  const TopoDS_Face stock=stock_face(json,z);if(stock.IsNull())return TopoDS_Shape();
- BRepAlgoAPI_Common inStock(footprint.face,stock);inStock.Build();if(!inStock.IsDone()||inStock.Shape().IsNull())return TopoDS_Shape();
- // Mixed-dimensional OCCT Boolean: subtract the transformed solid directly
- // from the planar target footprint. This preserves exact model topology at Z;
- // the only approximation is native edge sampling used to project the selected
- // Face footprint into XY. No display mesh participates.
- BRepAlgoAPI_Cut material(inStock.Shape(),fullModel);material.Build();if(!material.IsDone())return TopoDS_Shape();
+ const TopoDS_Shape selectedProjection=selected_face_projection(selected,stock);if(selectedProjection.IsNull())return TopoDS_Shape();
+ BRepAlgoAPI_Common selectedInStock(selectedProjection,stock);selectedInStock.Build();
+ if(!selectedInStock.IsDone()||selectedInStock.Shape().IsNull())return TopoDS_Shape();
+ const TopoDS_Shape aboveProjection=solid_above_projection(fullModel,json,z,stock);
+ if(aboveProjection.IsNull())return selectedInStock.Shape();
+ BRepAlgoAPI_Cut material(selectedInStock.Shape(),aboveProjection);material.Build();
+ if(!material.IsDone()||material.Shape().IsNull())return TopoDS_Shape();
  return material.Shape();
 }
 struct PlanarIsland{SectionChain outer;std::vector<SectionChain> holes;};
