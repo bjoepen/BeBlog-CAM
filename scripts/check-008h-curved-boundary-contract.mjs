@@ -44,37 +44,61 @@ for(const consumer of ['src/lib/curvedFaceRoughingOperation.ts','src/lib/surface
 }
 
 const model=fs.readFileSync('src/lib/modelRoughingOperation.ts','utf8');
+const toolpath=fs.readFileSync('src/lib/modelRoughingToolpath.ts','utf8');
 const raster=fs.readFileSync('src/lib/planarRasterKernel.ts','utf8');
 const types=fs.readFileSync('src/lib/types.ts','utf8');
 const zSlice=fs.readFileSync('src/lib/zLevelSlice.ts','utf8');
+
+// 008H-L reset: selected Faces own Stock−Model material before raster creation.
+// A generated canonical toolpath must never be clipped by Face contact/projection.
 for(const token of [
-  'scopeToSelectedFaces?:boolean',
-  'const slices=zs.map(cutZ=>',
-  'cutZ-allowance',
-  'selectedFaceScope',
-  'operation.tool.diameterMm+2*allowance',
-  'const toolRadius=operation.tool.diameterMm/2',
-  'const clearanceRadius=toolRadius+allowance',
-  'minX:-2*clearanceRadius',
-  'maxX:stock.width+2*clearanceRadius',
-  'const faceContactRadius=clearanceRadius',
-  'clipToolpathToSelectedFaceSlices',
-  'sliceFaceSegmentsAtZ',
-  'run.z+o.z-allowance',
-  "buildDirection('x',group.scope,[group.faceId])",
-  "buildDirection('y',group.scope,[group.faceId])",
+  'faceOwnedMaterialPoint',
+  'faceSegmentsByLevel',
+  'sliceFaceSegmentsAtZ(part,faceIds,allFaceIds',
+  'ownershipFilter(targetFaceIds)',
+  'nearestTarget<=nearest+1e-5',
+  "buildDirection('x',[group.faceId])",
+  "buildDirection('y',[group.faceId])",
+  'Face-owned Stock−Model',
 ]){
-  if(!model.includes(token))throw new Error(`008H true Z-level contract missing: ${token}`);
+  if(!model.includes(token))throw new Error(`008H-L owned-region contract missing: ${token}`);
 }
-for(const token of ['ZLevelFaceSegment','sliceFaceSegmentsAtZ','faceId=faceIds[triangleIndex]','triangleSegment(points[i],points[i+1],points[i+2],z)']){
-  if(!zSlice.includes(token))throw new Error(`008H-K face/Z slice ownership missing: ${token}`);
+for(const token of ['regionPointFilter?', 'regionPointFilter?.(region)']){
+  if(!toolpath.includes(token))throw new Error(`008H-L toolpath-region contract missing: ${token}`);
 }
-for(const forbidden of ['faceScopeContainsToolCenter','pointSegmentDistanceXY','clipSegmentToFaceContactScope','clipToolpathToFaceContactScope','selectedFaceSliceScope','clipToolpathToZLocalFaceContactScope']){
-  if(model.includes(forbidden))throw new Error(`008H-K must not regress to projected-face clipping: ${forbidden}`);
+for(const token of ['PlanarRasterPointFilter','pointFilter?:PlanarRasterPointFilter','safeAt(loops,point(primary,rowValue),radius,profile,pointFilter)','buildPlanarRasterStayDownConnector(loops,from,to,toolDiameterMm,sampleStep,profile,pointFilter)']){
+  if(!raster.includes(token))throw new Error(`008H-L raster-region contract missing: ${token}`);
 }
+for(const token of ['ZLevelFaceSegment','sliceFaceSegmentsAtZ','faceId=faceIds[triangleIndex]']){
+  if(!zSlice.includes(token))throw new Error(`008H-L native Face/Z ownership missing: ${token}`);
+}
+for(const forbidden of [
+  'clipToolpathToSelectedFaceSlices',
+  'clipSegmentToFaceSlice',
+  'faceContactRadius',
+  'clipToolpathToFaceContactScope',
+  'clipToolpathToZLocalFaceContactScope',
+  'faceScopeContainsToolCenter',
+  'pointSegmentDistanceXY',
+]){
+  if(model.includes(forbidden))throw new Error(`008H-L forbids post-toolpath Face clipping: ${forbidden}`);
+}
+if(!model.includes('operation.tool.diameterMm+2*allowance'))throw new Error('008H-L complete-solid accessibility clearance missing');
+if(!model.includes('minX:-2*clearanceRadius')||!model.includes('maxX:stock.width+2*clearanceRadius'))throw new Error('008H-L stock-edge overhang contract missing');
 const state=fs.readFileSync('src/lib/zLevelOperationState.ts','utf8');
 if(!state.includes('buildModelRoughingOperationState({...args,scopeToSelectedFaces:true})')){
   throw new Error('008H curved targets must consume complete-solid Z-level truth');
+}
+const app=fs.readFileSync('src/App.svelte','utf8');
+for(const token of ['updateZLevelFinishAllowance','Schlichtaufmaß','True Z-Level schneidet den vollständigen STEP-Solid']){
+  if(!app.includes(token))throw new Error(`008H allowance UI contract missing: ${token}`);
+}
+
+for(const token of ["direction:'x'|'y'='x'","direction==='x'?b.minX:b.minY"]){
+  if(!raster.includes(token))throw new Error(`008H-G raster direction kernel missing: ${token}`);
+}
+for(const token of ["ZLevelRasterDirection='auto'|'x'|'y'","rasterDirection?:ZLevelRasterDirection","rasterDirection:'auto'"]){
+  if(!types.includes(token))throw new Error(`008H-G persisted raster direction missing: ${token}`);
 }
 const app=fs.readFileSync('src/App.svelte','utf8');
 for(const token of ['updateZLevelFinishAllowance','Schlichtaufmaß','True Z-Level schneidet den vollständigen STEP-Solid']){
@@ -98,4 +122,4 @@ for(const token of ["selectedFaceScopeGroups","for(const group of groups)","buil
 for(const token of ["Rasterrichtung","Automatisch","Parallel X","Parallel Y","rasterDirection:'auto'","rasterDirection:'x'","rasterDirection:'y'"]){
   if(!app.includes(token))throw new Error(`008H-G UI contract missing: ${token}`);
 }
-console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by cutter-contact envelopes; stock edges permit cutter overhang; Auto/X/Y raster direction is explicit and deterministic, with Auto selected independently per target face and native face/Z slice ownership; model boundaries and legacy safety remain fail-closed.');
+console.log('PASS 008H-L: selected Faces own Stock−Model material before raster generation; no post-toolpath Face clipping remains; complete-solid safety, stock-edge overhang, Auto/X/Y and downstream fail-closed contracts remain intact.');
