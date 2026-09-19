@@ -242,3 +242,7 @@ if(!diagnosticApp.includes('canonicalOverrideErrors:nativeFaceTargetErrors'))thr
 for(const token of ['FaceTargetRegionProbe','failedStage','selectedProjectionFaces','selectedInStockFaces','aboveProjectionFaces','materialFaces','OCCT Face-target stage=']){
   if(!nativeCpp.includes(token))throw new Error(`008H-N3 native stage diagnostics missing: ${token}`);
 }
+
+for(const token of ['case GeomAbs_Cylinder:','case GeomAbs_Cone:','case GeomAbs_Sphere:','default:\n   return project_face_wires_to_plane(face,target);']){
+  if(!nativeCpp.includes(token))throw new Error(`008H-N2 FreeCAD surface-aware projection dispatch missing: ${token}`);
+}
