@@ -49,19 +49,20 @@ const raster=fs.readFileSync('src/lib/planarRasterKernel.ts','utf8');
 const types=fs.readFileSync('src/lib/types.ts','utf8');
 const zSlice=fs.readFileSync('src/lib/zLevelSlice.ts','utf8');
 
-// 008H-L reset: selected Faces own Stock−Model material before raster creation.
-// A generated canonical toolpath must never be clipped by Face contact/projection.
+// 008H-M: selected Faces own bounded Stock−Model material before raster creation.
+// Ownership follows the native OCCT outward side and stops at Face section endpoints.
 for(const token of [
   'faceOwnedMaterialPoint',
-  'faceSegmentsByLevel',
-  'sliceFaceSegmentsAtZ(part,faceIds,allFaceIds',
+  'faceExtrudesToMaterial',
+  'faceOrientations',
+  'sliceFaceSegmentsAtZ(part,faceIds,operation.faceIds,sliceZ,profile,faceOrientations)',
+  'if(t<-1e-5||t>1+1e-5)return false',
+  'ox*outward.x+oy*outward.y>=-1e-5',
   'ownershipFilter(targetFaceIds)',
-  'nearestTarget<=nearest+1e-5',
   "buildDirection('x',[group.faceId])",
   "buildDirection('y',[group.faceId])",
-  'Face-owned Stock−Model',
 ]){
-  if(!model.includes(token))throw new Error(`008H-L owned-region contract missing: ${token}`);
+  if(!model.includes(token))throw new Error(`008H-M bounded owned-region contract missing: ${token}`);
 }
 for(const token of ['regionPointFilter?', 'regionPointFilter?.(region)']){
   if(!toolpath.includes(token))throw new Error(`008H-L toolpath-region contract missing: ${token}`);
@@ -69,7 +70,7 @@ for(const token of ['regionPointFilter?', 'regionPointFilter?.(region)']){
 for(const token of ['PlanarRasterPointFilter','pointFilter?:PlanarRasterPointFilter','safeAt(loops,point(primary,rowValue),radius,profile,pointFilter)','buildPlanarRasterStayDownConnector(loops,from,to,toolDiameterMm,sampleStep,profile,pointFilter)']){
   if(!raster.includes(token))throw new Error(`008H-L raster-region contract missing: ${token}`);
 }
-for(const token of ['ZLevelFaceSegment','sliceFaceSegmentsAtZ','faceId=faceIds[triangleIndex]']){
+for(const token of ['ZLevelFaceSegment','sliceFaceSegmentsAtZ','faceId=faceIds[triangleIndex]','triangleNormal','outward:xyLength>EPS']){
   if(!zSlice.includes(token))throw new Error(`008H-L native Face/Z ownership missing: ${token}`);
 }
 for(const forbidden of [
@@ -103,4 +104,4 @@ for(const token of ["ZLevelRasterDirection='auto'|'x'|'y'","rasterDirection?:ZLe
 for(const token of ["Rasterrichtung","Automatisch","Parallel X","Parallel Y","rasterDirection:'auto'","rasterDirection:'x'","rasterDirection:'y'"]){
   if(!app.includes(token))throw new Error(`008H-G UI contract missing: ${token}`);
 }
-console.log('PASS 008H-L: selected Faces own Stock−Model material before raster generation; no post-toolpath Face clipping remains; complete-solid safety, stock-edge overhang, Auto/X/Y and downstream fail-closed contracts remain intact.');
+console.log('PASS 008H-M: selected Faces own bounded outward Stock−Model material before raster generation; Face endpoints prevent adjacent-surface leakage; no post-toolpath clipping remains and downstream safety stays fail-closed.');
