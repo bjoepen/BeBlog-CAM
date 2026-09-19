@@ -82,11 +82,11 @@ std::vector<std::size_t> json_size_array(const std::string& json,const char* key
 void append_json_string(std::ostringstream& out,const std::string& value){out<<'"';for(char c:value){if(c=='"'||c=='\\')out<<'\\';out<<c;}out<<'"';}
 TopoDS_Shape transform_shape(const TopoDS_Shape& source,const std::string& json){
  gp_Trsf total;
- auto apply_rotation=[&](double degrees,const gp_Dir& axis){if(std::abs(degrees)<=1e-12)return;gp_Trsf r;r.SetRotation(gp_Ax1(gp_Pnt(0,0,0),axis),degrees*M_PI/180.0);total.Multiply(r);};
+ auto apply_rotation=[&](double degrees,const gp_Dir& axis){if(std::abs(degrees)<=1e-12)return;gp_Trsf r;r.SetRotation(gp_Ax1(gp_Pnt(0,0,0),axis),degrees*M_PI/180.0);total.PreMultiply(r);};
  apply_rotation(json_number_field(json,"rotationXDeg"),gp_Dir(1,0,0));
  apply_rotation(json_number_field(json,"rotationYDeg"),gp_Dir(0,1,0));
  apply_rotation(json_number_field(json,"rotationZDeg"),gp_Dir(0,0,1));
- const auto t=json_number_array(json,"translationMm");if(t.size()==3){gp_Trsf tr;tr.SetTranslation(gp_Vec(t[0],t[1],t[2]));total.Multiply(tr);}
+ const auto t=json_number_array(json,"translationMm");if(t.size()==3){gp_Trsf tr;tr.SetTranslation(gp_Vec(t[0],t[1],t[2]));total.PreMultiply(tr);}
  return BRepBuilderAPI_Transform(source,total,true).Shape();
 }
 struct SectionChain{std::vector<gp_Pnt> points;};
@@ -125,9 +125,11 @@ ProjectedFaceRegion projected_face_footprint(const TopoDS_Face& face,double z){
 }
 TopoDS_Face stock_face(const std::string& json,double z){
  const double width=json_number_field(json,"width"),height=json_number_field(json,"height");
- const double ox=json_number_field(json,"offsetX"),oy=json_number_field(json,"offsetY");
  if(!(width>0)||!(height>0))return TopoDS_Face();
- BRepBuilderAPI_MakePolygon p;p.Add(gp_Pnt(ox,oy,z));p.Add(gp_Pnt(ox+width,oy,z));p.Add(gp_Pnt(ox+width,oy+height,z));p.Add(gp_Pnt(ox,oy+height,z));p.Close();
+ // Manufacturing stock coordinates match the existing TS roughing truth:
+ // XY stock domain is 0..width / 0..height. Stock offset fields describe
+ // setup/import semantics and are not an XY translation of this CAM domain.
+ BRepBuilderAPI_MakePolygon p;p.Add(gp_Pnt(0,0,z));p.Add(gp_Pnt(width,0,z));p.Add(gp_Pnt(width,height,z));p.Add(gp_Pnt(0,height,z));p.Close();
  if(!p.IsDone())return TopoDS_Face();BRepBuilderAPI_MakeFace f(gp_Pln(gp_Pnt(0,0,z),gp_Dir(0,0,1)),p.Wire(),true);return f.IsDone()?f.Face():TopoDS_Face();
 }
 TopoDS_Shape face_target_material_region(const TopoDS_Face& selected,const TopoDS_Shape& fullModel,const std::string& json,double z){
