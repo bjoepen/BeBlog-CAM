@@ -1,5 +1,11 @@
 #include "occt_bridge.h"
 #include <BRepAdaptor_Curve.hxx>
+#include <TopTools_ListOfShape.hxx>
+#include <BRepTools.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Common.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepAlgoAPI_Section.hxx>
 #include <BRepTools_WireExplorer.hxx>
@@ -84,6 +90,69 @@ TopoDS_Shape transform_shape(const TopoDS_Shape& source,const std::string& json)
  return BRepBuilderAPI_Transform(source,total,true).Shape();
 }
 struct SectionChain{std::vector<gp_Pnt> points;};
+
+double d2xy(const gp_Pnt&a,const gp_Pnt&b);
+struct ProjectedFaceRegion{TopoDS_Face face;bool valid=false;};
+std::vector<gp_Pnt> sampled_wire_xy(const TopoDS_Wire& wire,double z){
+ std::vector<gp_Pnt> points;
+ for(BRepTools_WireExplorer wit(wire);wit.More();wit.Next()){
+  const TopoDS_Edge edge=wit.Current();BRepAdaptor_Curve c(edge);double a=c.FirstParameter(),b=c.LastParameter();
+  if(!std::isfinite(a)||!std::isfinite(b))continue;
+  const int samples=c.GetType()==GeomAbs_Line?2:65;
+  for(int i=0;i<samples;++i){
+   if(!points.empty()&&i==0)continue;
+   const double t=a+(b-a)*double(i)/double(samples-1);const gp_Pnt p=c.Value(t);
+   gp_Pnt q(p.X(),p.Y(),z);if(points.empty()||d2xy(points.back(),q)>1e-16)points.push_back(q);
+  }
+ }
+ if(points.size()>2&&d2xy(points.front(),points.back())>1e-12)points.push_back(points.front());
+ return points;
+}
+TopoDS_Wire polygon_wire(const std::vector<gp_Pnt>& points){
+ BRepBuilderAPI_MakePolygon polygon;for(const auto&p:points)polygon.Add(p);if(points.size()>2)polygon.Close();
+ return polygon.IsDone()?polygon.Wire():TopoDS_Wire();
+}
+ProjectedFaceRegion projected_face_footprint(const TopoDS_Face& face,double z){
+ ProjectedFaceRegion result;const TopoDS_Wire outer3d=BRepTools::OuterWire(face);if(outer3d.IsNull())return result;
+ const auto outerPoints=sampled_wire_xy(outer3d,z);if(outerPoints.size()<4)return result;
+ const TopoDS_Wire outer=polygon_wire(outerPoints);if(outer.IsNull())return result;
+ BRepBuilderAPI_MakeFace maker(gp_Pln(gp_Pnt(0,0,z),gp_Dir(0,0,1)),outer,true);if(!maker.IsDone())return result;
+ for(TopExp_Explorer it(face,TopAbs_WIRE);it.More();it.Next()){
+  const TopoDS_Wire sourceWire=TopoDS::Wire(it.Current());if(sourceWire.IsSame(outer3d))continue;
+  const auto holePoints=sampled_wire_xy(sourceWire,z);if(holePoints.size()<4)continue;const TopoDS_Wire hole=polygon_wire(holePoints);if(!hole.IsNull())maker.Add(hole);
+ }
+ if(!maker.IsDone())return result;result.face=maker.Face();result.valid=!result.face.IsNull();return result;
+}
+TopoDS_Face stock_face(const std::string& json,double z){
+ const double width=json_number_field(json,"width"),height=json_number_field(json,"height");
+ const double ox=json_number_field(json,"offsetX"),oy=json_number_field(json,"offsetY");
+ if(!(width>0)||!(height>0))return TopoDS_Face();
+ BRepBuilderAPI_MakePolygon p;p.Add(gp_Pnt(ox,oy,z));p.Add(gp_Pnt(ox+width,oy,z));p.Add(gp_Pnt(ox+width,oy+height,z));p.Add(gp_Pnt(ox,oy+height,z));p.Close();
+ if(!p.IsDone())return TopoDS_Face();BRepBuilderAPI_MakeFace f(gp_Pln(gp_Pnt(0,0,z),gp_Dir(0,0,1)),p.Wire(),true);return f.IsDone()?f.Face():TopoDS_Face();
+}
+TopoDS_Shape face_target_material_region(const TopoDS_Face& selected,const TopoDS_Shape& fullModel,const std::string& json,double z){
+ const auto footprint=projected_face_footprint(selected,z);if(!footprint.valid)return TopoDS_Shape();
+ const TopoDS_Face stock=stock_face(json,z);if(stock.IsNull())return TopoDS_Shape();
+ BRepAlgoAPI_Common inStock(footprint.face,stock);inStock.Build();if(!inStock.IsDone()||inStock.Shape().IsNull())return TopoDS_Shape();
+ // Mixed-dimensional OCCT Boolean: subtract the transformed solid directly
+ // from the planar target footprint. This preserves exact model topology at Z;
+ // the only approximation is native edge sampling used to project the selected
+ // Face footprint into XY. No display mesh participates.
+ BRepAlgoAPI_Cut material(inStock.Shape(),fullModel);material.Build();if(!material.IsDone())return TopoDS_Shape();
+ return material.Shape();
+}
+std::vector<SectionChain> planar_shape_chains(const TopoDS_Shape& shape){
+ std::vector<SectionChain> out;
+ for(TopExp_Explorer fit(shape,TopAbs_FACE);fit.More();fit.Next()){
+  const TopoDS_Face face=TopoDS::Face(fit.Current());
+  for(TopExp_Explorer wit(face,TopAbs_WIRE);wit.More();wit.Next()){
+   auto points=sampled_wire_xy(TopoDS::Wire(wit.Current()),BRepAdaptor_Surface(face,true).Plane().Location().Z());
+   if(points.size()>3)out.push_back({std::move(points)});
+  }
+ }
+ return out;
+}
+
 double d2xy(const gp_Pnt&a,const gp_Pnt&b){const double dx=a.X()-b.X(),dy=a.Y()-b.Y();return dx*dx+dy*dy;}
 std::vector<SectionChain> section_chains(const TopoDS_Shape& selected,double z){
  Handle(Geom_Plane) plane=new Geom_Plane(gp_Pln(gp_Pnt(0,0,z),gp_Dir(0,0,1)));
@@ -136,28 +205,25 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
  if(reader.TransferRoots()<=0)return copy_result("{\"error\":\"STEP-Datei enthält keine übertragbare BRep-Geometrie\"}");
  TopoDS_Shape source=reader.OneShape();if(source.IsNull())return copy_result("{\"error\":\"OCCT lieferte eine leere Shape\"}");
  std::vector<TopoDS_Face> faces;for(TopExp_Explorer it(source,TopAbs_FACE);it.More();it.Next())faces.push_back(TopoDS::Face(it.Current()));
- BRep_Builder builder;TopoDS_Compound selected;builder.MakeCompound(selected);
- for(auto id:face_ids){if(id>=faces.size())return copy_result("{\"error\":\"Native Z-Level-Anfrage enthält eine ungültige Face-ID\"}");builder.Add(selected,faces[id]);}
- const TopoDS_Shape transformed=transform_shape(selected,request);
+ for(auto id:face_ids)if(id>=faces.size())return copy_result("{\"error\":\"Native Z-Level-Anfrage enthält eine ungültige Face-ID\"}");
+ const TopoDS_Shape transformedModel=transform_shape(source,request);
+ std::vector<TopoDS_Face> transformedFaces;transformedFaces.reserve(face_ids.size());
+ for(auto id:face_ids){const TopoDS_Shape transformedFace=transform_shape(faces[id],request);if(transformedFace.IsNull()||transformedFace.ShapeType()!=TopAbs_FACE)return copy_result("{\"error\":\"Gewählte Face konnte nicht in Manufacturing-Koordinaten transformiert werden\"}");transformedFaces.push_back(TopoDS::Face(transformedFace));}
  std::ostringstream out;out<<"{\"contractVersion\":\"008H-N1-v1\",\"sourceFingerprint\":";append_json_string(out,fingerprint);
  out<<",\"faceIdContract\":\"zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds\",\"regions\":[";
  bool first_region=true;
- for(double z:levels){if(!first_region)out<<',';first_region=false;auto chains=section_chains(transformed,z);
-  out<<"{\"z\":"<<std::setprecision(12)<<z<<",\"valid\":"<<(!chains.empty()?"true":"false")<<",\"islands\":[";
-  bool first_island=true;for(const auto& chain:chains){if(chain.points.size()<2)continue;if(!first_island)out<<',';first_island=false;
-   // N2 first executable kernel: exact OCCT Face/plane section, represented as
-   // bounded section loops/polylines. Closed planar material booleans are the
-   // next N2 increment; open sections fail closed instead of inventing ownership.
-   const bool closed=d2xy(chain.points.front(),chain.points.back())<1e-10;
-   if(!closed)continue;
+ for(double z:levels){if(!first_region)out<<',';first_region=false;
+  std::vector<SectionChain> materialChains;
+  for(const auto& selectedFace:transformedFaces){const TopoDS_Shape material=face_target_material_region(selectedFace,transformedModel,request,z);if(material.IsNull())continue;auto chains=planar_shape_chains(material);materialChains.insert(materialChains.end(),chains.begin(),chains.end());}
+  out<<"{\"z\":"<<std::setprecision(12)<<z<<",\"valid\":"<<(!materialChains.empty()?"true":"false")<<",\"islands\":[";
+  bool first_island=true;for(const auto& chain:materialChains){if(chain.points.size()<4||d2xy(chain.points.front(),chain.points.back())>=1e-10)continue;if(!first_island)out<<',';first_island=false;
    out<<"{\"outer\":[";bool fp=true;for(const auto&p:chain.points){if(!fp)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';fp=false;}out<<"],\"holes\":[]}";
   }
   out<<"],\"errors\":[";
-  bool any_closed=false;for(const auto&c:chains)if(c.points.size()>2&&d2xy(c.points.front(),c.points.back())<1e-10){any_closed=true;break;}
-  if(!any_closed)out<<"\"OCCT Face/Z section did not form a closed planar region; fail-closed\"";
+  if(materialChains.empty())out<<"\"OCCT could not prove a Face-target Stock-model material region; fail-closed\"";
   out<<"],\"warnings\":[]}";
  }
- out<<"],\"errors\":[],\"warnings\":[\"008H-N2 native OCCT Face/Z section kernel active; no display triangulation used\"]}";
+ out<<"],\"errors\":[],\"warnings\":[\"008H-N2 native OCCT Face-footprint intersect Stock minus exact Model material-region kernel active; no display triangulation used\"]}";
  return copy_result(out.str());
  }catch(const std::exception& e){std::ostringstream out;out<<"{\"error\":\"OCCT native Z-Level error: ";append_json_string(out,e.what());out<<"\"}";return copy_result("{\"error\":\"OCCT-Fehler bei nativer Z-Level-Region\"}");}catch(...){return copy_result("{\"error\":\"OCCT-Fehler bei nativer Z-Level-Region\"}");}}
 
