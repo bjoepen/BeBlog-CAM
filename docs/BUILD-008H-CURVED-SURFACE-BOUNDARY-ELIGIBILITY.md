@@ -708,3 +708,38 @@ unimplemented/stub native geometry path executable.
 
 N2 is responsible for the actual OCCT region construction and may only then
 expose the command after fail-closed native validation exists.
+
+
+## 008H-N2 — Native OCCT section kernel, increment 1
+
+Status: **IMPLEMENTED / CI pending / not yet a CAM consumer**
+
+The N1 wire contract is now executable. Rust serializes the versioned request to
+the native bridge and validates the versioned response. Tauri exposes
+`build_native_zlevel_regions`, but the existing production Z-Level roughing
+operation is intentionally not switched yet.
+
+The native C++ bridge now:
+
+1. reloads the STEP BRep with OCCT;
+2. resolves selected Face IDs using the same zero-based native Face enumeration;
+3. builds a compound from the selected `TopoDS_Face` objects;
+4. applies the requested X/Y/Z manufacturing rotation and translation;
+5. intersects that native selected-Face shape with each requested Z plane using
+   `BRepAlgoAPI_Section`;
+6. samples the resulting OCCT section curves into ordered planar chains;
+7. emits only chains that can be proven closed; open/ambiguous sections fail
+   closed.
+
+No `displayVertices`, `displayFaceIds` or TypeScript triangle reconstruction
+participates in this native region builder.
+
+This is deliberately the **first N2 increment**, not N2 completion. A closed
+Face/Z section is a useful native geometric primitive, but it is not yet the
+complete Face-owned Stock−Model material domain required by the final contract.
+The next N2 increment must construct the planar material region/boolean from
+native BRep topology. Until that exists, N3 must not connect this response to
+the production raster kernel.
+
+The new gate therefore proves the architecture boundary and fail-closed
+behavior, not real-world Hohlkehle correctness.
