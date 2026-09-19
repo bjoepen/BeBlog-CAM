@@ -2,7 +2,7 @@ import type { ImportSummary,PartOrientation,PartPlacement,StockDefinition,WorkCo
 import type { CanonicalToolpath } from './canonicalToolpath';
 import { orientPoint3 } from './partOrientation';
 import type { P3 } from './stepView';
-import { sliceTrianglesAtZ } from './zLevelSlice';
+import { sliceTrianglesAtZ, sliceFaceSegmentsAtZ, type ZLevelFaceSegment } from './zLevelSlice';
 import { buildModelSliceRegions } from './modelSliceRegion';
 import { buildRoughingRegions, type RoughingRegion } from './roughingRegion';
 import { buildModelRoughingCanonicalToolpath } from './modelRoughingToolpath';
@@ -39,70 +39,19 @@ function selectedFaceScopeGroups(part:P3[],faceIds:number[],selectedFaceIds:numb
   }
   return groups;
 }
-function selectedFaceSliceScope(part:P3[],faceIds:number[],selectedFaceIds:number[],z:number,contactRadius:number):FaceScope|null{
-  const selected=new Set(selectedFaceIds),triangles:P3[]=[];
-  for(let t=0;t<faceIds.length&&t*3+2<part.length;t++){
-    if(!selected.has(faceIds[t]))continue;
-    const a=part[t*3],b=part[t*3+1],c=part[t*3+2];
-    // A cutter at this Z can only contact triangles whose vertical extent is
-    // within one physical cutter radius. This prevents a steep face's entire
-    // global XY shadow from owning unrelated Z-level motion.
-    if(z<Math.min(a.z,b.z,c.z)-contactRadius-EPS||z>Math.max(a.z,b.z,c.z)+contactRadius+EPS)continue;
-    triangles.push(a,b,c);
-  }
-  if(!triangles.length)return null;
-  const b=bounds(triangles);
-  return{triangles,minZ:b.minZ,maxZ:b.maxZ};
-}
-function clipToolpathToZLocalFaceContactScope(toolpath:CanonicalToolpath,part:P3[],faceIds:number[],selectedFaceIds:number[],o:P3,contactRadius:number):CanonicalToolpath{
-  const runs:CanonicalToolpath['runs']=[];
-  for(const run of toolpath.runs){
-    const scope=selectedFaceSliceScope(part,faceIds,selectedFaceIds,run.z+o.z,contactRadius);
-    if(!scope)continue;
-    runs.push(...clipToolpathToFaceContactScope({...toolpath,runs:[run]},scope,o,contactRadius).runs);
-  }
-  return{...toolpath,runs};
-}
-function pointInTriangleXY(p:{x:number;y:number},a:P3,b:P3,c:P3){
-  const den=(b.y-c.y)*(a.x-c.x)+(c.x-b.x)*(a.y-c.y);
-  if(Math.abs(den)<=EPS)return false;
-  const u=((b.y-c.y)*(p.x-c.x)+(c.x-b.x)*(p.y-c.y))/den;
-  const v=((c.y-a.y)*(p.x-c.x)+(a.x-c.x)*(p.y-c.y))/den;
-  const w=1-u-v;
-  return u>=-EPS&&v>=-EPS&&w>=-EPS;
-}
-function pointSegmentDistanceXY(p:{x:number;y:number},a:P3,b:P3){
+function pointSegmentDistance2(p:{x:number;y:number},a:{x:number;y:number},b:{x:number;y:number}){
   const dx=b.x-a.x,dy=b.y-a.y,l2=dx*dx+dy*dy;
   if(l2<=EPS*EPS)return Math.hypot(p.x-a.x,p.y-a.y);
   const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l2));
   return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy));
 }
-function faceScopeContainsToolCenter(scope:FaceScope,p:{x:number;y:number},contactRadius:number){
-  const limit=contactRadius+EPS;
-  for(let i=0;i+2<scope.triangles.length;i+=3){
-    const a=scope.triangles[i],b=scope.triangles[i+1],c=scope.triangles[i+2];
-    const minX=Math.min(a.x,b.x,c.x)-limit,maxX=Math.max(a.x,b.x,c.x)+limit;
-    const minY=Math.min(a.y,b.y,c.y)-limit,maxY=Math.max(a.y,b.y,c.y)+limit;
-    if(p.x<minX||p.x>maxX||p.y<minY||p.y>maxY)continue;
-    if(pointInTriangleXY(p,a,b,c)||
-      pointSegmentDistanceXY(p,a,b)<=limit||
-      pointSegmentDistanceXY(p,b,c)<=limit||
-      pointSegmentDistanceXY(p,c,a)<=limit)return true;
-  }
-  return false;
-}
-function clipSegmentToFaceContactScope(a:{x:number;y:number},b:{x:number;y:number},scope:FaceScope,contactRadius:number){
+function clipSegmentToFaceSlice(a:{x:number;y:number},b:{x:number;y:number},segments:ZLevelFaceSegment[],contactRadius:number){
   const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
   if(length<=EPS)return[];
-  // 008H-F: selected faces describe cutter CONTACT intent, not cutter-centre
-  // containment. A centre may therefore lie up to cutter radius + allowance
-  // outside the projected face while the cutter still reaches that face.
-  // Scope clipping can only remove already solid-proven-safe motion, so a
-  // finely sampled/bisected contact predicate cannot weaken collision safety.
   const step=Math.max(0.05,Math.min(0.25,contactRadius/6||0.1));
   const count=Math.max(1,Math.ceil(length/step));
   const at=(t:number)=>({x:a.x+dx*t,y:a.y+dy*t});
-  const inside=(t:number)=>faceScopeContainsToolCenter(scope,at(t),contactRadius);
+  const inside=(t:number)=>segments.some(segment=>pointSegmentDistance2(at(t),segment.a,segment.b)<=contactRadius+EPS);
   const intervals:[number,number][]=[];
   let t0=0,in0=inside(0),open=in0?0:null as number|null;
   for(let i=1;i<=count;i++){
@@ -111,28 +60,33 @@ function clipSegmentToFaceContactScope(a:{x:number;y:number},b:{x:number;y:numbe
       let lo=t0,hi=t1;
       for(let n=0;n<18;n++){const mid=(lo+hi)/2;if(inside(mid)===in0)lo=mid;else hi=mid}
       const edge=(lo+hi)/2;
-      if(in0&&open!=null){intervals.push([open,edge]);open=null}
-      else if(in1)open=edge;
+      if(in0&&open!=null){intervals.push([open,edge]);open=null}else if(in1)open=edge;
     }
     t0=t1;in0=in1;
   }
   if(in0&&open!=null)intervals.push([open,1]);
   return intervals.filter(([u,v])=>v-u>1e-7).map(([u,v])=>[at(u),at(v)] as [{x:number;y:number},{x:number;y:number}]);
 }
-function clipToolpathToFaceContactScope(toolpath:CanonicalToolpath,scope:FaceScope,o:P3,contactRadius:number):CanonicalToolpath{
+function clipToolpathToSelectedFaceSlices(toolpath:CanonicalToolpath,part:P3[],faceIds:number[],selectedFaceIds:number[],o:P3,contactRadius:number,allowance:number,profile?:ZLevelPerformanceProfile):CanonicalToolpath{
   const runs:CanonicalToolpath['runs']=[];
   for(const run of toolpath.runs){
+    // Use the same allowance-shifted Z plane as the solid slice that created
+    // this roughing region. Face ownership and Stock−Model truth therefore
+    // refer to one identical geometric section.
+    const sliceZ=Math.max(0,run.z+o.z-allowance);
+    const segments=sliceFaceSegmentsAtZ(part,faceIds,selectedFaceIds,sliceZ,profile);
+    if(!segments.length)continue;
     let current:typeof run.points=[];
     const flush=()=>{if(current.length>=2)runs.push({...run,points:current,retractAfter:true});current=[]};
     for(let i=1;i<run.points.length;i++){
       const aw={x:run.points[i-1].x+o.x,y:run.points[i-1].y+o.y};
       const bw={x:run.points[i].x+o.x,y:run.points[i].y+o.y};
-      const pieces=clipSegmentToFaceContactScope(aw,bw,scope,contactRadius);
+      const pieces=clipSegmentToFaceSlice(aw,bw,segments,contactRadius);
       if(!pieces.length){flush();continue}
       for(const [wa,wb] of pieces){
-        const a={x:wa.x-o.x,y:wa.y-o.y},b={x:wb.x-o.x,y:wb.y-o.y},last=current.at(-1);
-        if(!last||Math.hypot(last.x-a.x,last.y-a.y)>1e-5){flush();current=[a]}
-        if(Math.hypot(current.at(-1)!.x-b.x,current.at(-1)!.y-b.y)>EPS)current.push(b);
+        const pa={x:wa.x-o.x,y:wa.y-o.y},pb={x:wb.x-o.x,y:wb.y-o.y},last=current.at(-1);
+        if(!last||Math.hypot(last.x-pa.x,last.y-pa.y)>1e-5){flush();current=[pa]}
+        if(Math.hypot(current.at(-1)!.x-pb.x,current.at(-1)!.y-pb.y)>EPS)current.push(pb);
       }
     }
     flush();
@@ -184,7 +138,9 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   if(invalid.length){errors.push(`${invalid.length} Stock−Model-Ebene${invalid.length===1?' ist':'n sind'} ungültig.`);for(const r of invalid)for(const e of r.errors)errors.push(`Z ${r.z.toFixed(3)}: ${e}`)}
   if(errors.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings};
   const o=origin(stock,wcs);
-  // 008H-J: selected-face ownership is evaluated locally on every cutting Z.
+  // 008H-K: selected-face ownership comes from actual face/Z intersection
+  // segments on the exact allowance-shifted solid slice plane. No global or
+  // Z-filtered XY face projection participates in CAM scope any more.
   // The full solid remains the only material/safety truth; face scope only
   // filters already-safe motion by triangles that can physically participate
   // at that level. This removes the asymmetric global-XY-shadow behaviour.
@@ -192,7 +148,11 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   // Face selection only expresses cutter-contact intent, so its XY reach is the
   // physical cutter radius, not cutter radius + allowance. Adding allowance a
   // second time here displaced accepted paths away from the selected surface.
-  const faceContactRadius=toolRadius;
+  // The generated solid-safe cutter centre is clearanceRadius away from the
+  // nominal model when finish allowance is requested. Face intent must accept
+  // that intentional gap; this radius filters ownership only and cannot create
+  // motion outside the already-safe Stock−Model candidate.
+  const faceContactRadius=clearanceRadius;
   const buildDirection=(direction:'x'|'y',scope:FaceScope|null=selected,scopeFaceIds:number[]=operation.faceIds)=>{
     const candidateWarnings:string[]=[];
     const candidateErrors:string[]=[];
@@ -202,7 +162,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     if(!built.ok||!built.toolpath)return{direction,toolpath:null as CanonicalToolpath|null,errors:candidateErrors,warnings:candidateWarnings};
     let candidate=built.toolpath;
     if(scope){
-      candidate=clipToolpathToZLocalFaceContactScope(candidate,part,faceIds,scopeFaceIds,o,faceContactRadius);
+      candidate=clipToolpathToSelectedFaceSlices(candidate,part,faceIds,scopeFaceIds,o,faceContactRadius,allowance,profile);
       if(!candidate.runs.length)candidateErrors.push('Im Werkzeugkontakt-Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
     }
     if(candidate.runs.length)candidateErrors.push(...accessErrors(candidate,rough,o,operation.tool.diameterMm+2*allowance,profile));
@@ -260,6 +220,6 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     warnings.push(...chosen.warnings);
     if(requestedDirection==='auto')warnings.push(`008H-G: Rasterrichtung Auto → ${chosen.direction.toUpperCase()} gewählt.`);
   }
-  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich über ihren Werkzeugkontakt-Bereich (projizierte Face-Geometrie + physischer Fräserradius; das Aufmaß stammt ausschließlich aus der vollständigen Solid-Sicherheitsgeometrie); Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
+  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich über ihren Werkzeugkontakt-Bereich (echte Face/Z-Schnittsegmente auf derselben Solid-Schnittebene + Werkzeug-Clearance; keine projizierte 3D-Face-Geometrie); Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
   return{ok:true,toolpath:toolpath!,levelCount:zs.length,roughingRegionCount:rough.length,errors:[],warnings:[...new Set(warnings)]};
 }
