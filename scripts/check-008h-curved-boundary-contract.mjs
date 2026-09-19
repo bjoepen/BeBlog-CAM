@@ -243,8 +243,8 @@ for(const token of ['FaceTargetRegionProbe','failedStage','selectedProjectionFac
   if(!nativeCpp.includes(token))throw new Error(`008H-N3 native stage diagnostics missing: ${token}`);
 }
 
-for(const token of ['case GeomAbs_Cylinder:','case GeomAbs_Cone:','case GeomAbs_Sphere:','default:\n   return project_face_wires_to_plane(face,target);']){
-  if(!nativeCpp.includes(token))throw new Error(`008H-N2 FreeCAD surface-aware projection dispatch missing: ${token}`);
+for(const token of ['const TopoDS_Shape trimmedBoundary=project_face_wires_to_plane(face,target);','if(!trimmedBoundary.IsNull()&&count_subshapes(trimmedBoundary,TopAbs_FACE)>0)return trimmedBoundary;','case GeomAbs_Cylinder:','case GeomAbs_Cone:','case GeomAbs_Sphere:','return project_face_outline_to_plane(face,target);','projectionDispatch="trimmed-wires-first"']){
+  if(!nativeCpp.includes(token))throw new Error(`008H-N2d trimmed Face boundary / HLR fallback contract missing: ${token}`);
 }
 
 for(const token of ['surfaceType','projectionDispatch','sourceWires','closedSourceWires','sourceEdges','projectedShapes','surface=','dispatch=']){
