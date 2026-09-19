@@ -27,6 +27,7 @@
   import { buildActiveCanonicalToolpath } from './lib/activeCanonicalToolpath';
   import type { ZLevelPerformanceProfile } from './lib/zLevelPerformance';
   import { buildZLevelOperationState, zLevelMode } from './lib/zLevelOperationState';
+  import { buildNativeFaceTargetCanonicalToolpath } from './lib/nativeFaceTargetToolpath';
   import { resolveContourDepth } from './lib/contourDepth';
   import { validateJob, type JobPreflightResult } from './lib/jobPreflight';
   import { createCamProjectV1, parseCamProject, serializeCamProject } from './lib/projectPersistence';
@@ -58,6 +59,9 @@
   let nativeRegionDiagnostic:NativeZLevelRegionSet|null=null;
   let nativeRegionDiagnosticBusy=false;
   let nativeRegionDiagnosticError='';
+  let nativeFaceTargetOverrides:Record<string,CanonicalToolpath|null>={};
+  let nativeFaceTargetErrors:Record<string,string[]>={};
+  let nativeFaceTargetRefreshToken=0;
   function receiveFaceTargetState(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null){faceTargetState=state;}
   function diagnosticPlacedBounds(){
     if(importSummary?.kind!=='step')return null;
@@ -91,15 +95,60 @@
     }catch(e){nativeRegionDiagnosticError=String(e)}finally{nativeRegionDiagnosticBusy=false}
   }
 
-  function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject,profile?:ZLevelPerformanceProfile){
+  function operationNeedsNativeFaceTarget(op:CamOperation){
+    if(op.kind!=='z-level-roughing'||zLevelMode(op)!=='face-target'||!op.faceIds.length)return false;
+    const kinds=new Map((importSummary?.brep?.manufacturingFaces??[]).map(face=>[face.faceId,face.kind] as const));
+    return op.faceIds.some(id=>(kinds.get(id)??'other')!=='plane');
+  }
+  function nativeRequestFor(op:ZLevelRoughingOperation){
+    if(!sourcePath||importSummary?.kind!=='step')return null;
+    const b=diagnosticPlacedBounds();if(!b)return null;
+    const selected=new Set(op.faceIds),ids=importSummary.brep?.displayFaceIds??[],v=importSummary.brep?.displayVertices??[];
+    let selectedMinZ=Number.POSITIVE_INFINITY;
+    for(let t=0;t<ids.length&&t*9+8<v.length;t++)if(selected.has(ids[t]))for(let k=0;k<3;k++){
+      const p=orientPoint3({x:v[t*9+k*3],y:v[t*9+k*3+1],z:v[t*9+k*3+2]},orientation);
+      selectedMinZ=Math.min(selectedMinZ,p.z+b.translation[2]);
+    }
+    if(!Number.isFinite(selectedMinZ))return null;
+    const levels=diagnosticLevels(stock.thickness,selectedMinZ+Math.max(0,op.finishAllowanceMm),op.stepDownMm);
+    if(!levels.length)return null;
+    return{contractVersion:NATIVE_ZLEVEL_REGION_CONTRACT_VERSION,sourcePath,sourceFingerprint:importSummary.fileName+'::008H-N3-production',faceIds:[...op.faceIds],transform:{orientation:{...orientation},translationMm:b.translation},stock:{...stock},zLevelsMm:levels,finishAllowanceMm:0};
+  }
+  async function refreshNativeFaceTargetProduction(){
+    const token=++nativeFaceTargetRefreshToken;
+    const targets=operationsProject.operations.filter((op):op is ZLevelRoughingOperation=>op.enabled!==false&&operationNeedsNativeFaceTarget(op));
+    const pending:Record<string,CanonicalToolpath|null>={};
+    for(const op of targets)pending[op.id]=null;
+    nativeFaceTargetOverrides=pending;
+    nativeFaceTargetErrors={};
+    if(!targets.length)return;
+    const entries=await Promise.all(targets.map(async op=>{
+      const request=nativeRequestFor(op);
+      if(!request)return[op.id,null,['Native OCCT Face-Target-Anfrage konnte nicht aufgebaut werden.']] as const;
+      try{
+        const native=await invoke<NativeZLevelRegionSet>('build_native_zlevel_regions',{request});
+        const built=buildNativeFaceTargetCanonicalToolpath({native,stock,wcs,operation:op});
+        const toolpath=built.toolpath?{...built.toolpath,sourceOperationId:op.id}:null;
+        return[op.id,toolpath,built.errors] as const;
+      }catch(error){return[op.id,null,[String(error)]] as const}
+    }));
+    if(token!==nativeFaceTargetRefreshToken)return;
+    const next:Record<string,CanonicalToolpath|null>={},errors:Record<string,string[]>={};
+    for(const [id,toolpath,opErrors] of entries){next[id]=toolpath;if(opErrors.length)errors[id]=[...opErrors]}
+    nativeFaceTargetOverrides=next;
+    nativeFaceTargetErrors=errors;
+  }
+
+  function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject,profile?:ZLevelPerformanceProfile,overrides:Record<string,CanonicalToolpath|null>={}){
     if(!summary)return null;
     const previousToolpaths:CanonicalToolpath[]=[];
     for(const candidate of project.operations){
       if(candidate.enabled===false)continue;
-      if(candidate.id===currentOperation.id)return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths,zLevelPerformanceProfile:profile});
-      const toolpath=buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:candidate,previousToolpaths});
+      if(candidate.id===currentOperation.id){if(Object.prototype.hasOwnProperty.call(overrides,currentOperation.id))return overrides[currentOperation.id];return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths,zLevelPerformanceProfile:profile});}
+      const toolpath=Object.prototype.hasOwnProperty.call(overrides,candidate.id)?overrides[candidate.id]:buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:candidate,previousToolpaths});
       if(toolpath)previousToolpaths.push(toolpath);
     }
+    if(Object.prototype.hasOwnProperty.call(overrides,currentOperation.id))return overrides[currentOperation.id];
     return buildActiveCanonicalToolpath({summary,stock:currentStock,stockMode:currentStockMode,placement:currentPlacement,orientation:currentOrientation,wcs:currentWcs,operation:currentOperation,previousToolpaths,zLevelPerformanceProfile:profile});
   }
   function buildOrderedJobCanonicalToolpaths(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,project:OperationsProject){
@@ -112,7 +161,9 @@
     }
     return toolpaths;
   }
-  $: activeCanonicalToolpath=buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject);
+  $: nativeFaceTargetRefreshKey=JSON.stringify({sourcePath,file:importSummary?.fileName,stock,placement,orientation,wcs,ops:operationsProject.operations.filter(op=>op.kind==='z-level-roughing').map(op=>({id:op.id,enabled:op.enabled,faceIds:op.faceIds,mode:op.roughingMode,stepDownMm:op.stepDownMm,stepoverPercent:op.stepoverPercent,finishAllowanceMm:op.finishAllowanceMm,rasterDirection:op.rasterDirection,toolDiameterMm:op.tool.diameterMm}))});
+  $: if(nativeFaceTargetRefreshKey)void refreshNativeFaceTargetProduction();
+  $: activeCanonicalToolpath=buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject,undefined,nativeFaceTargetOverrides);
   // 008E-C1: Editing must not eagerly rebuild expensive Z-level states that are
   // only consumed by Prüfen/Fräsen. The active canonical path above remains the
   // single manufacturing truth while Bearbeiten is active.
@@ -120,7 +171,7 @@
   $: preflightStepToolpaths=activeStep==='Prüfen'&&importSummary?.kind==='step'?buildOrderedJobCanonicalToolpaths(importSummary,stock,stockMode,placement,orientation,wcs,operationsProject).filter(toolpath=>toolpath.operationKind!=='z-level-roughing'):[];
   $: preflightDxfToolpaths=activeStep==='Prüfen'&&importSummary?.kind==='dxf'?operationsProject.operations.filter(op=>op.enabled!==false&&op.kind!=='z-level-roughing').map(op=>buildActiveCanonicalToolpath({summary:importSummary!,stock,stockMode,placement,orientation,wcs,operation:op})).filter((toolpath):toolpath is CanonicalToolpath=>toolpath!==null):[];
   $: contourDepthState=operation.kind==='contour'?resolveContourDepth({operation,stock,stockMode,wcs}):null;
-  $: jobPreflight=(activeStep==='Prüfen'||activeStep==='Fräsen')&&importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null}):null;
+  $: jobPreflight=(activeStep==='Prüfen'||activeStep==='Fräsen')&&importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null,canonicalOverrides:nativeFaceTargetOverrides}):null;
 
   const operationLabel=(kind:OperationKind)=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':kind==='surface-finishing'?'3D Schlichten':'Z-Level Schruppen';
   function setOperation(next:CamOperation){operationsProject=replaceOperation(operationsProject,next);const synced=operationsProject.operations.find(op=>op.id===next.id);operation=cloneOperation(synced??next);}
