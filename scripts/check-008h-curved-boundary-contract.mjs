@@ -231,3 +231,10 @@ const preflight=fs.readFileSync('src/lib/jobPreflight.ts','utf8');
 for(const token of ['canonicalOverrides?:Record<string,CanonicalToolpath|null>','hasOverride','autoritative native Face-Target-Werkzeugbahn']){
   if(!preflight.includes(token))throw new Error(`008H-N3 preflight/NC truth integration missing: ${token}`);
 }
+
+const nativeFaceTargetToolpath=fs.readFileSync('src/lib/nativeFaceTargetToolpath.ts','utf8');
+for(const token of ['Z=${region.z.toFixed(3)} mm','region.errors.map']){
+  if(!nativeFaceTargetToolpath.includes(token))throw new Error(`008H-N3 native root-cause propagation missing: ${token}`);
+}
+if(!preflight.includes('canonicalOverrideErrors?:Record<string,string[]>')||!preflight.includes('args.canonicalOverrideErrors?.[operation.id]'))throw new Error('008H-N3 preflight must expose concrete native Face-target errors');
+if(!diagnosticApp.includes('canonicalOverrideErrors:nativeFaceTargetErrors'))throw new Error('008H-N3 App must pass concrete native Face-target errors into preflight');
