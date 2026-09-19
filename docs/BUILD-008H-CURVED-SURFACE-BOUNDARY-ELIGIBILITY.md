@@ -194,3 +194,35 @@ clearance proof unchanged.
 This specifically covers the acceptance case where stock XY dimensions equal
 the part XY dimensions. Such a setup must not suppress an otherwise reachable
 rounded edge merely because the tool centre has to pass outside the stock.
+
+
+## 008H-F — Face Selection Is Cutter-Contact Intent
+
+The stock-edge correction alone did not make a stock-to-part-size rounded grip
+machinable. The remaining failure exposed a separate semantic error in 008H-D:
+selected-face scope required the **tool centre** to lie inside the XY projection
+of the selected face.
+
+That is incorrect for convex fillets, hemispheres and other outside curvature.
+The cutter can contact a selected face while its centre lies outside that face
+projection—and, legitimately, outside the physical stock.
+
+008H-F therefore defines selected faces as **cutter-contact intent**. A
+solid-proven-safe cutter centre belongs to the face scope when its XY position
+is within the contact radius (physical cutter radius plus finishing allowance)
+of the actual projected selected-face triangulation.
+
+The implementation tests the union of projected selected triangles plus their
+edge-distance envelope. Straight raster segments are sampled and their
+inside/outside transitions are bisected to preserve contact-scope boundaries.
+
+Safety ordering remains unchanged:
+
+1. complete-solid Stock−Model roughing proves a path safe,
+2. model clearance uses cutter radius plus allowance,
+3. stock edges permit legal cutter overhang,
+4. selected-face contact scope may only remove portions of that safe path.
+
+Thus expanding face intent cannot legalize a collision. It only prevents valid
+convex-surface cutter positions from being discarded because the cutter centre
+is not geometrically inside the selected CAD face.
