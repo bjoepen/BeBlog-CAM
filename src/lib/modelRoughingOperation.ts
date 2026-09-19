@@ -211,7 +211,9 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
       decisions.push(`Face ${group.faceId} → ${chosen.direction.toUpperCase()} (${describe(x)}; ${describe(y)})`);
     }
     if(errors.length||!combinedRuns.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
-    toolpath={kind:'raster',runs:combinedRuns};
+    const template=[buildDirection('x'),buildDirection('y')].find(candidate=>candidate.toolpath)?.toolpath;
+    if(!template)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:['008H-H: kanonische Z-Level-Metadaten konnten nicht materialisiert werden.'],warnings:[...new Set(warnings)]};
+    toolpath={...template,runs:combinedRuns};
     warnings.push(`008H-H: Rasterrichtung Auto lokal pro Ziel-Face gewählt: ${decisions.join(' · ')}.`);
   }else{
     const candidates=requestedDirection==='auto'?[buildDirection('x'),buildDirection('y')]:[buildDirection(requestedDirection)];
