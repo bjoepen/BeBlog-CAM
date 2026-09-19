@@ -893,3 +893,19 @@ This is still not accepted from source/CI alone. Qualification order is strict:
 4. only then N3 may consume native regions.
 
 If step 2 fails, N2b is rejected before raster/Canonical/004T are investigated.
+
+
+## 008H-N2c — Curved Face projection parity
+
+Status: **IMPLEMENTED / qualification pending**
+
+N2b preserved the FreeCAD Adaptive boolean data flow but incorrectly replaced FreeCAD's surface-aware `projectFacesToXY()` with one generic projection of every BRep wire. The Headstock single-Hohlkehle fixture proved that shortcut invalid: seam/boundary wires of a curved Face can reconstruct a broad planar Face unrelated to the Face's actual top-view silhouette.
+
+N2c removes that shortcut. Projection is now Face-based:
+
+- planar Faces keep exact closed-wire parallel projection;
+- curved Faces are projected through OCCT's exact HLR BRep algorithm, using visible hard edges plus the visible silhouette and excluding seam-only geometry;
+- the same Face projector is used for the selected Face and for every Face of the solid clipped above each requested Z level;
+- only after those projections are built does the existing FreeCAD-style `selectedRefined - aboveRefined` boolean run.
+
+The production raster path remains untouched and N3 remains blocked. Qualification is still native-region first: the CBG Headstock single Hohlkehle must produce a local native region before V14 Grip or any production CAM integration is considered.
