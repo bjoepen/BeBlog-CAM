@@ -137,14 +137,19 @@ for(const token of [
   'BRepAlgoAPI_Section',
   'BRepAlgoAPI_Common',
   'BRepAlgoAPI_Cut',
-  'projected_face_footprint',
+  'project_wires_to_plane',
+  'selected_face_projection',
+  'solid_above_projection',
+  'BRepProj_Projection',
+  'BOPAlgo_Tools::WiresToFaces',
+  'BRepPrimAPI_MakeBox',
   'face_target_material_region',
   'transform_shape(source,request)',
   'transform_shape(faces[id],request)',
   'total.PreMultiply(r)',
   'total.PreMultiply(tr)',
   'OCCT could not prove a Face-target Stock-model material region; fail-closed',
-  'no display triangulation used',
+  'no mixed-dimensional solid subtraction or display triangulation used',
 ]){
   if(!nativeCpp.includes(token))throw new Error(`008H-N2 native geometry kernel missing: ${token}`);
 }
@@ -175,6 +180,9 @@ for(const token of [
 }
 const diagnosticView=fs.readFileSync('src/lib/GeometryView.svelte','utf8');
 for(const token of ['nativeRegionDiagnostic','nativeRegionWorld','native-region-proof','diagnosticActive?[]'])if(!diagnosticView.includes(token))throw new Error(`008H-N2 viewport isolation missing: ${token}`);
+if(nativeCpp.includes('projected_face_footprint'))throw new Error('008H-N2b forbids rejected sampled Face-footprint projection');
+if(nativeCpp.includes('BRepAlgoAPI_Cut material(inStock.Shape(),fullModel)'))throw new Error('008H-N2b forbids rejected 2D-minus-3D mixed-dimensional Boolean');
+if(!nativeCpp.includes('BRepAlgoAPI_Cut material(selectedInStock.Shape(),aboveProjection)'))throw new Error('008H-N2b must subtract solid-above planar projection from selected planar projection');
 const nativeRegionStart=nativeCpp.indexOf('extern "C" char* beblog_occt_build_zlevel_regions');
 const nativeRegionEnd=nativeCpp.indexOf('extern "C" void beblog_occt_free_string',nativeRegionStart);
 if(nativeRegionStart<0||nativeRegionEnd<=nativeRegionStart){
@@ -192,4 +200,4 @@ if(faceIdMentions>1){
   throw new Error('008H-N2 native region builder contains unexpected displayFaceIds usage beyond Face-ID contract metadata');
 }
 
-console.log('PASS 008H-N2 diagnostic + material kernel: native OCCT selected-Face footprints are intersected with stock and exact transformed Model material is subtracted before any raster. Native Face identity is preserved; display triangulation is excluded; unprovable regions fail closed. Production CAM has not yet switched consumers.');
+console.log('PASS 008H-N2b contract: FreeCAD-style selected planar projection minus solid-above planar projection is enforced. Rejected sampled footprint and mixed-dimensional 2D-minus-3D Boolean are forbidden; display triangulation remains excluded. Production CAM has not switched consumers.');
