@@ -179,19 +179,20 @@ TopoDS_Shape project_face_outline_to_plane(const TopoDS_Face& face,const TopoDS_
 }
 TopoDS_Shape project_face_to_plane(const TopoDS_Face& face,const TopoDS_Face& target){
  BRepAdaptor_Surface surface(face,true);
- // FreeCAD CAM projectFacesToXY is surface-aware. Only seam-heavy analytic
- // surfaces (cylinder/cone/sphere) use the TechDraw/HLR outline path. Ordinary
- // curved Faces, including a non-seam Hohlkehle represented as BSpline/other,
- // keep their actual closed BRep boundary and project those wires to XY.
- // This distinction is essential: forcing every curved Face through HLR can
- // yield only open visible edges, so no selected Face region can be rebuilt.
+ // 008H-N2d: preserve the trimmed BRep Face boundary whenever OCCT can project
+ // it into a closed planar Face. This is the strongest available Face-target
+ // truth and is required for concave cylindrical fillets such as the Headstock
+ // Hohlkehle. HLR remains a fallback for seam/silhouette cases whose trimmed
+ // boundary cannot produce a planar Face.
+ const TopoDS_Shape trimmedBoundary=project_face_wires_to_plane(face,target);
+ if(!trimmedBoundary.IsNull()&&count_subshapes(trimmedBoundary,TopAbs_FACE)>0)return trimmedBoundary;
  switch(surface.GetType()){
   case GeomAbs_Cylinder:
   case GeomAbs_Cone:
   case GeomAbs_Sphere:
    return project_face_outline_to_plane(face,target);
   default:
-   return project_face_wires_to_plane(face,target);
+   return TopoDS_Shape();
  }
 }
 TopoDS_Shape fuse_planar_faces(const TopoDS_Shape& source){
@@ -247,7 +248,7 @@ FaceTargetRegionProbe face_target_material_region(const TopoDS_Face& selected,co
  FaceTargetRegionProbe probe;
  BRepAdaptor_Surface selectedSurface(selected,true);
  probe.surfaceType=surface_name(selectedSurface.GetType());
- probe.projectionDispatch=(selectedSurface.GetType()==GeomAbs_Cylinder||selectedSurface.GetType()==GeomAbs_Cone||selectedSurface.GetType()==GeomAbs_Sphere)?"hlr":"wires";
+ probe.projectionDispatch="trimmed-wires-first";
  for(TopExp_Explorer wit(selected,TopAbs_WIRE);wit.More();wit.Next()){++probe.sourceWires;const TopoDS_Wire wire=TopoDS::Wire(wit.Current());if(wire.Closed())++probe.closedSourceWires;for(TopExp_Explorer eit(wire,TopAbs_EDGE);eit.More();eit.Next())++probe.sourceEdges;}
  const TopoDS_Face stock=stock_face(json,z);if(stock.IsNull()){probe.failedStage="stock";return probe;}
  const TopoDS_Shape selectedProjection=selected_face_projection(selected,stock);
