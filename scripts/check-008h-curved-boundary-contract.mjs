@@ -107,6 +107,7 @@ for(const token of ["Rasterrichtung","Automatisch","Parallel X","Parallel Y","ra
 const nativeHeader=fs.readFileSync('src-tauri/native/occt_bridge.h','utf8');
 const rustOcct=fs.readFileSync('src-tauri/src/occt.rs','utf8');
 const tauriLib=fs.readFileSync('src-tauri/src/lib.rs','utf8');
+const nativeCpp=fs.readFileSync('src-tauri/native/occt_bridge.cpp','utf8');
 for(const token of [
   'beblog_occt_build_zlevel_regions(const char* request_json)',
 ]){
@@ -132,8 +133,33 @@ for(const token of [
 ]){
   if(!types.includes(token))throw new Error(`008H-N1 TypeScript contract missing: ${token}`);
 }
-if(tauriLib.includes('build_zlevel_regions')){
-  throw new Error('008H-N1 is contract-only: executable Tauri region command must wait for N2');
+for(const token of [
+  'BRepAlgoAPI_Section',
+  'section_chains',
+  'TopoDS_Compound selected',
+  'builder.Add(selected,faces[id])',
+  'transform_shape(selected,request)',
+  'OCCT Face/Z section did not form a closed planar region; fail-closed',
+  'no display triangulation used',
+]){
+  if(!nativeCpp.includes(token))throw new Error(`008H-N2 native geometry kernel missing: ${token}`);
+}
+for(const token of [
+  'fn build_zlevel_regions(&self, request: &NativeZLevelRegionRequest)',
+  'beBlog'.toLowerCase().replace('blog','blog')
+]){
+  if(token==='beblog')continue;
+  if(!rustOcct.includes(token))throw new Error(`008H-N2 Rust backend missing: ${token}`);
+}
+for(const token of [
+  'fn build_native_zlevel_regions(request: NativeZLevelRegionRequest)',
+  'Occt8Backend.build_zlevel_regions(&request)',
+  'build_native_zlevel_regions, new_project',
+]){
+  if(!tauriLib.includes(token))throw new Error(`008H-N2 Tauri boundary missing: ${token}`);
+}
+if(nativeCpp.includes('displayVertices')||nativeCpp.includes('displayFaceIds')){
+  throw new Error('008H-N2 native region builder must not consume display triangulation');
 }
 
-console.log('PASS 008H-N1: native Face-target region ABI plus Rust/TypeScript request-response and deterministic Face-ID contracts are frozen; no production CAM consumer has switched to an unimplemented native region builder.');
+console.log('PASS 008H-N2 kernel: native OCCT selected-Face/Z sections are executable through Rust/Tauri, use native Face identity and fail closed when a closed planar region cannot be proven. Production CAM has not yet switched consumers.');
