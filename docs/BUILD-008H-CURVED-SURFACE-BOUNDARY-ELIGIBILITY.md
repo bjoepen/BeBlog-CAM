@@ -257,3 +257,24 @@ The chosen direction and both candidate metrics are emitted as an 008H-G
 diagnostic warning in Preflight. Direction changes only raster strategy; it does
 not alter Stock−Model truth, cutter clearance, allowance, face-contact scope or
 004T/004Q safety contracts.
+
+
+## 008H-H — Per-Face Auto Raster Direction
+
+The grip fixture proved that one global Auto direction is insufficient when a
+single operation selects orthogonal faces. Long side fillets prefer one raster
+axis while short end fillets prefer the other.
+
+For **Auto** only, each selected BRep target face is now reconstructed as an
+independent cutter-contact scope. X and Y candidates are built for that face
+through the same complete-solid safety, contact clipping and top-accessibility
+checks. The local winner uses the existing deterministic rule: fewer canonical
+runs, then greater mean connected cutting length, then X as final tie-break.
+
+The accepted runs from all selected faces are combined into one canonical
+raster toolpath. Preflight reports the chosen direction and candidate metrics
+for every target face.
+
+Manual **Parallel X** and **Parallel Y** intentionally remain global overrides.
+No local decision can bypass Stock−Model truth, cutter clearance, allowance,
+004T motion truth or 004Q assembly checks.
