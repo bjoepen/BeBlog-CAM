@@ -194,7 +194,7 @@ for(const token of [
 const diagnosticView=fs.readFileSync('src/lib/GeometryView.svelte','utf8');
 for(const token of ['nativeRegionDiagnostic','nativeRegionWorld','native-region-proof','diagnosticActive?[]'])if(!diagnosticView.includes(token))throw new Error(`008H-N2 viewport isolation missing: ${token}`);
 if(nativeCpp.includes('TopoDS_Shape project_wires_to_plane('))throw new Error('008H-N2c forbids generic all-wire projection for curved Face ownership');
-if(!nativeCpp.includes('if(surface.GetType()==GeomAbs_Plane)return project_face_wires_to_plane(face,target);'))throw new Error('008H-N2c must route curved Faces through exact silhouette projection');
+if(nativeCpp.includes('if(surface.GetType()==GeomAbs_Plane)return project_face_wires_to_plane(face,target);'))throw new Error('008H-N2c superseded blanket curved-Face HLR dispatch must not return');
 if(nativeCpp.includes('projected_face_footprint'))throw new Error('008H-N2b forbids rejected sampled Face-footprint projection');
 if(nativeCpp.includes('BRepAlgoAPI_Cut material(inStock.Shape(),fullModel)'))throw new Error('008H-N2b forbids rejected 2D-minus-3D mixed-dimensional Boolean');
 if(!nativeCpp.includes('BRepAlgoAPI_Cut material(selectedInStock.Shape(),aboveProjection)'))throw new Error('008H-N2b must subtract solid-above planar projection from selected planar projection');
