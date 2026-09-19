@@ -158,7 +158,13 @@ for(const token of [
 ]){
   if(!tauriLib.includes(token))throw new Error(`008H-N2 Tauri boundary missing: ${token}`);
 }
-if(nativeCpp.includes('displayVertices')||nativeCpp.includes('displayFaceIds')){
+const nativeRegionStart=nativeCpp.indexOf('extern "C" char* beblog_occt_build_zlevel_regions');
+const nativeRegionEnd=nativeCpp.indexOf('extern "C" void beblog_occt_free_string',nativeRegionStart);
+if(nativeRegionStart<0||nativeRegionEnd<=nativeRegionStart){
+  throw new Error('008H-N2 native region builder source boundary missing');
+}
+const nativeRegionBuilder=nativeCpp.slice(nativeRegionStart,nativeRegionEnd);
+if(nativeRegionBuilder.includes('displayVertices')||nativeRegionBuilder.includes('displayFaceIds')||nativeRegionBuilder.includes('BRepMesh_IncrementalMesh')){
   throw new Error('008H-N2 native region builder must not consume display triangulation');
 }
 
