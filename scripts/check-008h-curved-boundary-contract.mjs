@@ -209,3 +209,18 @@ if(faceIdMentions>1){
 }
 
 console.log('PASS 008H-N2b contract: FreeCAD-style selected planar projection minus solid-above planar projection is enforced. Rejected sampled footprint and mixed-dimensional 2D-minus-3D Boolean are forbidden; display triangulation remains excluded. Production CAM has not switched consumers.');
+
+const nativeProduction=fs.readFileSync('src/lib/nativeFaceTargetToolpath.ts','utf8');
+for(const token of ['buildNativeFaceTargetCanonicalToolpath','regionsFromNative','buildModelRoughingCanonicalToolpath','008H-N3 production boundary']){
+  if(!nativeProduction.includes(token))throw new Error(`008H-N3 production adapter missing: ${token}`);
+}
+const zLevelState=fs.readFileSync('src/lib/zLevelOperationState.ts','utf8');
+if(zLevelState.includes('buildModelRoughingOperationState({...args,scopeToSelectedFaces:true})'))throw new Error('008H-N3 forbids rejected 008H-M ownership fallback for curved Face targets');
+if(!zLevelState.includes('Kein TypeScript-Ownership-Fallback zulässig'))throw new Error('008H-N3 synchronous curved Face path must fail closed without native truth');
+for(const token of ['refreshNativeFaceTargetProduction','buildNativeFaceTargetCanonicalToolpath','nativeFaceTargetOverrides','canonicalOverrides:nativeFaceTargetOverrides']){
+  if(!diagnosticApp.includes(token))throw new Error(`008H-N3 App production integration missing: ${token}`);
+}
+const preflight=fs.readFileSync('src/lib/jobPreflight.ts','utf8');
+for(const token of ['canonicalOverrides?:Record<string,CanonicalToolpath|null>','hasOverride','autoritative native Face-Target-Werkzeugbahn']){
+  if(!preflight.includes(token))throw new Error(`008H-N3 preflight/NC truth integration missing: ${token}`);
+}
