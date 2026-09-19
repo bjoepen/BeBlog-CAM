@@ -909,3 +909,29 @@ N2c removes that shortcut. Projection is now Face-based:
 - only after those projections are built does the existing FreeCAD-style `selectedRefined - aboveRefined` boolean run.
 
 The production raster path remains untouched and N3 remains blocked. Qualification is still native-region first: the CBG Headstock single Hohlkehle must produce a local native region before V14 Grip or any production CAM integration is considered.
+
+## 008H-N4 — Separate Face scope from cutter safety
+
+Status: **IMPLEMENTED / real-world qualification pending**
+
+Contract version `008H-N4-v2` replaces the N1 wire semantics for native
+production requests. Each Z level now carries two independent planar truths:
+
+- `scopeIslands`: material attributable to the selected trimmed BRep Face;
+- `safetyIslands`: cutter-center free space derived from the complete
+  transformed BRep solid.
+
+The N2d trimmed-wires-first projection and HLR fallback remain authoritative
+for Face scope. Raster extent and center containment use `scopeIslands`, while
+cutter-radius clearance and stay-down connector validation use only
+`safetyIslands`. Finish allowance samples complete-solid safety at
+`cutZ - finishAllowanceMm` and enlarges XY clearance to cutter radius plus
+allowance. The safety stock domain is expanded by twice that clearance so the
+existing 008H-E legal stock-edge overhang remains available after raster
+erosion.
+
+Native projection/kernel failure is distinct from a genuinely empty
+solid-above intersection and remains fail-closed. The downstream canonical,
+004T, Preview/Preflight and NC pipeline is unchanged. N4 is not qualified until
+the Headstock Hohlkehle, V14 Grip and hemisphere fixtures pass together in the
+production UI.

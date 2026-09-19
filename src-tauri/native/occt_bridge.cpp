@@ -115,10 +115,10 @@ std::vector<gp_Pnt> sampled_wire_xy(const TopoDS_Wire& wire,double z){
  if(points.size()>2&&d2xy(points.front(),points.back())>1e-12)points.push_back(points.front());
  return points;
 }
-TopoDS_Face stock_face(const std::string& json,double z){
+TopoDS_Face stock_face(const std::string& json,double z,double margin=0){
  const double width=json_number_field(json,"width"),height=json_number_field(json,"height");
  if(!(width>0)||!(height>0))return TopoDS_Face();
- BRepBuilderAPI_MakePolygon p;p.Add(gp_Pnt(0,0,z));p.Add(gp_Pnt(width,0,z));p.Add(gp_Pnt(width,height,z));p.Add(gp_Pnt(0,height,z));p.Close();
+ BRepBuilderAPI_MakePolygon p;p.Add(gp_Pnt(-margin,-margin,z));p.Add(gp_Pnt(width+margin,-margin,z));p.Add(gp_Pnt(width+margin,height+margin,z));p.Add(gp_Pnt(-margin,height+margin,z));p.Close();
  if(!p.IsDone())return TopoDS_Face();BRepBuilderAPI_MakeFace f(gp_Pln(gp_Pnt(0,0,z),gp_Dir(0,0,1)),p.Wire(),true);return f.IsDone()?f.Face():TopoDS_Face();
 }
 
@@ -218,13 +218,18 @@ TopoDS_Shape project_shape_to_stock_plane(const TopoDS_Shape& source,const TopoD
 TopoDS_Shape selected_face_projection(const TopoDS_Face& selected,const TopoDS_Face& target){
  return project_face_to_plane(selected,target);
 }
-TopoDS_Shape solid_above_projection(const TopoDS_Shape& fullModel,const std::string& json,double z,const TopoDS_Face& target){
+struct SolidAboveProjection{TopoDS_Shape shape;bool empty=false;bool failed=false;};
+SolidAboveProjection solid_above_projection(const TopoDS_Shape& fullModel,const std::string& json,double clipZ,const TopoDS_Face& target,double margin=0){
  const double width=json_number_field(json,"width"),height=json_number_field(json,"height"),top=json_number_field(json,"thickness");
- if(!(width>0)||!(height>0)||!(top>z+1e-9))return TopoDS_Shape();
- const double dz=top-z+1e-6;
- const TopoDS_Shape upperBox=BRepPrimAPI_MakeBox(gp_Pnt(0,0,z),width,height,dz).Shape();
- BRepAlgoAPI_Common common(fullModel,upperBox);common.Build();if(!common.IsDone()||common.Shape().IsNull())return TopoDS_Shape();
- return project_shape_to_stock_plane(common.Shape(),target);
+ if(!(width>0)||!(height>0))return{{},false,true};
+ if(!(top>clipZ+1e-9))return{{},true,false};
+ const double dz=top-clipZ+1e-6;
+ const TopoDS_Shape upperBox=BRepPrimAPI_MakeBox(gp_Pnt(-margin,-margin,clipZ),width+2*margin,height+2*margin,dz).Shape();
+ BRepAlgoAPI_Common common(fullModel,upperBox);common.Build();if(!common.IsDone())return{{},false,true};
+ if(common.Shape().IsNull()||count_subshapes(common.Shape(),TopAbs_FACE)==0)return{{},true,false};
+ const TopoDS_Shape projected=project_shape_to_stock_plane(common.Shape(),target);
+ if(projected.IsNull()||count_subshapes(projected,TopAbs_FACE)==0)return{{},false,true};
+ return{projected,false,false};
 }
 struct FaceTargetRegionProbe{
  TopoDS_Shape material;
@@ -259,16 +264,36 @@ FaceTargetRegionProbe face_target_material_region(const TopoDS_Face& selected,co
  if(!selectedInStock.IsDone()||selectedInStock.Shape().IsNull()){probe.failedStage="selectedInStock";return probe;}
  probe.selectedInStockFaces=planar_face_count(selectedInStock.Shape());
  if(probe.selectedInStockFaces==0){probe.failedStage="selectedInStock";return probe;}
- const TopoDS_Shape aboveProjection=solid_above_projection(fullModel,json,z,stock);
- probe.aboveProjectionFaces=planar_face_count(aboveProjection);
- if(aboveProjection.IsNull()||probe.aboveProjectionFaces==0){
+ const SolidAboveProjection above=solid_above_projection(fullModel,json,z,stock);
+ if(above.failed){probe.failedStage="solidAboveProjection";return probe;}
+ probe.aboveProjectionFaces=planar_face_count(above.shape);
+ if(above.empty){
   probe.material=selectedInStock.Shape();probe.materialFaces=probe.selectedInStockFaces;return probe;
  }
- BRepAlgoAPI_Cut material(selectedInStock.Shape(),aboveProjection);material.Build();
+ BRepAlgoAPI_Cut material(selectedInStock.Shape(),above.shape);material.Build();
  if(!material.IsDone()||material.Shape().IsNull()){probe.failedStage="materialCut";return probe;}
  probe.material=material.Shape();probe.materialFaces=planar_face_count(probe.material);
  if(probe.materialFaces==0)probe.failedStage="material";
  return probe;
+}
+struct CutterSafetyRegion{TopoDS_Shape material;std::string failedStage;std::size_t aboveProjectionFaces=0;std::size_t materialFaces=0;};
+CutterSafetyRegion cutter_safety_region(const TopoDS_Shape& fullModel,const std::string& json,double cutZ,double finishAllowance,double clearanceRadius){
+ CutterSafetyRegion result;
+ // Match the established 008H-E domain: raster erosion by clearanceRadius
+ // still leaves one legal clearanceRadius of cutter-centre stock overhang.
+ const double stockMargin=2*clearanceRadius;
+ const TopoDS_Face domain=stock_face(json,cutZ,stockMargin);
+ if(domain.IsNull()){result.failedStage="safetyStock";return result;}
+ const double safetyZ=cutZ-finishAllowance;
+ const SolidAboveProjection above=solid_above_projection(fullModel,json,safetyZ,domain,stockMargin);
+ if(above.failed){result.failedStage="safetySolidAboveProjection";return result;}
+ result.aboveProjectionFaces=planar_face_count(above.shape);
+ if(above.empty){result.material=domain;result.materialFaces=1;return result;}
+ BRepAlgoAPI_Cut safety(domain,above.shape);safety.Build();
+ if(!safety.IsDone()||safety.Shape().IsNull()){result.failedStage="safetyMaterialCut";return result;}
+ result.material=safety.Shape();result.materialFaces=planar_face_count(result.material);
+ if(result.materialFaces==0)result.failedStage="safetyMaterial";
+ return result;
 }
 struct PlanarIsland{SectionChain outer;std::vector<SectionChain> holes;};
 std::vector<PlanarIsland> planar_shape_islands(const TopoDS_Shape& shape){
@@ -285,6 +310,14 @@ std::vector<PlanarIsland> planar_shape_islands(const TopoDS_Shape& shape){
   out.push_back(std::move(island));
  }
  return out;
+}
+void append_planar_islands(std::ostringstream& out,const std::vector<PlanarIsland>& islands){
+ bool firstIsland=true;
+ for(const auto& island:islands){const auto& chain=island.outer;if(chain.points.size()<4||d2xy(chain.points.front(),chain.points.back())>=1e-10)continue;if(!firstIsland)out<<',';firstIsland=false;
+  out<<"{\"outer\":[";bool firstPoint=true;for(const auto&p:chain.points){if(!firstPoint)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';firstPoint=false;}out<<"],\"holes\":[";
+  bool firstHole=true;for(const auto& hole:island.holes){if(!firstHole)out<<',';firstHole=false;out<<'[';bool firstHolePoint=true;for(const auto&p:hole.points){if(!firstHolePoint)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';firstHolePoint=false;}out<<']';}
+  out<<"]}";
+ }
 }
 
 double d2xy(const gp_Pnt&a,const gp_Pnt&b){const double dx=a.X()-b.X(),dy=a.Y()-b.Y();return dx*dx+dy*dy;}
@@ -330,12 +363,14 @@ extern "C" char* beblog_occt_inspect_step(const char* path){try{
 extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
  if(!request_json||!*request_json)return copy_result("{\"error\":\"Leere native Z-Level-Anfrage\"}");
  const std::string request(request_json);
- if(json_string_field(request,"contractVersion")!="008H-N1-v1")return copy_result("{\"error\":\"Unbekannte Native-Z-Level-Contract-Version\"}");
+ if(json_string_field(request,"contractVersion")!="008H-N4-v2")return copy_result("{\"error\":\"Unbekannte Native-Z-Level-Contract-Version\"}");
  const std::string path=json_string_field(request,"sourcePath"),fingerprint=json_string_field(request,"sourceFingerprint");
  if(path.empty()||fingerprint.empty())return copy_result("{\"error\":\"Native Z-Level-Anfrage benötigt sourcePath und sourceFingerprint\"}");
  const auto face_ids=json_size_array(request,"faceIds");
  const auto levels=json_number_array(request,"zLevelsMm");
  if(face_ids.empty()||levels.empty())return copy_result("{\"error\":\"Native Z-Level-Anfrage benötigt Face-IDs und Z-Level\"}");
+ const double finishAllowance=json_number_field(request,"finishAllowanceMm",-1),toolDiameter=json_number_field(request,"toolDiameterMm");
+ if(finishAllowance<0||!(toolDiameter>0))return copy_result("{\"error\":\"Native Z-Level-Anfrage benötigt gültiges Werkzeug und nichtnegatives Schlichtaufmaß\"}");
  STEPControl_Reader reader;if(reader.ReadFile(path.c_str())!=IFSelect_RetDone)return copy_result("{\"error\":\"STEP-Datei konnte von OCCT nicht gelesen werden\"}");
  if(reader.TransferRoots()<=0)return copy_result("{\"error\":\"STEP-Datei enthält keine übertragbare BRep-Geometrie\"}");
  TopoDS_Shape source=reader.OneShape();if(source.IsNull())return copy_result("{\"error\":\"OCCT lieferte eine leere Shape\"}");
@@ -344,23 +379,25 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
  const TopoDS_Shape transformedModel=transform_shape(source,request);
  std::vector<TopoDS_Face> transformedFaces;transformedFaces.reserve(face_ids.size());
  for(auto id:face_ids){const TopoDS_Shape transformedFace=transform_shape(faces[id],request);if(transformedFace.IsNull()||transformedFace.ShapeType()!=TopAbs_FACE)return copy_result("{\"error\":\"Gewählte Face konnte nicht in Manufacturing-Koordinaten transformiert werden\"}");transformedFaces.push_back(TopoDS::Face(transformedFace));}
- std::ostringstream out;out<<"{\"contractVersion\":\"008H-N1-v1\",\"sourceFingerprint\":";append_json_string(out,fingerprint);
+ std::ostringstream out;out<<"{\"contractVersion\":\"008H-N4-v2\",\"sourceFingerprint\":";append_json_string(out,fingerprint);
  out<<",\"faceIdContract\":\"zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds\",\"regions\":[";
  bool first_region=true;
  for(double z:levels){if(!first_region)out<<',';first_region=false;
-  std::vector<PlanarIsland> materialIslands;std::vector<FaceTargetRegionProbe> probes;
-  for(const auto& selectedFace:transformedFaces){auto probe=face_target_material_region(selectedFace,transformedModel,request,z);if(!probe.material.IsNull()){auto islands=planar_shape_islands(probe.material);materialIslands.insert(materialIslands.end(),std::make_move_iterator(islands.begin()),std::make_move_iterator(islands.end()));}probes.push_back(std::move(probe));}
-  out<<"{\"z\":"<<std::setprecision(12)<<z<<",\"valid\":"<<(!materialIslands.empty()?"true":"false")<<",\"islands\":[";
-  bool first_island=true;for(const auto& island:materialIslands){const auto& chain=island.outer;if(chain.points.size()<4||d2xy(chain.points.front(),chain.points.back())>=1e-10)continue;if(!first_island)out<<',';first_island=false;
-   out<<"{\"outer\":[";bool fp=true;for(const auto&p:chain.points){if(!fp)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';fp=false;}out<<"],\"holes\":[";
-   bool first_hole=true;for(const auto& hole:island.holes){if(!first_hole)out<<',';first_hole=false;out<<'[';bool hp=true;for(const auto&p:hole.points){if(!hp)out<<',';out<<"{\"x\":"<<std::setprecision(12)<<p.X()<<",\"y\":"<<p.Y()<<'}';hp=false;}out<<']';}
-   out<<"]}";
-  }
+  std::vector<PlanarIsland> scopeIslands;std::vector<FaceTargetRegionProbe> probes;
+  for(const auto& selectedFace:transformedFaces){auto probe=face_target_material_region(selectedFace,transformedModel,request,z);if(!probe.material.IsNull()){auto islands=planar_shape_islands(probe.material);scopeIslands.insert(scopeIslands.end(),std::make_move_iterator(islands.begin()),std::make_move_iterator(islands.end()));}probes.push_back(std::move(probe));}
+  const CutterSafetyRegion safety=cutter_safety_region(transformedModel,request,z,finishAllowance,toolDiameter/2+finishAllowance);
+  const std::vector<PlanarIsland> safetyIslands=safety.material.IsNull()?std::vector<PlanarIsland>{}:planar_shape_islands(safety.material);
+  const bool scopeKernelFailed=std::any_of(probes.begin(),probes.end(),[](const FaceTargetRegionProbe& probe){return !probe.failedStage.empty()&&probe.failedStage!="material";});
+  const bool valid=!scopeKernelFailed&&!scopeIslands.empty()&&safety.failedStage.empty()&&!safetyIslands.empty();
+  out<<"{\"z\":"<<std::setprecision(12)<<z<<",\"valid\":"<<(valid?"true":"false")<<",\"scopeIslands\":[";append_planar_islands(out,scopeIslands);
+  out<<"],\"safetyIslands\":[";append_planar_islands(out,safetyIslands);
   out<<"],\"errors\":[";
-  if(materialIslands.empty()){bool first_error=true;for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(!first_error)out<<',';first_error=false;std::ostringstream detail;detail<<"OCCT Face-target stage="<<(probe.failedStage.empty()?"planarIslands":probe.failedStage)<<" faceIndex="<<i<<" surface="<<probe.surfaceType<<" dispatch="<<probe.projectionDispatch<<" sourceWires="<<probe.sourceWires<<" closedSourceWires="<<probe.closedSourceWires<<" sourceEdges="<<probe.sourceEdges<<" projectedShapes="<<probe.projectedShapes<<" selectedProjectionFaces="<<probe.selectedProjectionFaces<<" selectedInStockFaces="<<probe.selectedInStockFaces<<" aboveProjectionFaces="<<probe.aboveProjectionFaces<<" materialFaces="<<probe.materialFaces<<" islands=0; fail-closed";append_json_string(out,detail.str());}}
+  bool first_error=true;
+  if(scopeKernelFailed||scopeIslands.empty()){for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(!scopeIslands.empty()&&(probe.failedStage.empty()||probe.failedStage=="material"))continue;if(!first_error)out<<',';first_error=false;std::ostringstream detail;detail<<"OCCT Face-target stage="<<(probe.failedStage.empty()?"scopePlanarIslands":probe.failedStage)<<" faceIndex="<<i<<" surface="<<probe.surfaceType<<" dispatch="<<probe.projectionDispatch<<" sourceWires="<<probe.sourceWires<<" closedSourceWires="<<probe.closedSourceWires<<" sourceEdges="<<probe.sourceEdges<<" projectedShapes="<<probe.projectedShapes<<" selectedProjectionFaces="<<probe.selectedProjectionFaces<<" selectedInStockFaces="<<probe.selectedInStockFaces<<" aboveProjectionFaces="<<probe.aboveProjectionFaces<<" materialFaces="<<probe.materialFaces<<" islands=0; fail-closed";append_json_string(out,detail.str());}}
+  if(!safety.failedStage.empty()||safetyIslands.empty()){if(!first_error)out<<',';std::ostringstream detail;detail<<"OCCT cutter-safety stage="<<(safety.failedStage.empty()?"safetyPlanarIslands":safety.failedStage)<<" aboveProjectionFaces="<<safety.aboveProjectionFaces<<" materialFaces="<<safety.materialFaces<<" islands="<<safetyIslands.size()<<"; fail-closed";append_json_string(out,detail.str());}
   out<<"],\"warnings\":[]}";
  }
- out<<"],\"errors\":[],\"warnings\":[\"008H-N2c surface-aware Face projection plus solid-above projection active; no mixed-dimensional solid subtraction or display triangulation used\"]}";
+ out<<"],\"errors\":[],\"warnings\":[\"008H-N4 dual native truths active: trimmed Face scope plus complete-solid cutter safety; no mixed-dimensional solid subtraction or display triangulation used\"]}";
  return copy_result(out.str());
  }catch(const std::exception& e){std::ostringstream out;out<<"{\"error\":\"OCCT native Z-Level error: ";append_json_string(out,e.what());out<<"\"}";return copy_result("{\"error\":\"OCCT-Fehler bei nativer Z-Level-Region\"}");}catch(...){return copy_result("{\"error\":\"OCCT-Fehler bei nativer Z-Level-Region\"}");}}
 

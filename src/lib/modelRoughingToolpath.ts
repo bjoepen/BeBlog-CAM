@@ -1,5 +1,5 @@
 import type { CanonicalToolpath, CanonicalToolpathRun } from './canonicalToolpath';
-import { buildPlanarRasterChains, type PlanarRasterPointFilter } from './planarRasterKernel';
+import { buildPlanarRasterChains, type PlanarRasterLoop, type PlanarRasterPointFilter } from './planarRasterKernel';
 import type { RoughingRegion } from './roughingRegion';
 import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
@@ -23,6 +23,7 @@ export function buildModelRoughingCanonicalToolpath(
   clearanceAllowanceMm=0,
   rasterDirection:'x'|'y'='x',
   regionPointFilter?:(region:RoughingRegion)=>PlanarRasterPointFilter|undefined,
+  regionSafetyLoops?:(region:RoughingRegion)=>PlanarRasterLoop[]|undefined,
 ):ModelRoughingToolpathResult{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -56,7 +57,8 @@ export function buildModelRoughingCanonicalToolpath(
         {points:island.outer},
         ...island.holes.map(points=>({points})),
       ];
-      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection,regionPointFilter?.(region));
+      const safetyLoops=regionSafetyLoops?.(region)??loops;
+      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection,regionPointFilter?.(region),safetyLoops);
       if(!chains.length){
         warnings.push(`Z ${region.z.toFixed(3)} · Schruppinsel ${islandCount}: kein werkzeugradius-sicherer Rasterpfad.`);
         continue;

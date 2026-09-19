@@ -106,6 +106,7 @@ pub struct NativeZLevelRegionRequest {
     pub stock: NativeStockDefinition,
     pub z_levels_mm: Vec<f64>,
     pub finish_allowance_mm: f64,
+    pub tool_diameter_mm: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,7 +121,8 @@ pub struct NativeZLevelRegionIsland {
 pub struct NativeZLevelRegion {
     pub z: f64,
     pub valid: bool,
-    #[serde(default)] pub islands: Vec<NativeZLevelRegionIsland>,
+    #[serde(default)] pub scope_islands: Vec<NativeZLevelRegionIsland>,
+    #[serde(default)] pub safety_islands: Vec<NativeZLevelRegionIsland>,
     #[serde(default)] pub errors: Vec<String>,
     #[serde(default)] pub warnings: Vec<String>,
 }
@@ -136,7 +138,7 @@ pub struct NativeZLevelRegionSet {
     #[serde(default)] pub warnings: Vec<String>,
 }
 
-pub const NATIVE_ZLEVEL_REGION_CONTRACT_VERSION: &str = "008H-N1-v1";
+pub const NATIVE_ZLEVEL_REGION_CONTRACT_VERSION: &str = "008H-N4-v2";
 pub const NATIVE_FACE_ID_CONTRACT: &str = "zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds";
 
 pub trait BrepBackend {

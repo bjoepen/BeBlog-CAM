@@ -41,18 +41,19 @@ function clearanceToBoundary(loops:PlanarRasterLoop[],p:ToolpathPoint2,profile?:
   return best;
 }
 
-function safeAt(loops:PlanarRasterLoop[],p:ToolpathPoint2,radius:number,profile?:ZLevelPerformanceProfile,pointFilter?:PlanarRasterPointFilter){
+function safeAt(scopeLoops:PlanarRasterLoop[],safetyLoops:PlanarRasterLoop[],p:ToolpathPoint2,radius:number,profile?:ZLevelPerformanceProfile,pointFilter?:PlanarRasterPointFilter){
   if(profile)profile.rasterSafetyTests++;
-  return pointInEvenOdd(loops,p)&&clearanceToBoundary(loops,p,profile)>=radius-EPS&&(!pointFilter||pointFilter(p));
+  return pointInEvenOdd(scopeLoops,p)&&pointInEvenOdd(safetyLoops,p)&&clearanceToBoundary(safetyLoops,p,profile)>=radius-EPS&&(!pointFilter||pointFilter(p));
 }
 
 export function isPlanarRasterPointSafe(loops:PlanarRasterLoop[],point:ToolpathPoint2,toolDiameterMm:number,profile?:ZLevelPerformanceProfile){
   if(!(toolDiameterMm>0)||!loops.length)return false;
-  return safeAt(loops,point,toolDiameterMm/2,profile);
+  return safeAt(loops,loops,point,toolDiameterMm/2,profile);
 }
 
 function safeSegment(
-  loops:PlanarRasterLoop[],
+  scopeLoops:PlanarRasterLoop[],
+  safetyLoops:PlanarRasterLoop[],
   a:ToolpathPoint2,
   b:ToolpathPoint2,
   radius:number,
@@ -61,18 +62,19 @@ function safeSegment(
   pointFilter?:PlanarRasterPointFilter,
 ){
   const distance=Math.hypot(b.x-a.x,b.y-a.y);
-  if(distance<=EPS)return safeAt(loops,a,radius,profile,pointFilter);
+  if(distance<=EPS)return safeAt(scopeLoops,safetyLoops,a,radius,profile,pointFilter);
   const steps=Math.max(1,Math.ceil(distance/Math.max(.1,sampleStep)));
   for(let i=0;i<=steps;i++){
     const t=i/steps;
     if(profile)profile.stayDownSafetyTests++;
-    if(!safeAt(loops,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},radius,profile,pointFilter))return false;
+    if(!safeAt(scopeLoops,safetyLoops,{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t},radius,profile,pointFilter))return false;
   }
   return true;
 }
 
 function safePolyline(
-  loops:PlanarRasterLoop[],
+  scopeLoops:PlanarRasterLoop[],
+  safetyLoops:PlanarRasterLoop[],
   points:ToolpathPoint2[],
   radius:number,
   sampleStep:number,
@@ -80,7 +82,7 @@ function safePolyline(
   pointFilter?:PlanarRasterPointFilter,
 ){
   if(points.length<2)return false;
-  for(let i=1;i<points.length;i++)if(!safeSegment(loops,points[i-1],points[i],radius,sampleStep,profile,pointFilter))return false;
+  for(let i=1;i<points.length;i++)if(!safeSegment(scopeLoops,safetyLoops,points[i-1],points[i],radius,sampleStep,profile,pointFilter))return false;
   return true;
 }
 
@@ -100,15 +102,16 @@ function safePolyline(
  * the conservative Safe-Z retract.
  */
 export function buildPlanarRasterStayDownConnector(
-  loops:PlanarRasterLoop[],
+  scopeLoops:PlanarRasterLoop[],
   a:ToolpathPoint2,
   b:ToolpathPoint2,
   toolDiameterMm:number,
   sampleStep?:number,
   profile?:ZLevelPerformanceProfile,
   pointFilter?:PlanarRasterPointFilter,
+  safetyLoops:PlanarRasterLoop[]=scopeLoops,
 ):ToolpathPoint2[]|null{
-  if(!(toolDiameterMm>0)||!loops.length)return null;
+  if(!(toolDiameterMm>0)||!scopeLoops.length||!safetyLoops.length)return null;
   const radius=toolDiameterMm/2;
   const step=sampleStep??Math.max(.15,Math.min(.75,toolDiameterMm/8));
   const candidates:ToolpathPoint2[][]=[
@@ -117,7 +120,7 @@ export function buildPlanarRasterStayDownConnector(
     [a,{x:a.x,y:b.y},b],
   ];
   for(const candidate of candidates){
-    if(safePolyline(loops,candidate,radius,step,profile,pointFilter))return candidate;
+    if(safePolyline(scopeLoops,safetyLoops,candidate,radius,step,profile,pointFilter))return candidate;
   }
   return null;
 }
@@ -134,17 +137,22 @@ function bounds(loops:PlanarRasterLoop[]){
  * region. This kernel knows nothing about STEP, stock or CAM operations.
  */
 export function buildPlanarRasterChains(
-  loops:PlanarRasterLoop[],
+  scopeLoops:PlanarRasterLoop[],
   toolDiameterMm:number,
   stepoverPercent:number,
   profile?:ZLevelPerformanceProfile,
   direction:'x'|'y'='x',
   pointFilter?:PlanarRasterPointFilter,
+  safetyLoops:PlanarRasterLoop[]=scopeLoops,
 ):PlanarRasterChain[]{
-  if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!loops.length)return[];
-  const b=bounds(loops);if(!b)return[];
+  if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!scopeLoops.length||!safetyLoops.length)return[];
+  const b=bounds(scopeLoops);if(!b)return[];
 
   const radius=toolDiameterMm/2;
+  // A standalone region uses its own boundary for cutter clearance and keeps
+  // the historical radius inset. With N4 split geometry, scope boundaries are
+  // containment-only; only the independent safety loops may reject the cutter.
+  const scopeInset=safetyLoops===scopeLoops?radius:0;
   const stepover=Math.max(.05,toolDiameterMm*stepoverPercent/100);
   const sampleStep=Math.max(.15,Math.min(.75,toolDiameterMm/8));
 
@@ -156,12 +164,12 @@ export function buildPlanarRasterChains(
   const point=(primary:number,rowValue:number):ToolpathPoint2=>
     direction==='x'?{x:primary,y:rowValue}:{x:rowValue,y:primary};
   let row=0;
-  for(let rowValue=rowMin+radius;rowValue<=rowMax-radius+EPS;rowValue+=stepover,row++){
+  for(let rowValue=rowMin+scopeInset;rowValue<=rowMax-scopeInset+EPS;rowValue+=stepover,row++){
     const lineRuns:{a:number;b:number}[]=[];
     let start:number|null=null,last:number|null=null;
 
-    for(let primary=primaryMin+radius;primary<=primaryMax-radius+EPS;primary+=sampleStep){
-      if(safeAt(loops,point(primary,rowValue),radius,profile,pointFilter)){
+    for(let primary=primaryMin+scopeInset;primary<=primaryMax-scopeInset+EPS;primary+=sampleStep){
+      if(safeAt(scopeLoops,safetyLoops,point(primary,rowValue),radius,profile,pointFilter)){
         if(start===null)start=primary;
         last=primary;
       }else if(start!==null&&last!==null){
@@ -189,7 +197,7 @@ export function buildPlanarRasterChains(
       continue;
     }
     const from=current[current.length-1],to=segment.points[0];
-    const connector=buildPlanarRasterStayDownConnector(loops,from,to,toolDiameterMm,sampleStep,profile,pointFilter);
+    const connector=buildPlanarRasterStayDownConnector(scopeLoops,from,to,toolDiameterMm,sampleStep,profile,pointFilter,safetyLoops);
     if(connector){
       for(const point of connector.slice(1)){
         const previous=current[current.length-1];

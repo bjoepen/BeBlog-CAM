@@ -1,5 +1,6 @@
 import type { CanonicalToolpath } from './canonicalToolpath';
 import { buildModelRoughingCanonicalToolpath } from './modelRoughingToolpath';
+import type { PlanarRasterLoop } from './planarRasterKernel';
 import type { RoughingRegion } from './roughingRegion';
 import type { NativeZLevelRegionSet, StockDefinition, WorkCoordinateSystem, ZLevelRoughingOperation } from './types';
 
@@ -24,7 +25,7 @@ function regionsFromNative(native:NativeZLevelRegionSet,stock:StockDefinition):R
     z:region.z,
     valid:region.valid,
     stock:stockRect,
-    islands:region.islands.map(island=>({
+    islands:region.scopeIslands.map(island=>({
       outer:island.outer.map(point=>({...point})),
       holes:island.holes.map(hole=>hole.map(point=>({...point}))),
       source:'model-void' as const,
@@ -36,10 +37,21 @@ function regionsFromNative(native:NativeZLevelRegionSet,stock:StockDefinition):R
   }));
 }
 
+function safetyLoopsByZ(native:NativeZLevelRegionSet){
+  return new Map(native.regions.map(region=>[
+    region.z.toFixed(6),
+    region.safetyIslands.flatMap<PlanarRasterLoop>(island=>[
+      {points:island.outer.map(point=>({...point}))},
+      ...island.holes.map(points=>({points:points.map(point=>({...point}))})),
+    ]),
+  ]));
+}
+
 /**
- * 008H-N3 production boundary.
- * Native OCCT owns Face-target material geometry. TypeScript only rasterises
- * the already-proven planar regions; it must not infer Face ownership.
+ * 008H-N4 production boundary.
+ * Native OCCT owns both Face-target scope and complete-solid safety geometry.
+ * TypeScript only rasterises those independent planar truths; it must not infer
+ * Face ownership or reinterpret either boundary.
  */
 export function buildNativeFaceTargetCanonicalToolpath(args:{
   native:NativeZLevelRegionSet;
@@ -61,6 +73,7 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
   if(errors.length)return{ok:false,toolpath:null,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
 
   const regions=regionsFromNative(native,stock);
+  const safetyByZ=safetyLoopsByZ(native);
   const build=(direction:'x'|'y')=>buildModelRoughingCanonicalToolpath(
     regions,
     operation.tool.diameterMm,
@@ -69,6 +82,8 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
     undefined,
     Math.max(0,operation.finishAllowanceMm),
     direction,
+    undefined,
+    region=>safetyByZ.get(region.z.toFixed(6)),
   );
   const requested=operation.rasterDirection??'auto';
   const candidates=requested==='auto'?[build('x'),build('y')]:[build(requested)];
@@ -85,6 +100,6 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
   });
   const chosen=valid[0];
   warnings.push(...chosen.warnings);
-  warnings.push('008H-N3: Werkzeugbahn stammt ausschließlich aus der nativen OCCT Face-Target-Materialregion.');
+  warnings.push('008H-N4: Native trimmed-Face-Scope und vollständige Solid-Cuttersicherheit bleiben bis zum Raster getrennt.');
   return{ok:true,toolpath:chosen.toolpath,errors:[],warnings:[...new Set(warnings)]};
 }
