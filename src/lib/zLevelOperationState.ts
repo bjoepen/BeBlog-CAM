@@ -109,4 +109,3 @@ export function buildZLevelOperationState(args:{
     targetMaxZ:null,
   };
 }
-}
