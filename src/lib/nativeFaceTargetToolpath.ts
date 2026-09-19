@@ -25,8 +25,8 @@ function regionsFromNative(native:NativeZLevelRegionSet,stock:StockDefinition):R
     valid:region.valid,
     stock:stockRect,
     islands:region.islands.map(island=>({
-      outer:island.outer.map(point=>({...point,z:region.z})),
-      holes:island.holes.map(hole=>hole.map(point=>({...point,z:region.z}))),
+      outer:island.outer.map(point=>({...point})),
+      holes:island.holes.map(hole=>hole.map(point=>({...point}))),
       source:'model-void' as const,
       depth:0,
     })),
