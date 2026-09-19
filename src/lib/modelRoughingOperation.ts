@@ -162,6 +162,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   if(requestedDirection==='auto'&&selected){
     const groups=selectedFaceScopeGroups(part,faceIds,operation.faceIds);
     const combinedRuns:CanonicalToolpath['runs']=[];
+    let templateToolpath:CanonicalToolpath|null=null;
     const decisions:string[]=[];
     for(const group of groups){
       const candidates=[buildDirection('x',[group.faceId]),buildDirection('y',[group.faceId])];
@@ -172,15 +173,15 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
         continue;
       }
       combinedRuns.push(...chosen.toolpath.runs);
+      templateToolpath??=chosen.toolpath;
       warnings.push(...chosen.warnings);
       const x=candidates[0],y=candidates[1];
       const describe=(candidate:typeof chosen)=>candidate.toolpath?`${candidate.direction.toUpperCase()}: ${candidate.toolpath.runs.length} Bahnen · Ø ${(pathLength(candidate.toolpath)/Math.max(1,candidate.toolpath.runs.length)).toFixed(1)} mm`:`${candidate.direction.toUpperCase()}: nicht freigabefähig`;
       decisions.push(`Face ${group.faceId} → ${chosen.direction.toUpperCase()} (${describe(x)}; ${describe(y)})`);
     }
     if(errors.length||!combinedRuns.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
-    const template=combinedRuns.length?buildDirection('x',operation.faceIds).toolpath:null;
-    if(!template)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:['008H-L: kanonische Z-Level-Metadaten konnten nicht materialisiert werden.'],warnings:[...new Set(warnings)]};
-    toolpath={...template,runs:combinedRuns};
+    if(!templateToolpath)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:['008H-L: kanonische Z-Level-Metadaten konnten nicht materialisiert werden.'],warnings:[...new Set(warnings)]};
+    toolpath={...templateToolpath,runs:combinedRuns};
     warnings.push(`008H-L: Rasterrichtung Auto lokal pro Face-owned Materialregion gewählt: ${decisions.join(' · ')}.`);
   }else{
     const candidates=requestedDirection==='auto'?[buildDirection('x'),buildDirection('y')]:[buildDirection(requestedDirection)];
