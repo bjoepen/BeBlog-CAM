@@ -39,6 +39,7 @@ export type DrillSelectionMode='individual'|'layer';
 export type DrillMethod='drill'|'helical-mill';
 export type ZLevelRoughingMode='face-target'|'model';
 export type ZLevelIslandMode='preserve'|'clear';
+export type ZLevelRasterDirection='auto'|'x'|'y';
 export type FacingDirection='x'|'y';
 export interface ToolDefinition{id:string;name:string;diameterMm:number;kind?:MillingToolKind;cuttingLengthMm?:number;stickoutMm?:number;shaftDiameterMm?:number;holderDiameterMm?:number;}
 interface BaseOperation{id:string;name:string;enabled:boolean;tool:ToolDefinition;totalDepthMm:number;stepDownMm:number;feedMmMin:number;plungeMmMin:number;spindleRpm:number;safeZMm:number;}
@@ -80,7 +81,7 @@ export interface PocketOperation extends BaseOperation{kind:'pocket';contourId:n
 export interface CarveOperation extends BaseOperation{kind:'carve';curveIds:number[];layerName:string|null;selectionMode:CarveSelectionMode;side:OpenContourSide;}
 export interface DrillOperation extends BaseOperation{kind:'drill';curveIds:number[];stepHoleFeatureIds?:string[];layerName:string|null;selectionMode:DrillSelectionMode;method:DrillMethod;depthMode?:DrillDepthMode;overcutMm?:number;}
 export interface SurfaceFinishingOperation extends BaseOperation{kind:'surface-finishing';faceIds:number[];stepoverPercent:number;direction:'x'|'y';}
-export interface ZLevelRoughingOperation extends BaseOperation{kind:'z-level-roughing';faceIds:number[];roughingMode?:ZLevelRoughingMode;islandMode?:ZLevelIslandMode;stepoverPercent:number;finishAllowanceMm:number;}
+export interface ZLevelRoughingOperation extends BaseOperation{kind:'z-level-roughing';faceIds:number[];roughingMode?:ZLevelRoughingMode;islandMode?:ZLevelIslandMode;rasterDirection?:ZLevelRasterDirection;stepoverPercent:number;finishAllowanceMm:number;}
 export type CamOperation=FacingOperation|ContourOperation|PocketOperation|CarveOperation|DrillOperation|ZLevelRoughingOperation|SurfaceFinishingOperation;
 export interface OperationsProject { operations:CamOperation[];activeOperationId:string|null; }
 
@@ -95,5 +96,5 @@ export const defaultPocketOperation:PocketOperation={id:'op-pocket-1',kind:'pock
 export const defaultCarveOperation:CarveOperation={id:'op-carve-1',kind:'carve',name:'Carve 1',enabled:true,curveIds:[],layerName:null,selectionMode:'individual',side:'on-line',tool:{id:'tool-carve-1',name:'Schaftfräser 0,6 mm',diameterMm:.6,kind:'end-mill',cuttingLengthMm:4,stickoutMm:15,shaftDiameterMm:3,holderDiameterMm:20},totalDepthMm:1,stepDownMm:.5,feedMmMin:250,plungeMmMin:100,spindleRpm:16000,safeZMm:5};
 export const defaultDrillOperation:DrillOperation={id:'op-drill-1',kind:'drill',name:'Bohren 1',enabled:true,curveIds:[],stepHoleFeatureIds:[],layerName:null,selectionMode:'individual',method:'drill',depthMode:'manual',overcutMm:1,tool:{id:'tool-drill-1',name:'Bohrer 3 mm',diameterMm:3,cuttingLengthMm:20,stickoutMm:25,shaftDiameterMm:3,holderDiameterMm:20},totalDepthMm:5,stepDownMm:5,feedMmMin:180,plungeMmMin:120,spindleRpm:10000,safeZMm:5};
 export const defaultSurfaceFinishingOperation:SurfaceFinishingOperation={id:'op-surface-finishing-1',kind:'surface-finishing',name:'3D Schlichten 1',enabled:true,faceIds:[],tool:{id:'tool-finish-1',name:'Vollradiusfräser 3 mm',diameterMm:3,kind:'ball-nose',cuttingLengthMm:12,stickoutMm:25,shaftDiameterMm:3,holderDiameterMm:20},stepoverPercent:12,direction:'x',totalDepthMm:0,stepDownMm:1,feedMmMin:500,plungeMmMin:150,spindleRpm:14000,safeZMm:5};
-export const defaultZLevelRoughingOperation:ZLevelRoughingOperation={id:'op-z-level-roughing-1',kind:'z-level-roughing',name:'Z-Level Schruppen 1',enabled:true,faceIds:[],roughingMode:'face-target',islandMode:'preserve',tool:{id:'tool-roughing-1',name:'Schaftfräser 6 mm',diameterMm:6,kind:'end-mill',cuttingLengthMm:15,stickoutMm:25,shaftDiameterMm:6,holderDiameterMm:20},stepoverPercent:40,finishAllowanceMm:.5,totalDepthMm:0,stepDownMm:2,feedMmMin:600,plungeMmMin:200,spindleRpm:12000,safeZMm:5};
+export const defaultZLevelRoughingOperation:ZLevelRoughingOperation={id:'op-z-level-roughing-1',kind:'z-level-roughing',name:'Z-Level Schruppen 1',enabled:true,faceIds:[],roughingMode:'face-target',islandMode:'preserve',rasterDirection:'auto',tool:{id:'tool-roughing-1',name:'Schaftfräser 6 mm',diameterMm:6,kind:'end-mill',cuttingLengthMm:15,stickoutMm:25,shaftDiameterMm:6,holderDiameterMm:20},stepoverPercent:40,finishAllowanceMm:.5,totalDepthMm:0,stepDownMm:2,feedMmMin:600,plungeMmMin:200,spindleRpm:12000,safeZMm:5};
 export const defaultOperationsProject:OperationsProject={operations:[{...defaultContourOperation,tool:{...defaultContourOperation.tool}}],activeOperationId:defaultContourOperation.id};
