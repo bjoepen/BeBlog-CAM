@@ -10,7 +10,6 @@ import { isPlanarRasterPointSafe } from './planarRasterKernel';
 import type { ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export type ModelRoughingOperationState={ok:boolean;toolpath:CanonicalToolpath|null;levelCount:number;roughingRegionCount:number;errors:string[];warnings:string[]};
-type XYBounds={minX:number;minY:number;maxX:number;maxY:number};
 const EPS=1e-6;
 function bounds(p:P3[]){const x=p.map(q=>q.x),y=p.map(q=>q.y),z=p.map(q=>q.z);return{minX:Math.min(...x),maxX:Math.max(...x),minY:Math.min(...y),maxY:Math.max(...y),minZ:Math.min(...z),maxZ:Math.max(...z)}}
 function placedPart(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation):P3[]|null{
@@ -21,34 +20,71 @@ function placedPart(summary:ImportSummary,stock:StockDefinition,placement:PartPl
 }
 function origin(stock:StockDefinition,wcs:WorkCoordinateSystem):P3{return{x:wcs.x==='left'?0:wcs.x==='right'?stock.width:stock.width/2,y:wcs.y==='front'?0:wcs.y==='back'?stock.height:stock.height/2,z:wcs.z==='top'?stock.thickness:0}}
 function levels(top:number,bottom:number,step:number){const out:number[]=[];for(let z=top-step;z>bottom+1e-3;z-=step)out.push(z);const last=bottom+1e-3;if(last<top-EPS&&(out.length===0||Math.abs(out[out.length-1]-last)>1e-4))out.push(last);return out}
-function selectedFaceBounds(part:P3[],faceIds:number[],selectedFaceIds:number[]):({xy:XYBounds;minZ:number;maxZ:number}|null){
-  const selected=new Set(selectedFaceIds),points:P3[]=[];
-  for(let t=0;t<faceIds.length&&t*3+2<part.length;t++)if(selected.has(faceIds[t]))points.push(part[t*3],part[t*3+1],part[t*3+2]);
-  if(!points.length)return null;
-  const b=bounds(points);
-  return{xy:{minX:b.minX,minY:b.minY,maxX:b.maxX,maxY:b.maxY},minZ:b.minZ,maxZ:b.maxZ};
-}
-function clipSegmentToXY(a:{x:number;y:number},b:{x:number;y:number},r:XYBounds){
-  const dx=b.x-a.x,dy=b.y-a.y,p=[-dx,dx,-dy,dy],q=[a.x-r.minX,r.maxX-a.x,a.y-r.minY,r.maxY-a.y];
-  let u0=0,u1=1;
-  for(let i=0;i<4;i++){
-    if(Math.abs(p[i])<=EPS){if(q[i]<0)return null;continue}
-    const t=q[i]/p[i];
-    if(p[i]<0){if(t>u1)return null;u0=Math.max(u0,t)}else{if(t<u0)return null;u1=Math.min(u1,t)}
+type FaceScope={triangles:P3[];minZ:number;maxZ:number};
+function selectedFaceScope(part:P3[],faceIds:number[],selectedFaceIds:number[]):FaceScope|null{
+  const selected=new Set(selectedFaceIds),triangles:P3[]=[];
+  for(let t=0;t<faceIds.length&&t*3+2<part.length;t++){
+    if(selected.has(faceIds[t]))triangles.push(part[t*3],part[t*3+1],part[t*3+2]);
   }
-  return[{x:a.x+u0*dx,y:a.y+u0*dy},{x:a.x+u1*dx,y:a.y+u1*dy}] as const;
+  if(!triangles.length)return null;
+  const b=bounds(triangles);
+  return{triangles,minZ:b.minZ,maxZ:b.maxZ};
 }
-function clipToolpathToXY(toolpath:CanonicalToolpath,b:XYBounds):CanonicalToolpath{
+function pointInTriangleXY(p:{x:number;y:number},a:P3,b:P3,c:P3){
+  const den=(b.y-c.y)*(a.x-c.x)+(c.x-b.x)*(a.y-c.y);
+  if(Math.abs(den)<=EPS)return false;
+  const u=((b.y-c.y)*(p.x-c.x)+(c.x-b.x)*(p.y-c.y))/den;
+  const v=((c.y-a.y)*(p.x-c.x)+(a.x-c.x)*(p.y-c.y))/den;
+  const w=1-u-v;
+  return u>=-EPS&&v>=-EPS&&w>=-EPS;
+}
+function faceScopeContainsXY(scope:FaceScope,p:{x:number;y:number}){
+  for(let i=0;i+2<scope.triangles.length;i+=3){
+    if(pointInTriangleXY(p,scope.triangles[i],scope.triangles[i+1],scope.triangles[i+2]))return true;
+  }
+  return false;
+}
+function clipSegmentToFaceScope(a:{x:number;y:number},b:{x:number;y:number},scope:FaceScope){
+  const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
+  if(length<=EPS)return[];
+  // Raster runs are straight. Split them at every projected selected-face
+  // triangle edge, then classify each interval by its midpoint. This preserves
+  // the actual union of selected BRep faces instead of their rectangular bounds.
+  const ts=[0,1];
+  const cross=(ax:number,ay:number,bx:number,by:number)=>ax*by-ay*bx;
+  for(let i=0;i+2<scope.triangles.length;i+=3){
+    const tri=[scope.triangles[i],scope.triangles[i+1],scope.triangles[i+2]];
+    for(let e=0;e<3;e++){
+      const c=tri[e],d=tri[(e+1)%3],ex=d.x-c.x,ey=d.y-c.y,den=cross(dx,dy,ex,ey);
+      if(Math.abs(den)<=EPS)continue;
+      const qx=c.x-a.x,qy=c.y-a.y,t=cross(qx,qy,ex,ey)/den,u=cross(qx,qy,dx,dy)/den;
+      if(t>EPS&&t<1-EPS&&u>=-EPS&&u<=1+EPS)ts.push(t);
+    }
+  }
+  ts.sort((x,y)=>x-y);
+  const unique=ts.filter((t,i)=>i===0||Math.abs(t-ts[i-1])>1e-7),out:[{x:number;y:number},{x:number;y:number}][]=[];
+  for(let i=1;i<unique.length;i++){
+    const t0=unique[i-1],t1=unique[i],tm=(t0+t1)/2,mid={x:a.x+dx*tm,y:a.y+dy*tm};
+    if(!faceScopeContainsXY(scope,mid))continue;
+    out.push([{x:a.x+dx*t0,y:a.y+dy*t0},{x:a.x+dx*t1,y:a.y+dy*t1}]);
+  }
+  return out;
+}
+function clipToolpathToFaceScope(toolpath:CanonicalToolpath,scope:FaceScope,o:P3):CanonicalToolpath{
   const runs:CanonicalToolpath['runs']=[];
   for(const run of toolpath.runs){
     let current:typeof run.points=[];
     const flush=()=>{if(current.length>=2)runs.push({...run,points:current,retractAfter:true});current=[]};
     for(let i=1;i<run.points.length;i++){
-      const clipped=clipSegmentToXY(run.points[i-1],run.points[i],b);
-      if(!clipped){flush();continue}
-      const [a,c]=clipped,last=current.at(-1);
-      if(!last||Math.hypot(last.x-a.x,last.y-a.y)>1e-5){flush();current=[a]}
-      if(Math.hypot(current.at(-1)!.x-c.x,current.at(-1)!.y-c.y)>EPS)current.push(c);
+      const aw={x:run.points[i-1].x+o.x,y:run.points[i-1].y+o.y};
+      const bw={x:run.points[i].x+o.x,y:run.points[i].y+o.y};
+      const pieces=clipSegmentToFaceScope(aw,bw,scope);
+      if(!pieces.length){flush();continue}
+      for(const [wa,wb] of pieces){
+        const a={x:wa.x-o.x,y:wa.y-o.y},b={x:wb.x-o.x,y:wb.y-o.y},last=current.at(-1);
+        if(!last||Math.hypot(last.x-a.x,last.y-a.y)>1e-5){flush();current=[a]}
+        if(Math.hypot(current.at(-1)!.x-b.x,current.at(-1)!.y-b.y)>EPS)current.push(b);
+      }
     }
     flush();
   }
@@ -68,7 +104,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   const part=placedPart(summary,stock,placement,orientation);if(!part)return{ok:false,toolpath:null,levelCount:0,roughingRegionCount:0,errors:['STEP/BRep-Triangulation konnte nicht rekonstruiert werden.'],warnings};
   const b=bounds(part);if(b.minZ<-EPS||b.maxZ>stock.thickness+EPS)errors.push(`Bauteil Z ${b.minZ.toFixed(3)}…${b.maxZ.toFixed(3)} mm liegt nicht vollständig im Rohling 0…${stock.thickness.toFixed(3)} mm.`);
   const faceIds=summary.brep?.displayFaceIds??[];
-  const selected=args.scopeToSelectedFaces?selectedFaceBounds(part,faceIds,operation.faceIds):null;
+  const selected=args.scopeToSelectedFaces?selectedFaceScope(part,faceIds,operation.faceIds):null;
   if(args.scopeToSelectedFaces&&!selected)errors.push('Gewählte STEP/BRep-Zielflächen konnten nicht als Z-Level-Bearbeitungsbereich rekonstruiert werden.');
   const allowance=Math.max(0,operation.finishAllowanceMm);
   const bottom=(selected?.minZ??b.minZ)+allowance;
@@ -86,12 +122,13 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   let toolpath=built.toolpath;
   if(selected&&toolpath){
     // Canonical paths are first proven safe against the complete solid, then
-    // restricted to the XY envelope of the selected manufacturing faces.
-    const machineBounds={minX:selected.xy.minX-o.x,minY:selected.xy.minY-o.y,maxX:selected.xy.maxX-o.x,maxY:selected.xy.maxY-o.y};
-    toolpath=clipToolpathToXY(toolpath,machineBounds);
-    if(!toolpath.runs.length)errors.push('Im gewählten Face-Bereich blieb keine sichere True-Z-Level-Schruppbahn übrig.');
+    // intersected with the actual XY projection of the selected BRep faces.
+    // Selection defines WHERE to machine; the complete solid still defines
+    // WHAT is safe to remove.
+    toolpath=clipToolpathToFaceScope(toolpath,selected,o);
+    if(!toolpath.runs.length)errors.push('Im geometrischen Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
   }
   if(toolpath)errors.push(...accessErrors(toolpath,rough,o,operation.tool.diameterMm+2*allowance,profile));
-  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich; Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid.');
+  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich mit ihrer tatsächlichen projizierten Geometrie; Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid.');
   return{ok:errors.length===0,toolpath:errors.length?null:toolpath,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
 }
