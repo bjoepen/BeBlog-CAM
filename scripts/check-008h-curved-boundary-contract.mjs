@@ -104,4 +104,36 @@ for(const token of ["ZLevelRasterDirection='auto'|'x'|'y'","rasterDirection?:ZLe
 for(const token of ["Rasterrichtung","Automatisch","Parallel X","Parallel Y","rasterDirection:'auto'","rasterDirection:'x'","rasterDirection:'y'"]){
   if(!app.includes(token))throw new Error(`008H-G UI contract missing: ${token}`);
 }
-console.log('PASS 008H-M: selected Faces own bounded outward Stock−Model material before raster generation; Face endpoints prevent adjacent-surface leakage; no post-toolpath clipping remains and downstream safety stays fail-closed.');
+const nativeHeader=fs.readFileSync('src-tauri/native/occt_bridge.h','utf8');
+const rustOcct=fs.readFileSync('src-tauri/src/occt.rs','utf8');
+const tauriLib=fs.readFileSync('src-tauri/src/lib.rs','utf8');
+for(const token of [
+  'beblog_occt_build_zlevel_regions(const char* request_json)',
+]){
+  if(!nativeHeader.includes(token))throw new Error(`008H-N1 native ABI contract missing: ${token}`);
+}
+for(const token of [
+  'NativeZLevelRegionRequest',
+  'NativeZLevelRegionSet',
+  'NativeZLevelRegionIsland',
+  'NATIVE_ZLEVEL_REGION_CONTRACT_VERSION',
+  '008H-N1-v1',
+  'NATIVE_FACE_ID_CONTRACT',
+  'zero-based TopExp_Explorer(shape, TopAbs_FACE) order',
+]){
+  if(!rustOcct.includes(token))throw new Error(`008H-N1 Rust contract missing: ${token}`);
+}
+for(const token of [
+  'NativeZLevelRegionRequest',
+  'NativeZLevelRegionSet',
+  'NativeZLevelRegionIsland',
+  "NATIVE_ZLEVEL_REGION_CONTRACT_VERSION='008H-N1-v1'",
+  'NATIVE_FACE_ID_CONTRACT',
+]){
+  if(!types.includes(token))throw new Error(`008H-N1 TypeScript contract missing: ${token}`);
+}
+if(tauriLib.includes('build_zlevel_regions')){
+  throw new Error('008H-N1 is contract-only: executable Tauri region command must wait for N2');
+}
+
+console.log('PASS 008H-N1: native Face-target region ABI plus Rust/TypeScript request-response and deterministic Face-ID contracts are frozen; no production CAM consumer has switched to an unimplemented native region builder.');
