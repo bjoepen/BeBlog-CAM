@@ -299,3 +299,30 @@ This is intentionally a narrow correction. It does not weaken solid safety and
 does not invent additional toolpath geometry; it can only reject portions of an
 already solid-safe canonical candidate that do not physically reach a selected
 face.
+
+
+## 008H-J — Z-local selected-face ownership
+
+The V14 grip remained asymmetric after separating finish allowance from the
+face-contact radius. The root problem was therefore not another tolerance:
+selected steep/rounded faces were still represented by their complete global
+XY projection at every cutting level.
+
+Face selection is now evaluated **per canonical Z-level**. For each cutting
+run, only triangles of the selected BRep face whose vertical extent can
+physically participate within one cutter radius of that Z are admitted to the
+contact scope. The already complete-solid-safe canonical run is then clipped
+against that Z-local scope.
+
+This changes ownership, not safety:
+
+- complete STEP solid remains the source of Stock−Model and clearance truth;
+- finish allowance remains exclusively in the solid safety envelope;
+- selected faces only filter already-safe motion;
+- manual X/Y and per-face Auto use the same Z-local contact rule;
+- 004T and 004Q remain downstream and unchanged.
+
+Acceptance fixture: the two opposite long and two opposite short rounded faces
+of the Z-CAM V14 grip must produce geometrically symmetric machining where the
+STEP geometry is symmetric. A single remote fragment on one opposite face is a
+Real-World FAIL.
