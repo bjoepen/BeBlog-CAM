@@ -167,10 +167,14 @@ for(const token of [
   'runNativeRegionDiagnostic',
   "invoke<NativeZLevelRegionSet>('build_native_zlevel_regions'",
   '008H-N2 · Native Region Diagnose',
-  'Dieser View zeigt nur die N2-Region. Er erzeugt bewusst keinen Werkzeugweg.',
+  'Diagnose aktiv:',
+  "canonicalToolpath={activeStep==='Bearbeiten'&&!nativeRegionDiagnostic?activeCanonicalToolpath:null}",
+  'nativeRegionDiagnostic={activeStep',
 ]){
   if(!diagnosticApp.includes(token))throw new Error(`008H-N2 diagnostic view missing: ${token}`);
 }
+const diagnosticView=fs.readFileSync('src/lib/GeometryView.svelte','utf8');
+for(const token of ['nativeRegionDiagnostic','nativeRegionWorld','native-region-proof','diagnosticActive?[]'])if(!diagnosticView.includes(token))throw new Error(`008H-N2 viewport isolation missing: ${token}`);
 const nativeRegionStart=nativeCpp.indexOf('extern "C" char* beblog_occt_build_zlevel_regions');
 const nativeRegionEnd=nativeCpp.indexOf('extern "C" void beblog_occt_free_string',nativeRegionStart);
 if(nativeRegionStart<0||nativeRegionEnd<=nativeRegionStart){
