@@ -146,6 +146,7 @@ for(const token of [
   'HLRBRep_Algo',
   'HLRBRep_HLRToShape',
   'OutLineVCompound',
+  'BOPAlgo_Tools::EdgesToWires',
   'BOPAlgo_Tools::WiresToFaces',
   'BRepPrimAPI_MakeBox',
   'face_target_material_region',
