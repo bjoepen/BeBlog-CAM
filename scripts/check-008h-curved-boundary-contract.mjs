@@ -90,10 +90,10 @@ for(const token of ["ZLevelRasterDirection='auto'|'x'|'y'","rasterDirection?:ZLe
 for(const token of ["requestedDirection=operation.rasterDirection??'auto'","[buildDirection('x'),buildDirection('y')]","pathLength(a.toolpath!)","Rasterrichtung Auto"]){
   if(!model.includes(token))throw new Error(`008H-G auto-selection contract missing: ${token}`);
 }
-for(const token of ["selectedFaceScopeGroups","for(const group of groups)","buildDirection('x',group.scope)","buildDirection('y',group.scope)","combinedRuns.push(...chosen.toolpath.runs)","Rasterrichtung Auto lokal pro Ziel-Face gewählt"]){
+for(const token of ["selectedFaceScopeGroups","for(const group of groups)","buildDirection('x',group.scope,[group.faceId])","buildDirection('y',group.scope,[group.faceId])","combinedRuns.push(...chosen.toolpath.runs)","Rasterrichtung Auto lokal pro Ziel-Face gewählt"]){
   if(!model.includes(token))throw new Error(`008H-H per-face Auto contract missing: ${token}`);
 }
 for(const token of ["Rasterrichtung","Automatisch","Parallel X","Parallel Y","rasterDirection:'auto'","rasterDirection:'x'","rasterDirection:'y'"]){
   if(!app.includes(token))throw new Error(`008H-G UI contract missing: ${token}`);
 }
-console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by cutter-contact envelopes; stock edges permit cutter overhang; Auto/X/Y raster direction is explicit and deterministic, with Auto selected independently per target face; model boundaries and legacy safety remain fail-closed.');
+console.log('PASS 008H: curved targets use complete-solid Z-level truth scoped by cutter-contact envelopes; stock edges permit cutter overhang; Auto/X/Y raster direction is explicit and deterministic, with Auto selected independently per target face and Z-local face ownership; model boundaries and legacy safety remain fail-closed.');
