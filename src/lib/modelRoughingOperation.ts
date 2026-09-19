@@ -148,7 +148,8 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   // leaves one clearance radius of legal cutter-centre overhang beyond the real
   // stock. Model boundaries remain untouched and therefore retain the full
   // cutter-radius + allowance protection.
-  const clearanceRadius=operation.tool.diameterMm/2+allowance;
+  const toolRadius=operation.tool.diameterMm/2;
+  const clearanceRadius=toolRadius+allowance;
   const rasterStock={
     minX:-2*clearanceRadius,
     minY:-2*clearanceRadius,
@@ -159,6 +160,11 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
   if(invalid.length){errors.push(`${invalid.length} Stock−Model-Ebene${invalid.length===1?' ist':'n sind'} ungültig.`);for(const r of invalid)for(const e of r.errors)errors.push(`Z ${r.z.toFixed(3)}: ${e}`)}
   if(errors.length)return{ok:false,toolpath:null,levelCount:zs.length,roughingRegionCount:rough.length,errors:[...new Set(errors)],warnings};
   const o=origin(stock,wcs);
+  // 008H-I: finish allowance belongs to the complete-solid safety envelope.
+  // Face selection only expresses cutter-contact intent, so its XY reach is the
+  // physical cutter radius, not cutter radius + allowance. Adding allowance a
+  // second time here displaced accepted paths away from the selected surface.
+  const faceContactRadius=toolRadius;
   const buildDirection=(direction:'x'|'y',scope:FaceScope|null=selected)=>{
     const candidateWarnings:string[]=[];
     const candidateErrors:string[]=[];
@@ -168,7 +174,7 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     if(!built.ok||!built.toolpath)return{direction,toolpath:null as CanonicalToolpath|null,errors:candidateErrors,warnings:candidateWarnings};
     let candidate=built.toolpath;
     if(scope){
-      candidate=clipToolpathToFaceContactScope(candidate,scope,o,clearanceRadius);
+      candidate=clipToolpathToFaceContactScope(candidate,scope,o,faceContactRadius);
       if(!candidate.runs.length)candidateErrors.push('Im Werkzeugkontakt-Bereich der gewählten Faces blieb keine sichere True-Z-Level-Schruppbahn übrig.');
     }
     if(candidate.runs.length)candidateErrors.push(...accessErrors(candidate,rough,o,operation.tool.diameterMm+2*allowance,profile));
@@ -226,6 +232,6 @@ export function buildModelRoughingOperationState(args:{summary:ImportSummary;sto
     warnings.push(...chosen.warnings);
     if(requestedDirection==='auto')warnings.push(`008H-G: Rasterrichtung Auto → ${chosen.direction.toUpperCase()} gewählt.`);
   }
-  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich über ihren Werkzeugkontakt-Bereich (projizierte Face-Geometrie + Fräserradius + Aufmaß); Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
+  if(selected)warnings.push('008H: Ziel-Faces begrenzen den Bearbeitungsbereich über ihren Werkzeugkontakt-Bereich (projizierte Face-Geometrie + physischer Fräserradius; das Aufmaß stammt ausschließlich aus der vollständigen Solid-Sicherheitsgeometrie); Kollisions- und Materialwahrheit stammt aus dem vollständigen STEP-Solid. Rohlingkanten sind Materialgrenzen und erlauben werkzeugradius-sicheren Fräserüberhang.');
   return{ok:true,toolpath:toolpath!,levelCount:zs.length,roughingRegionCount:rough.length,errors:[],warnings:[...new Set(warnings)]};
 }
