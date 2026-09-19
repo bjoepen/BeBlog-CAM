@@ -25,6 +25,7 @@ export type CurvedFaceTarget={
   spatialIndex:CurvedFaceSpatialIndex|null;
   errors:string[];
   warnings:string[];
+  fallbackTarget:CurvedFaceTarget|null;
 };
 
 const EPS=1e-8;
@@ -135,6 +136,9 @@ export function curvedFaceTargetZAt(
     if(Math.abs(hit-z)>1e-4)return null;
   }
 
+  if(hit===null&&target.fallbackTarget){
+    return curvedFaceTargetZAt(target.fallbackTarget,x,y,profile);
+  }
   return hit;
 }
 
@@ -143,6 +147,7 @@ export function buildCurvedFaceTarget(
   displayFaceIds:number[],
   selectedFaceIds:number[],
   profile?:ZLevelPerformanceProfile,
+  fallbackTarget:CurvedFaceTarget|null=null,
 ):CurvedFaceTarget{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -221,7 +226,7 @@ export function buildCurvedFaceTarget(
       for(let ix=0;ix<=nx;ix++){
         const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;
         let hit:number|null=null;
-        const candidates=spatialIndex?candidateTriangleIndices({valid:true,faceIds:[],triangles,bounds,spatialIndex,errors:[],warnings:[]},x,y):null;
+        const candidates=spatialIndex?candidateTriangleIndices({valid:true,faceIds:[],triangles,bounds,spatialIndex,errors:[],warnings:[],fallbackTarget:null},x,y):null;
         const triangleIndices=candidates??triangles.map((_,index)=>index);
         for(const triangleIndex of triangleIndices){
           const triangle=triangles[triangleIndex];
@@ -248,5 +253,6 @@ export function buildCurvedFaceTarget(
     spatialIndex,
     errors:[...new Set(errors)],
     warnings:[...new Set(warnings)],
+    fallbackTarget,
   };
 }
