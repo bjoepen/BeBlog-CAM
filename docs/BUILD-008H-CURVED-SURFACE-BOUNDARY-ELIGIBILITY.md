@@ -434,3 +434,250 @@ Acceptance fixtures are deliberately complementary:
   fillet toward the stock boundary.
 - Headstock: selecting only the Hohlkehle must not claim the broad headstock
   exterior.
+
+
+## 008H-N — Read-only architecture audit: Native OCCT CAM Region
+
+Status: **AUDIT / CONTRACT DRAFT — no implementation yet**
+
+### Trigger
+
+Real-world fixtures disproved both heuristic Face-target ownership models:
+
+- 008H-L nearest-Face ownership happened to look plausible on the V14 grip but
+  allowed a single Headstock Hohlkehle to claim a broad unrelated exterior area.
+- 008H-M bounded outward ownership still did not isolate the Hohlkehle correctly.
+
+Therefore 008H-L/M are not acceptable CAM semantics. They remain historical
+evidence only and must not be extended with another ownership heuristic.
+
+### Repository audit
+
+The native STEP adapter already has the correct source of truth:
+
+- `src-tauri/native/occt_bridge.cpp` loads STEP with `STEPControl_Reader`
+  and retains a real `TopoDS_Shape`.
+- Native Face identity is stable inside one inspection pass: Faces are enumerated
+  in the same order used for `manufacturingFaces` and `displayFaceIds`.
+- Native topology is already available through `TopoDS_Face`, Wires and Edges.
+  The bridge exports manufacturing Faces/Edges/Wires, but only as summaries.
+- `BRepMesh_IncrementalMesh` is currently used to export display triangles.
+  The TypeScript Z-Level path then reconstructs slices from those triangles.
+- The bridge currently exposes only one native entry point:
+  `beblog_occt_inspect_step(path)`. The real `TopoDS_Shape` is not retained
+  across calls and no native CAM-region operation exists.
+- `src-tauri/src/lib.rs` exposes only `inspect_import` for STEP geometry.
+  CAM generation itself is synchronous TypeScript.
+- `modelRoughingOperation.ts` therefore receives an `ImportSummary`, not a
+  native Shape handle or native planar CAM region.
+- `modelSliceRegion.ts` / `roughingRegion.ts` are valid downstream planar
+  topology consumers, but their current input is reconstructed mesh slicing.
+- `modelRoughingToolpath.ts` and `planarRasterKernel.ts` are downstream path
+  generators and do not need to know BRep ownership if the input region is
+  already authoritative.
+
+### Root cause
+
+The architecture crosses the geometry-kernel boundary too early:
+
+```
+TopoDS_Shape
+   ↓
+display triangulation
+   ↓
+TypeScript reconstructs model/Face topology
+   ↓
+heuristic Face ownership
+   ↓
+raster
+```
+
+This makes display geometry perform a manufacturing-kernel job.
+
+### New hard invariant
+
+> **OCCT constructs Face-target CAM geometry. TypeScript consumes the resulting
+> planar machining region. No TypeScript predicate infers BRep Face ownership.**
+
+The complete STEP BRep remains material/collision truth. Selected Face IDs are
+native subshape identity, not display-mesh proximity.
+
+### Proposed native boundary
+
+Add a dedicated native CAM-region entry point rather than expanding
+`inspect_step`:
+
+```text
+beblog_occt_build_zlevel_regions(
+    STEP source path,
+    selected Face IDs,
+    orientation,
+    placement,
+    stock,
+    Z levels,
+    finish allowance
+) -> per-Z planar regions
+```
+
+The exact C ABI may use one JSON request/response string to keep the existing
+Rust/C++ bridge simple and versionable.
+
+The native side must reload the STEP source deterministically, map Face IDs by
+the same enumeration contract as inspection, apply the manufacturing transform,
+and perform the exact BRep/planar operations before any tessellation is involved
+in CAM truth.
+
+### Region response contract
+
+Per Z level, return only manufacturing geometry:
+
+```text
+{
+  z,
+  valid,
+  islands: [
+    {
+      outer: [{x,y}, ...],
+      holes: [[{x,y}, ...], ...]
+    }
+  ],
+  errors: [],
+  warnings: []
+}
+```
+
+This intentionally mirrors the useful part of `RoughingRegion`, so the
+existing raster/toolpath/safety pipeline can remain downstream.
+
+The response must not contain:
+
+- raster samples;
+- canonical toolpaths;
+- nearest-Face ownership;
+- display-triangle IDs;
+- contact-envelope predicates.
+
+### Native geometric responsibility
+
+For every requested cutting level OCCT owns:
+
+1. exact STEP/BRep source and selected `TopoDS_Face` lookup;
+2. part orientation and placement before manufacturing geometry is derived;
+3. exact Z section / projection needed by the roughing strategy;
+4. selected-Face target boundary and adjacent native topology;
+5. Stock−Model material-domain construction for that target;
+6. planar boolean/topological cleanup and closed outer/hole loops;
+7. fail-closed validation of open, ambiguous or invalid regions.
+
+Tool diameter is deliberately **not** part of Face ownership. Tool-radius
+clearance and finish allowance must have one explicitly documented owner. For
+the first N implementation, finish allowance may remain in the existing
+downstream clearance model if and only if the native region represents nominal
+material ownership. It must not be applied once natively and again in
+TypeScript.
+
+### TypeScript responsibility after N
+
+TypeScript owns:
+
+- operation parameters and UI;
+- choosing requested Z levels;
+- receiving authoritative planar regions;
+- raster X/Y/Auto strategy;
+- physical tool-radius clearance inside the supplied region;
+- stay-down connector proof;
+- Canonical Toolpath construction;
+- top accessibility;
+- 004T / 004Q / Preview / Preflight / NC truth.
+
+TypeScript no longer owns:
+
+- `sliceFaceSegmentsAtZ` for Face-target scope;
+- `faceOwnedMaterialPoint`;
+- `faceExtrudesToMaterial`;
+- nearest-Face or outward ownership;
+- any post-toolpath Face clipping.
+
+Those helpers may remain temporarily only for historical/non-N consumers while
+the migration is staged; the final N gate must forbid them in the Face-target
+roughing path.
+
+### Synchronous architecture warning
+
+Current canonical toolpath construction is synchronous TypeScript, while a
+Tauri native command is asynchronous. Therefore N must not hide an async native
+call inside `buildModelRoughingOperationState()`.
+
+The implementation needs an explicit data-flow boundary, for example:
+
+```
+source/setup/operation changes
+        ↓
+async native region request
+        ↓
+cached NativeZLevelRegionSet keyed by
+source identity + transform + stock + Face IDs + Z levels
+        ↓
+synchronous canonical toolpath consumer
+```
+
+Editing must not recreate the 008E performance regression. Expensive native
+region construction should be demand-gated/cached and invalidated only by
+geometry-affecting inputs.
+
+### Link/build audit
+
+The current native build links the OCCT core, BRep, geometry, topology, mesh and
+STEP libraries. Native boolean/section implementation may require additional
+OCCT toolkit symbols. `src-tauri/build.rs` must be updated only for libraries
+actually required by the chosen OCCT APIs; packaging 008F must then re-run its
+dependency-closure test so the DMG remains portable.
+
+### Acceptance fixtures
+
+N is not PASS from unit/gate success alone.
+
+**V14 Grip**
+- selected rounded Faces produce the corresponding removable material regions;
+- regions may extend to the stock boundary where geometrically appropriate;
+- opposite Faces remain symmetric;
+- no contact fragments / comb artefacts / unexplained zero-path result.
+
+**CBG Headstock**
+- select only the Hohlkehle;
+- the native debug region itself must be limited to the Hohlkehle target;
+- broad exterior material is not part of that region;
+- this must be verifiable before raster generation.
+
+A debug view of the native region is required for qualification. If the region
+is wrong, raster, Canonical Toolpath and 004T are not investigated.
+
+### Migration plan
+
+**N1 — Native contract only**
+- request/response Rust + TypeScript types;
+- C ABI declaration;
+- deterministic Face-ID mapping contract;
+- no CAM consumer switch.
+
+**N2 — Native region construction**
+- exact OCCT section/planar boolean implementation;
+- fail-closed topology validation;
+- native fixture/gate where available.
+
+**N3 — Region integration**
+- async cache/data-flow;
+- convert native region response to existing `RoughingRegion`;
+- remove Face ownership predicates from raster path.
+
+**N4 — Qualification**
+- native-region debug rendering;
+- V14 Grip;
+- CBG Headstock Hohlkehle;
+- complete regression suite including 004Z/004T/004Q and native packaging.
+
+### Explicit non-goals
+
+008H-N does not redesign Canonical Toolpath, 004T, 004Q, the postprocessors or
+the general raster kernel. It moves BRep manufacturing-region construction back
+to the geometry kernel where it belongs.
