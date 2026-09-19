@@ -238,3 +238,7 @@ for(const token of ['Z=${region.z.toFixed(3)} mm','region.errors.map']){
 }
 if(!preflight.includes('canonicalOverrideErrors?:Record<string,string[]>')||!preflight.includes('args.canonicalOverrideErrors?.[operation.id]'))throw new Error('008H-N3 preflight must expose concrete native Face-target errors');
 if(!diagnosticApp.includes('canonicalOverrideErrors:nativeFaceTargetErrors'))throw new Error('008H-N3 App must pass concrete native Face-target errors into preflight');
+
+for(const token of ['FaceTargetRegionProbe','failedStage','selectedProjectionFaces','selectedInStockFaces','aboveProjectionFaces','materialFaces','OCCT Face-target stage=']){
+  if(!nativeCpp.includes(token))throw new Error(`008H-N3 native stage diagnostics missing: ${token}`);
+}
