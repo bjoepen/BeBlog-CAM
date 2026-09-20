@@ -75,7 +75,8 @@
     "check:008d:source": "node scripts/check-008d-oriented-step-source.mjs",
     "check:008d:regression": "node scripts/check-008d-regression.mjs",
     "check:008d:all": "pnpm check:008d && pnpm check:008d:source && pnpm check:008d:regression",
-    "check:008e": "node scripts/check-008e-performance.mjs"
+    "check:008e": "node scripts/check-008e-performance.mjs",
+    "check:008h-a4": "node scripts/check-008h-a4-level-eligibility.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
