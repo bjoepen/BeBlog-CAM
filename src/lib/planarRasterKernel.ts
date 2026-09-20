@@ -146,9 +146,11 @@ export function buildPlanarRasterChains(
   pointFilter?:PlanarRasterPointFilter,
   safetyLoops:PlanarRasterLoop[]=scopeLoops,
   clearanceAlreadyApplied=false,
+  rasterGuideLoops:PlanarRasterLoop[]=scopeLoops,
 ):PlanarRasterChain[]{
-  if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!scopeLoops.length||!safetyLoops.length)return[];
+  if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!scopeLoops.length||!safetyLoops.length||!rasterGuideLoops.length)return[];
   const b=bounds(scopeLoops);if(!b)return[];
+  const guideBounds=bounds(rasterGuideLoops);if(!guideBounds)return[];
 
   const radius=clearanceAlreadyApplied?0:toolDiameterMm/2;
   // A standalone region uses its own boundary for cutter clearance and keeps
@@ -161,8 +163,11 @@ export function buildPlanarRasterChains(
   const rasterSegments:PlanarRasterChain[]=[];
   const primaryMin=direction==='x'?b.minX:b.minY;
   const primaryMax=direction==='x'?b.maxX:b.maxY;
-  const rowMin=direction==='x'?b.minY:b.minX;
-  const rowMax=direction==='x'?b.maxY:b.maxX;
+  // Face-target roughing uses the target (Tz) only to choose which raster rows
+  // are required. Cutter centres may still overhang the target boundary inside
+  // the already-proven cutter-centre-safe scope (Az).
+  const rowMin=direction==='x'?guideBounds.minY:guideBounds.minX;
+  const rowMax=direction==='x'?guideBounds.maxY:guideBounds.maxX;
   const point=(primary:number,rowValue:number):ToolpathPoint2=>
     direction==='x'?{x:primary,y:rowValue}:{x:rowValue,y:primary};
   let row=0;
