@@ -40,10 +40,8 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
     return buildDrillCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
   }
   if(operation.kind==='3d-roughing'){
-    // 008H-A2 resolves the same fail-closed CurvedFaceTarget truth used by
-    // 3D finishing, but still emits no manufacturing toolpath.
-    buildThreeDRoughingOperationState({summary,stock,placement,orientation,wcs,operation});
-    return null;
+    const state=buildThreeDRoughingOperationState({summary,stock,placement,orientation,wcs,operation});
+    return state.ok?state.toolpath:null;
   }
   if(operation.kind==='surface-finishing'){
     const state=buildSurfaceFinishingOperationState({summary,stock,placement,orientation,wcs,operation});

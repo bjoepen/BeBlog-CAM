@@ -13,6 +13,7 @@ import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
 import { buildStepDrillOperationState } from './stepDrillOperation';
 import { buildZLevelOperationState, zLevelMode } from './zLevelOperationState';
 import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';
+import { buildThreeDRoughingOperationState } from './threeDRoughingOperation';
 import { buildDxfMultiTargetContourState, buildDxfMultiTargetPocketState } from './dxfMultiTargetToolpath';
 import { normalizeDxfTargetIds } from './dxfMultiTargetSelection';
 import { toolIdentityKey } from './toolIdentity.js';
@@ -57,11 +58,10 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
       if(operation.restMachiningEnabled){const source=enabled.find(op=>op.id===operation.restFromOperationId);detail+=` · Restmaterial${source?` aus ${source.name}`:''}`;}
     }
     else if(operation.kind==='3d-roughing'){
+      const state=buildThreeDRoughingOperationState({summary,stock,placement,orientation,wcs,operation});
+      opErrors.push(...state.errors);opWarnings.push(...state.warnings);canonicalToolpath=state.toolpath;
       detail=`3D Schruppen · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.stepDownMm.toFixed(3)} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toFixed(3)} mm Aufmaß`;
-      if(summary.kind!=='step')opErrors.push('3D Schruppen benötigt ein STEP/BRep-Modell.');
-      if(!operation.faceIds.length)opErrors.push('Keine STEP/BRep-Zielfläche für 3D Schruppen gewählt.');
-      if(operation.tool.kind!=='end-mill')opErrors.push('3D Schruppen v1 benötigt einen Schaftfräser.');
-      opErrors.push('008H-A1: Der 3D-Schrupp-Kernel ist noch nicht freigegeben; es wird bewusst kein Manufacturing-Toolpath erzeugt.');
+      if(state.toolpath)detail+=` · ${state.toolpath.runs.length} bewiesene Schnittkanten`;
     }
     else if(operation.kind==='surface-finishing'){detail=`3D Schlichten · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${operation.direction==='x'?'Parallel X':'Parallel Y'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.stepoverPercent}% Stepover`;const reconstructed=buildSurfaceFinishingOperationState({summary,stock,placement,orientation,wcs,operation});opErrors.push(...reconstructed.errors);opWarnings.push(...reconstructed.warnings);if(reconstructed.ok&&reconstructed.toolpath){canonicalToolpath=reconstructed.toolpath;detail+=` · ${reconstructed.chainCount} Schlichtketten · ${reconstructed.contactPointCount} Kontaktpunkte`;}}
     else if(operation.kind==='z-level-roughing'){const mode=zLevelMode(operation),islands=mode==='face-target'?((operation.islandMode??'preserve')==='clear'?' · Inneninseln mit schruppen':' · Inneninseln stehen lassen'):'';detail=`${mode==='model'?'Modell · Stock−Model':'Face Target'}${islands} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.stepDownMm.toFixed(3)} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toFixed(3)} mm Aufmaß`;const reconstructed=buildZLevelOperationState({summary,stock,placement,orientation,wcs,operation});opErrors.push(...reconstructed.errors);opWarnings.push(...reconstructed.warnings);if(reconstructed.toolpath){canonicalToolpath=reconstructed.toolpath;}}

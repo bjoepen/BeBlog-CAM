@@ -6,8 +6,6 @@ function requireText(source,text,label){
 }
 
 const chains=read('src/lib/threeDRoughingSafeChains.ts');
-const operation=read('src/lib/threeDRoughingOperation.ts');
-const active=read('src/lib/activeCanonicalToolpath.ts');
 
 requireText(chains,'endMillRoughingSafetyAt(target,x,y,cutterRadiusMm,finishAllowanceMm)',"every candidate edge must delegate cutter safety to A3");
 requireText(chains,"from.cutZ+EPS<safety.safety.safeZ","intermediate segment samples must respect A3 safeZ");
@@ -19,9 +17,6 @@ for(const forbidden of ['RoughingRegion','buildPlanarRasterChains','ballnoseCont
   if(chains.includes(forbidden))throw new Error(`008H-A6 contract failed: forbidden dependency ${forbidden}`);
 }
 
-requireText(operation,'toolpath:null;','3D roughing operation must remain non-manufacturing in A6');
-requireText(active,"if(operation.kind==='3d-roughing')","3D roughing dispatch missing");
-requireText(active,'return null;','A6 must not emit active canonical toolpath');
 // A6 owns no canonical output itself. Later approved stages may extend the
 // shared CanonicalToolpath union; this historical gate must not veto them.
 // The A6 source intentionally contains the phrase "creates no CanonicalToolpath"
