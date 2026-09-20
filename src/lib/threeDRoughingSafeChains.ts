@@ -83,24 +83,30 @@ export function buildThreeDRoughingSafeChains(
   const chains:ThreeDRoughingSafeChain[]=[];
   let rejectedSegmentCount=0;
 
+  // A6 is not a path-ordering strategy. It proves only immediate orthogonal
+  // A5 grid edges and exposes each accepted edge as a minimal safe chain.
   for(const component of connectivity.components){
-    const samples=[...component.samples].sort((a,b)=>a.y-b.y||a.x-b.x);
-    if(samples.length<2)continue;
+    const xs=[...new Set(component.samples.map(sample=>sample.x))].sort((a,b)=>a-b);
+    const ys=[...new Set(component.samples.map(sample=>sample.y))].sort((a,b)=>a-b);
+    const byKey=new Map(component.samples.map(sample=>[`${sample.x.toPrecision(15)}|${sample.y.toPrecision(15)}`,sample]));
 
-    let current:ThreeDRoughingEligibilitySample[]=[samples[0]];
-    for(let i=1;i<samples.length;i++){
-      const previous=current[current.length-1];
-      const next=samples[i];
-      if(segmentIsSafe(target,previous,next,cutterRadiusMm,finishAllowanceMm,validationStepMm)){
-        current.push(next);
-        continue;
+    for(const sample of component.samples){
+      const ix=xs.findIndex(x=>Math.abs(x-sample.x)<=EPS);
+      const iy=ys.findIndex(y=>Math.abs(y-sample.y)<=EPS);
+      const candidates=[
+        ix+1<xs.length?byKey.get(`${xs[ix+1].toPrecision(15)}|${sample.y.toPrecision(15)}`):undefined,
+        iy+1<ys.length?byKey.get(`${sample.x.toPrecision(15)}|${ys[iy+1].toPrecision(15)}`):undefined,
+      ];
+
+      for(const next of candidates){
+        if(!next)continue;
+        if(segmentIsSafe(target,sample,next,cutterRadiusMm,finishAllowanceMm,validationStepMm)){
+          chains.push({componentId:component.id,cutZ:component.cutZ,samples:[sample,next]});
+        }else{
+          rejectedSegmentCount++;
+        }
       }
-
-      rejectedSegmentCount++;
-      if(current.length>=2)chains.push({componentId:component.id,cutZ:component.cutZ,samples:current});
-      current=[next];
     }
-    if(current.length>=2)chains.push({componentId:component.id,cutZ:component.cutZ,samples:current});
   }
 
   if(rejectedSegmentCount)warnings.push(`${rejectedSegmentCount} Kandidaten-Segment${rejectedSegmentCount===1?' wurde':'e wurden'} fail-closed verworfen.`);
