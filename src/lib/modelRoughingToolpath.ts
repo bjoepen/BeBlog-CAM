@@ -25,6 +25,7 @@ export function buildModelRoughingCanonicalToolpath(
   regionPointFilter?:(region:RoughingRegion)=>PlanarRasterPointFilter|undefined,
   regionSafetyLoops?:(region:RoughingRegion)=>PlanarRasterLoop[]|undefined,
   nativeCutterCenterRegion=false,
+  regionRasterGuideLoops?:(region:RoughingRegion)=>PlanarRasterLoop[]|undefined,
 ):ModelRoughingToolpathResult{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -47,7 +48,7 @@ export function buildModelRoughingCanonicalToolpath(
   const ordered=[...regions].sort((a,b)=>b.z-a.z);
   // 008H: use an enlarged clearance disk for conservative XY stock allowance,
   // while canonical tool identity remains the physical cutter diameter.
-  const clearanceDiameterMm=toolDiameterMm+2*clearanceAllowanceMm;
+  const clearanceDiameterMm=nativeCutterCenterRegion?toolDiameterMm:toolDiameterMm+2*clearanceAllowanceMm;
   const runs:CanonicalToolpathRun[]=[];
   let islandCount=0;
 
@@ -59,7 +60,8 @@ export function buildModelRoughingCanonicalToolpath(
         ...island.holes.map(points=>({points})),
       ];
       const safetyLoops=regionSafetyLoops?.(region)??loops;
-      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection,regionPointFilter?.(region),safetyLoops,nativeCutterCenterRegion);
+      const rasterGuideLoops=regionRasterGuideLoops?.(region)??loops;
+      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection,regionPointFilter?.(region),safetyLoops,nativeCutterCenterRegion,rasterGuideLoops);
       if(!chains.length){
         warnings.push(`Z ${region.z.toFixed(3)} · Schruppinsel ${islandCount}: kein werkzeugradius-sicherer Rasterpfad.`);
         continue;
