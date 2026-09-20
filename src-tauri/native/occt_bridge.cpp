@@ -480,6 +480,23 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
   TopoDS_Shape azShape;
   if(!contactShape.IsNull()&&!czShape.IsNull()){BRepAlgoAPI_Common common(contactShape,czShape);common.Build();if(common.IsDone())azShape=common.Shape();}
   const std::vector<PlanarIsland> azIslands=azShape.IsNull()?std::vector<PlanarIsland>{}:planar_shape_islands(azShape);
+
+  // 008H investigation only: prove how much of the cutter-contact dilation lies
+  // outside the selected-Face target (Tz), and whether complete-solid safety
+  // (Cz) accepts that dilation-only region. This is diagnostic geometry only;
+  // it MUST NOT participate in Az, raster, canonical toolpath or NC generation.
+  TopoDS_Shape dilationOnlyShape;
+  if(!contactShape.IsNull()&&!tzShape.IsNull()){
+   BRepAlgoAPI_Cut dilationOnly(contactShape,tzShape);dilationOnly.Build();
+   if(dilationOnly.IsDone())dilationOnlyShape=dilationOnly.Shape();
+  }
+  TopoDS_Shape acceptedDilationShape;
+  if(!dilationOnlyShape.IsNull()&&!czShape.IsNull()){
+   BRepAlgoAPI_Common accepted(dilationOnlyShape,czShape);accepted.Build();
+   if(accepted.IsDone())acceptedDilationShape=accepted.Shape();
+  }
+  const std::vector<PlanarIsland> dilationOnlyIslands=dilationOnlyShape.IsNull()?std::vector<PlanarIsland>{}:planar_shape_islands(dilationOnlyShape);
+  const std::vector<PlanarIsland> acceptedDilationIslands=acceptedDilationShape.IsNull()?std::vector<PlanarIsland>{}:planar_shape_islands(acceptedDilationShape);
   const bool tzKernelFailed=std::any_of(probes.begin(),probes.end(),[](const FaceTargetRegionProbe& probe){return !probe.failedStage.empty();});
   const bool boundaryOnly=!tzKernelFailed&&tzIslands.empty();
   const bool valid=!tzKernelFailed&&(boundaryOnly||(!contactIslands.empty()&&safety.failedStage.empty()&&!czIslands.empty()&&!azIslands.empty()));
@@ -495,6 +512,19 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
   if(!boundaryOnly&&!contactIslands.empty()&&!czIslands.empty()&&azIslands.empty()){if(!first_error)out<<',';first_error=false;append_json_string(out,"OCCT N5 stage=Az/intersection islands=0; fail-closed");}
   out<<"],\"warnings\":[";bool first_warning=true;
   if(boundaryOnly){append_json_string(out,"OCCT N5 stage=Tz boundary-only/empty planar measure; legal level skipped by raster");first_warning=false;}
+  if(!boundaryOnly){
+   if(!first_warning)out<<',';first_warning=false;
+   std::ostringstream detail;
+   detail<<"008H investigation stage=contactEligibility"
+         <<" tzIslands="<<tzIslands.size()
+         <<" contactIslands="<<contactIslands.size()
+         <<" dilationOnlyIslands="<<dilationOnlyIslands.size()
+         <<" czIslands="<<czIslands.size()
+         <<" acceptedDilationIslands="<<acceptedDilationIslands.size()
+         <<" azIslands="<<azIslands.size()
+         <<"; diagnostic-only, no toolpath effect";
+   append_json_string(out,detail.str());
+  }
   for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(!(probe.rayUniqueAbove||probe.rayBoundary||probe.rayNoContact))continue;if(!first_warning)out<<',';first_warning=false;std::ostringstream detail;detail<<"OCCT N5 stage=Tz/rayProof faceIndex="<<i<<" below="<<probe.rayUniqueBelow<<" aboveOutsideTz="<<probe.rayUniqueAbove<<" boundary="<<probe.rayBoundary<<" noContactOutsideTz="<<probe.rayNoContact;append_json_string(out,detail.str());}
   out<<"]}";
  }
