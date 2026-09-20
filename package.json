@@ -78,7 +78,8 @@
     "check:008e": "node scripts/check-008e-performance.mjs",
     "check:008h-a4": "node scripts/check-008h-a4-level-eligibility.mjs",
     "check:008h-a5": "node scripts/check-008h-a5-material-connectivity.mjs",
-    "check:008h-a6": "node scripts/check-008h-a6-safe-roughing-chains.mjs"
+    "check:008h-a6": "node scripts/check-008h-a6-safe-roughing-chains.mjs",
+    "check:008h-a7": "node scripts/check-008h-a7-canonical-safe-edges.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
