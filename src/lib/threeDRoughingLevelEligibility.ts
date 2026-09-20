@@ -2,7 +2,7 @@ import type { CurvedFaceTarget } from './curvedFaceTarget';
 import type { PartSafetySurface } from './partSafetySurface';
 import { endMillRoughingSafetyAt } from './endMillRoughingSafety';
 
-export type ThreeDRoughingEligibility='removable'|'protected'|'unresolved';
+export type ThreeDRoughingEligibility='removable'|'protected'|'outside-target'|'unresolved';
 
 export type ThreeDRoughingEligibilitySample={
   x:number;
@@ -18,6 +18,7 @@ export type ThreeDRoughingLevelEligibility={
   samples:ThreeDRoughingEligibilitySample[];
   removableCount:number;
   protectedCount:number;
+  outsideTargetCount:number;
   unresolvedCount:number;
   errors:string[];
   warnings:string[];
@@ -50,20 +51,25 @@ export function buildThreeDRoughingLevelEligibility(
   if(!(gridStepMm>0))errors.push('Eligibility-Rasterabstand muss größer als 0 sein.');
 
   if(errors.length)return{
-    valid:false,cutZ,samples:[],removableCount:0,protectedCount:0,unresolvedCount:0,errors,warnings,
+    valid:false,cutZ,samples:[],removableCount:0,protectedCount:0,outsideTargetCount:0,unresolvedCount:0,errors,warnings,
   };
 
   const b=target.bounds!;
   const nx=Math.max(1,Math.ceil((b.maxX-b.minX)/gridStepMm));
   const ny=Math.max(1,Math.ceil((b.maxY-b.minY)/gridStepMm));
   const samples:ThreeDRoughingEligibilitySample[]=[];
-  let removableCount=0,protectedCount=0,unresolvedCount=0;
+  let removableCount=0,protectedCount=0,outsideTargetCount=0,unresolvedCount=0;
 
   for(let iy=0;iy<=ny;iy++){
     const y=b.minY+(b.maxY-b.minY)*iy/ny;
     for(let ix=0;ix<=nx;ix++){
       const x=b.minX+(b.maxX-b.minX)*ix/nx;
       const safety=endMillRoughingSafetyAt(target,partSafety,x,y,cutterRadiusMm,finishAllowanceMm);
+      if(safety.status==='outside-target'){
+        outsideTargetCount++;
+        samples.push({x,y,cutZ,safeZ:null,state:'outside-target'});
+        continue;
+      }
       if(!safety.valid||!safety.safety){
         unresolvedCount++;
         samples.push({x,y,cutZ,safeZ:null,state:'unresolved'});
@@ -80,6 +86,7 @@ export function buildThreeDRoughingLevelEligibility(
     }
   }
 
+  warnings.push(`Eligibility Z ${cutZ.toFixed(3)}: REMOVABLE ${removableCount} · PROTECTED ${protectedCount} · OUTSIDE_TARGET ${outsideTargetCount} · UNRESOLVED ${unresolvedCount}.`);
   if(unresolvedCount)warnings.push(`${unresolvedCount} Eligibility-Sample${unresolvedCount===1?' ist':'s sind'} fail-closed UNRESOLVED.`);
 
   return{
@@ -88,6 +95,7 @@ export function buildThreeDRoughingLevelEligibility(
     samples,
     removableCount,
     protectedCount,
+    outsideTargetCount,
     unresolvedCount,
     errors:[],
     warnings,
