@@ -1,13 +1,13 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
-import { curvedFaceTargetZAt } from './curvedFaceTarget';
 import type { PartSafetySurface } from './partSafetySurface';
-import { partSafetyUpperZAt } from './partSafetySurface';
+import { flatEndCutterReachabilityAt } from './flatEndCutterReachability';
 
 export type EndMillRoughingSafetyPoint={
   x:number;
   y:number;
   safeZ:number;
   surfaceMaxZ:number;
+  targetZ:number;
   finishAllowanceMm:number;
 };
 
@@ -20,17 +20,10 @@ export type EndMillRoughingSafetyResult={
   error:string|null;
 };
 
-const EPS=1e-7;
-
 /**
- * Conservative 3-axis safety truth for a flat end mill.
- *
- * Target Surface Truth owns machining intent: the cutter centre must lie on the
- * selected target. Complete Part Safety Truth owns cutter-footprint protection:
- * every projected part surface below the disk contributes its upper-envelope Z.
- * A disk sample outside the selected target is therefore not unresolved merely
- * because it crosses a face boundary. A sample with no projected part material
- * contributes no protected height. Genuine invalid geometry remains fail-closed.
+ * A3 safety adapter over the explicit A16 flat-end reachability truth.
+ * safeZ is the lowest legal flat-end tool-bottom Z. It is not target Z and
+ * must not be bypassed or clamped downward by later stages.
  */
 export function endMillRoughingSafetyAt(
   target:CurvedFaceTarget,
@@ -41,37 +34,24 @@ export function endMillRoughingSafetyAt(
   finishAllowanceMm:number,
   sampleStepMm=.25,
 ):EndMillRoughingSafetyResult{
-  if(!target.valid||!target.bounds)return{valid:false,status:'unresolved',safety:null,error:'Gekrümmte Zielfläche ist ungültig.'};
-  if(!partSafety.valid||!partSafety.bounds)return{valid:false,status:'unresolved',safety:null,error:'Part Safety Truth ist ungültig.'};
-  if(!(cutterRadiusMm>0))return{valid:false,status:'unresolved',safety:null,error:'Fräserradius muss größer als 0 sein.'};
-  if(!(finishAllowanceMm>=0))return{valid:false,status:'unresolved',safety:null,error:'Schlichtaufmaß darf nicht negativ sein.'};
-  if(!(sampleStepMm>0))return{valid:false,status:'unresolved',safety:null,error:'Abtastschritt muss größer als 0 sein.'};
-
-  // Selection still owns machining intent. Part Safety must never expand the
-  // operation centre domain beyond the selected target faces.
-  const centerZ=curvedFaceTargetZAt(target,x,y);
-  if(centerZ===null)return{valid:false,status:'outside-target',safety:null,error:null};
-
-  const step=Math.min(sampleStepMm,Math.max(.05,cutterRadiusMm/8));
-  const samples=Math.max(1,Math.ceil((cutterRadiusMm*2)/step));
-  let surfaceMaxZ=centerZ;
-
-  for(let iy=0;iy<=samples;iy++){
-    const dy=-cutterRadiusMm+(2*cutterRadiusMm*iy)/samples;
-    for(let ix=0;ix<=samples;ix++){
-      const dx=-cutterRadiusMm+(2*cutterRadiusMm*ix)/samples;
-      if(dx*dx+dy*dy>cutterRadiusMm*cutterRadiusMm+EPS)continue;
-      const partZ=partSafetyUpperZAt(partSafety,x+dx,y+dy);
-      if(partZ!==null)surfaceMaxZ=Math.max(surfaceMaxZ,partZ);
-    }
+  const reachability=flatEndCutterReachabilityAt(
+    target,partSafety,x,y,cutterRadiusMm,finishAllowanceMm,sampleStepMm,
+  );
+  if(reachability.status==='outside-target')return{valid:false,status:'outside-target',safety:null,error:null};
+  if(reachability.status==='unresolved'||reachability.targetZ===null||reachability.reachableFloorZ===null){
+    return{valid:false,status:'unresolved',safety:null,error:reachability.error??'Flat-End-Reachability ist ungeklärt.'};
   }
-
-  if(!Number.isFinite(surfaceMaxZ))return{valid:false,status:'unresolved',safety:null,error:'Für die Fräser-Stirnfläche konnte keine sichere 3D-Höhe bestimmt werden.'};
 
   return{
     valid:true,
     status:'safe',
-    safety:{x,y,safeZ:surfaceMaxZ+finishAllowanceMm,surfaceMaxZ,finishAllowanceMm},
+    safety:{
+      x,y,
+      safeZ:reachability.reachableFloorZ,
+      surfaceMaxZ:reachability.footprintPartMaxZ??reachability.targetZ,
+      targetZ:reachability.targetZ,
+      finishAllowanceMm,
+    },
     error:null,
   };
 }
