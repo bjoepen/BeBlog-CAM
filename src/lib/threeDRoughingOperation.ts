@@ -1,6 +1,7 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
 import { buildThreeDSurfaceTargetState } from './threeDSurfaceTargetState';
-import { endMillRoughingSafetyAt } from './endMillRoughingSafety';
+import type { CanonicalToolpath } from './canonicalToolpath';
+import { buildThreeDRoughingPipeline } from './threeDRoughingPipeline';
 import type {
   ImportSummary,
   PartOrientation,
@@ -13,7 +14,7 @@ import type {
 export type ThreeDRoughingOperationState={
   ok:boolean;
   target:CurvedFaceTarget|null;
-  toolpath:null;
+  toolpath:CanonicalToolpath|null;
   errors:string[];
   warnings:string[];
   triangleCount:number;
@@ -47,28 +48,19 @@ export function buildThreeDRoughingOperationState(args:{
   warnings.push(...surface.warnings);
   errors.push(...surface.errors);
 
-  // 008H-A2 intentionally stops at shared Surface Truth. A valid target is
-  // observable to the operation state, but no manufacturing toolpath exists
-  // until the dedicated 3D roughing strategy is accepted.
+  let toolpath:CanonicalToolpath|null=null;
   let safetyProbeCount=0;
-  if(surface.ok&&surface.target&&surface.target.bounds&&operation.tool.diameterMm>0&&operation.finishAllowanceMm>=0){
-    const b=surface.target.bounds;
-    const probes=[
-      {x:(b.minX+b.maxX)/2,y:(b.minY+b.maxY)/2},
-      {x:b.minX+(b.maxX-b.minX)*.25,y:b.minY+(b.maxY-b.minY)*.25},
-      {x:b.minX+(b.maxX-b.minX)*.75,y:b.minY+(b.maxY-b.minY)*.75},
-    ];
-    for(const probe of probes){
-      const safety=endMillRoughingSafetyAt(surface.target,probe.x,probe.y,operation.tool.diameterMm/2,operation.finishAllowanceMm);
-      if(safety.valid)safetyProbeCount++;
-    }
-    warnings.push(`008H-A3: 3D Surface Truth gültig; ${safetyProbeCount}/${probes.length} konservative Schaftfräser-Sicherheitsproben gültig. Manufacturing-Toolpath bleibt gesperrt.`);
+  if(errors.length===0&&surface.ok&&surface.target){
+    const pipeline=buildThreeDRoughingPipeline({target:surface.target,stock,wcs,operation});
+    warnings.push(...pipeline.warnings);
+    errors.push(...pipeline.errors);
+    if(pipeline.ok&&pipeline.toolpath)toolpath=pipeline.toolpath;
+    else if(pipeline.ok&&!pipeline.toolpath)errors.push('3D Schruppen: Kein bewiesener Manufacturing-Schnitt auf den geplanten Z-Leveln.');
   }
-
   return{
     ok:errors.length===0&&surface.ok&&surface.target!==null,
     target:errors.length===0&&surface.ok?surface.target:null,
-    toolpath:null,
+    toolpath:errors.length===0?toolpath:null,
     errors:[...new Set(errors)],
     warnings:[...new Set(warnings)],
     triangleCount:surface.triangleCount,
