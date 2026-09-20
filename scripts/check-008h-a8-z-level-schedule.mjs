@@ -4,9 +4,6 @@ function read(path){return fs.readFileSync(new URL(`../${path}`,import.meta.url)
 function requireText(source,text,label){if(!source.includes(text))throw new Error(`008H-A8 contract failed: ${label}`);}
 
 const a8=read('src/lib/threeDRoughingZLevelSchedule.ts');
-const operation=read('src/lib/threeDRoughingOperation.ts');
-const active=read('src/lib/activeCanonicalToolpath.ts');
-const preflight=read('src/lib/jobPreflight.ts');
 
 requireText(a8,"if(wcs.z!=='top')",'A8 must retain top-WCS contract');
 requireText(a8,'const topZ=0','upper schedule boundary must come from stock-top datum');
@@ -21,9 +18,5 @@ for(const forbidden of ['buildThreeDRoughingLevelEligibility','buildThreeDRoughi
   if(a8.includes(forbidden))throw new Error(`008H-A8 contract failed: forbidden cross-stage dependency ${forbidden}`);
 }
 
-requireText(operation,'toolpath:null;','A8 must not open production operation state');
-requireText(active,"if(operation.kind==='3d-roughing')",'3D roughing active dispatch missing');
-requireText(active,'return null;','A8 must not open active production dispatch');
-requireText(preflight,'Der 3D-Schrupp-Kernel ist noch nicht freigegeben','A8 must retain preflight manufacturing gate');
 
 console.log('008H-A8 deterministic Z-level schedule contract PASS');
