@@ -7,6 +7,9 @@ export type CurvedFaceTriangle={
   c:P3;
 };
 
+type ProjectedBoundaryEdge={a:P3;b:P3};
+type VerticalBoundaryCandidate={faceId:number;triangle:CurvedFaceTriangle};
+
 type CurvedFaceSpatialIndex={
   minX:number;
   minY:number;
@@ -31,6 +34,93 @@ const EPS=1e-8;
 
 function area2(a:P3,b:P3,c:P3){
   return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+}
+
+function projectedPointDistance(a:P3,b:P3){return Math.hypot(a.x-b.x,a.y-b.y);}
+function projectedPointOnSegment(point:P3,edge:ProjectedBoundaryEdge,tolerance:number){
+  const dx=edge.b.x-edge.a.x,dy=edge.b.y-edge.a.y;
+  const length2=dx*dx+dy*dy;
+  if(length2<=EPS*EPS)return projectedPointDistance(point,edge.a)<=tolerance;
+  const t=((point.x-edge.a.x)*dx+(point.y-edge.a.y)*dy)/length2;
+  if(t<-tolerance||t>1+tolerance)return false;
+  const q={x:edge.a.x+t*dx,y:edge.a.y+t*dy,z:0};
+  return Math.hypot(point.x-q.x,point.y-q.y)<=tolerance;
+}
+
+function edgeKey(a:P3,b:P3,tolerance:number){
+  const pointKey=(p:P3)=>`${Math.round(p.x/tolerance)}:${Math.round(p.y/tolerance)}`;
+  const ka=pointKey(a),kb=pointKey(b);
+  return ka<kb?`${ka}|${kb}`:`${kb}|${ka}`;
+}
+
+function classifyProjectedBoundary(triangles:CurvedFaceTriangle[]){
+  const tolerance=1e-7;
+  const edges=new Map<string,{edge:ProjectedBoundaryEdge;count:number}>();
+  for(const triangle of triangles){
+    for(const [a,b] of [[triangle.a,triangle.b],[triangle.b,triangle.c],[triangle.c,triangle.a]] as [P3,P3][]){
+      if(projectedPointDistance(a,b)<=tolerance)continue;
+      const key=edgeKey(a,b,tolerance),entry=edges.get(key);
+      if(entry)entry.count++;
+      else edges.set(key,{edge:{a,b},count:1});
+    }
+  }
+  return [...edges.values()].filter(entry=>entry.count===1).map(entry=>entry.edge);
+}
+
+function projectedCandidateExtent(candidate:VerticalBoundaryCandidate,tolerance:number):ProjectedBoundaryEdge{
+  const points=[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c];
+  let a=points[0],b=points[0],maxDistance=-1;
+  for(let i=0;i<points.length;i++)for(let j=i+1;j<points.length;j++){
+    const distance=projectedPointDistance(points[i],points[j]);
+    if(distance>maxDistance){maxDistance=distance;a=points[i];b=points[j];}
+  }
+  return maxDistance<=tolerance?{a,b:a}:{a,b};
+}
+
+function segmentCoveredByProjectedBoundary(segment:ProjectedBoundaryEdge,boundaryEdges:ProjectedBoundaryEdge[],tolerance:number){
+  const length=projectedPointDistance(segment.a,segment.b);
+  if(length<=tolerance)return boundaryEdges.some(edge=>projectedPointOnSegment(segment.a,edge,tolerance));
+
+  // Build a deterministic partition from all candidate/boundary intersections
+  // along the candidate line. Every open interval must be covered by at least
+  // one collinear outer-boundary edge; endpoint-only coincidence is insufficient.
+  const dx=segment.b.x-segment.a.x,dy=segment.b.y-segment.a.y;
+  const length2=dx*dx+dy*dy;
+  const parameter=(p:P3)=>((p.x-segment.a.x)*dx+(p.y-segment.a.y)*dy)/length2;
+  const cross=(p:P3)=>Math.abs(dx*(p.y-segment.a.y)-dy*(p.x-segment.a.x))/length;
+  const cuts=[0,1];
+
+  for(const edge of boundaryEdges){
+    if(cross(edge.a)>tolerance||cross(edge.b)>tolerance)continue;
+    const ta=parameter(edge.a),tb=parameter(edge.b);
+    const lo=Math.max(0,Math.min(ta,tb)),hi=Math.min(1,Math.max(ta,tb));
+    if(hi<lo-tolerance/Math.max(length,tolerance))continue;
+    cuts.push(Math.max(0,Math.min(1,lo)),Math.max(0,Math.min(1,hi)));
+  }
+
+  cuts.sort((a,b)=>a-b);
+  const unique=cuts.filter((value,index)=>index===0||Math.abs(value-cuts[index-1])>1e-9);
+  for(let i=1;i<unique.length;i++){
+    const lo=unique[i-1],hi=unique[i];
+    if(hi-lo<=1e-9)continue;
+    const t=(lo+hi)/2;
+    const point:P3={x:segment.a.x+dx*t,y:segment.a.y+dy*t,z:0};
+    if(!boundaryEdges.some(edge=>projectedPointOnSegment(point,edge,tolerance)))return false;
+  }
+  return projectedPointOnSegment(segment.a,segment,tolerance)
+    && projectedPointOnSegment(segment.b,segment,tolerance)
+    && boundaryEdges.some(edge=>projectedPointOnSegment(segment.a,edge,tolerance))
+    && boundaryEdges.some(edge=>projectedPointOnSegment(segment.b,edge,tolerance));
+}
+
+function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
+  const tolerance=1e-6;
+  const extent=projectedCandidateExtent(candidate,tolerance);
+  // A vertical/XY-degenerate triangle contributes only a projected segment or point.
+  // The complete projected extent, not merely its vertices, must be covered by the
+  // proven outer boundary. This prevents a chord between separate boundary edges
+  // from being accepted as a legitimate vertical boundary.
+  return segmentCoveredByProjectedBoundary(extent,boundaryEdges,tolerance);
 }
 
 function buildSpatialIndex(triangles:CurvedFaceTriangle[],bounds:NonNullable<CurvedFaceTarget['bounds']>):CurvedFaceSpatialIndex{
@@ -143,17 +233,26 @@ export function buildCurvedFaceTarget(
   }
 
   const triangles:CurvedFaceTriangle[]=[];
+  const verticalBoundaryCandidates:VerticalBoundaryCandidate[]=[];
   for(let i=0;i+2<partTriangles.length;i+=3){
     const faceId=displayFaceIds[Math.floor(i/3)];
     if(!selected.has(faceId))continue;
     const a=partTriangles[i],b=partTriangles[i+1],c=partTriangles[i+2];
 
-    // For a height field z(x,y), each projected triangle must have non-zero XY area.
+    // Regular triangles define z(x,y). XY-degenerate triangles cannot define a
+    // height-field patch themselves; retain them for an explicit outer-boundary proof.
     if(Math.abs(area2(a,b,c))<=EPS){
-      errors.push(`Ausgewählte Fläche ${faceId} enthält eine vertikale oder XY-degenerierte Dreiecksprojektion.`);
+      verticalBoundaryCandidates.push({faceId,triangle:{a,b,c}});
       continue;
     }
     triangles.push({a,b,c});
+  }
+
+  const boundaryEdges=classifyProjectedBoundary(triangles);
+  for(const candidate of verticalBoundaryCandidates){
+    if(!candidateOnProjectedBoundary(candidate,boundaryEdges)){
+      errors.push(`Ausgewählte Fläche ${candidate.faceId}: vertikale oder XY-degenerierte Dreiecksprojektion liegt nicht nachweisbar auf der äußeren XY-Boundary.`);
+    }
   }
 
   if(!triangles.length&&!errors.length){
