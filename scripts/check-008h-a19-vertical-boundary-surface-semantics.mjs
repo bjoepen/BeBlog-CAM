@@ -12,6 +12,10 @@ need(target,'function classifyProjectedBoundary','boundary classifier missing');
 need(target,'verticalBoundaryCandidates','vertical/XY-degenerate candidates must be retained for proof');
 need(target,'boundaryEdges','regular projected triangles must expose outer boundary edges');
 need(target,'candidateOnProjectedBoundary','degenerate candidates must be proven against projected outer boundary');
+need(target,'projectedCandidateExtent','degenerate candidate projected extent must be explicit');
+need(target,'segmentCoveredByProjectedBoundary','full projected candidate segment coverage proof missing');
+need(target,'Every open interval must be covered','boundary proof must cover intervals, not vertices only');
+need(target,'endpoint-only coincidence is insufficient','endpoint-only boundary coincidence must not qualify');
 need(target,'liegt nicht nachweisbar auf der äußeren XY-Boundary','unproven/internal degeneration must fail closed');
 need(target,'if(Math.abs(hit-z)>1e-4)return null','runtime XY/Z ambiguity must remain fail closed');
 need(target,'nicht eindeutig als Z(x,y) definiert','construction-time XY/Z ambiguity proof must remain');
@@ -24,6 +28,7 @@ for(const bad of [
   "Math.max(hit,z)",
   "Math.min(hit,z)",
   "ballnoseContactAt(target",
+  "return points.every(point=>boundaryEdges.some",
 ])forbid(target,bad,`forbidden Surface Truth shortcut: ${bad}`);
 
 console.log('008H-A19 vertical-boundary Surface Truth contract PASS');
