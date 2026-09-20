@@ -1,6 +1,7 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
 import { translateCurvedFaceTarget } from './curvedFaceTarget';
-import { buildThreeDSurfaceTargetState } from './threeDSurfaceTargetState';
+import { buildPlacedPartTriangles, buildThreeDSurfaceTargetState } from './threeDSurfaceTargetState';
+import { buildPartSafetySurface, translatePartSafetySurface } from './partSafetySurface';
 import type { CanonicalToolpath } from './canonicalToolpath';
 import type { P3 } from './stepView';
 import { buildThreeDRoughingPipeline } from './threeDRoughingPipeline';
@@ -61,12 +62,16 @@ export function buildThreeDRoughingOperationState(args:{
   let toolpath:CanonicalToolpath|null=null;
   let safetyProbeCount=0;
   if(errors.length===0&&surface.ok&&surface.target){
-    const wcsTarget=targetInWcs(surface.target,wcsOrigin(stock,wcs));
+    const origin=wcsOrigin(stock,wcs);
+    const wcsTarget=targetInWcs(surface.target,origin);
+    const placedPart=buildPlacedPartTriangles(summary,stock,placement,orientation);
+    const partSafety=placedPart?translatePartSafetySurface(buildPartSafetySurface(placedPart),{x:-origin.x,y:-origin.y,z:-origin.z}):null;
     if(!wcsTarget.valid){
       errors.push(...wcsTarget.errors);
       warnings.push(...wcsTarget.warnings);
     }
-    const pipeline=wcsTarget.valid?buildThreeDRoughingPipeline({target:wcsTarget,stock,wcs,operation}):null;
+    if(!partSafety||!partSafety.valid)errors.push(...(partSafety?.errors??['Part Safety Truth konnte nicht aus der STEP/BRep-Triangulation aufgebaut werden.']));
+    const pipeline=wcsTarget.valid&&partSafety?.valid?buildThreeDRoughingPipeline({target:wcsTarget,partSafety,stock,wcs,operation}):null;
     if(pipeline){
       warnings.push(...pipeline.warnings);
       errors.push(...pipeline.errors);
