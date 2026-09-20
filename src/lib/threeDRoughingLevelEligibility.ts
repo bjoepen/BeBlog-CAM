@@ -1,4 +1,5 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
+import type { PartSafetySurface } from './partSafetySurface';
 import { endMillRoughingSafetyAt } from './endMillRoughingSafety';
 
 export type ThreeDRoughingEligibility='removable'|'protected'|'unresolved';
@@ -33,6 +34,7 @@ const EPS=1e-7;
  */
 export function buildThreeDRoughingLevelEligibility(
   target:CurvedFaceTarget,
+  partSafety:PartSafetySurface,
   cutZ:number,
   cutterRadiusMm:number,
   finishAllowanceMm:number,
@@ -61,7 +63,7 @@ export function buildThreeDRoughingLevelEligibility(
     const y=b.minY+(b.maxY-b.minY)*iy/ny;
     for(let ix=0;ix<=nx;ix++){
       const x=b.minX+(b.maxX-b.minX)*ix/nx;
-      const safety=endMillRoughingSafetyAt(target,x,y,cutterRadiusMm,finishAllowanceMm);
+      const safety=endMillRoughingSafetyAt(target,partSafety,x,y,cutterRadiusMm,finishAllowanceMm);
       if(!safety.valid||!safety.safety){
         unresolvedCount++;
         samples.push({x,y,cutZ,safeZ:null,state:'unresolved'});

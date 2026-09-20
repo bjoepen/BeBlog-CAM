@@ -11,7 +11,7 @@ const safety=read('src/lib/endMillRoughingSafety.ts');
 
 requireText(operation,"z:wcs.z==='top'?stock.thickness:0",'3D roughing must resolve the same stock/WCS Z origin as 3D finishing');
 requireText(operation,'translateCurvedFaceTarget(target,{x:-origin.x,y:-origin.y,z:-origin.z})','Surface Truth must be translated as a whole into WCS');
-requireText(operation,'buildThreeDRoughingPipeline({target:wcsTarget,stock,wcs,operation})','A10 must consume WCS-normalized Surface Truth');
+requireText(operation,'buildThreeDRoughingPipeline({target:wcsTarget,partSafety,stock,wcs,operation})','A10 must consume WCS-normalized Surface Truth');
 requireText(target,'export function translateCurvedFaceTarget(','CurvedFaceTarget needs an explicit rigid translation helper');
 requireText(target,'spatialIndex:buildSpatialIndex(triangles,bounds)','translated Surface Truth must rebuild its spatial index');
 requireText(schedule,'const topZ=0','A8 must keep WCS stock top at Z=0');

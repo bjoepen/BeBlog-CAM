@@ -1,5 +1,6 @@
 import type { CanonicalToolpath } from './canonicalToolpath';
 import type { CurvedFaceTarget } from './curvedFaceTarget';
+import type { PartSafetySurface } from './partSafetySurface';
 import { buildThreeDRoughingZLevelSchedule } from './threeDRoughingZLevelSchedule';
 import { buildThreeDRoughingLevelEligibility } from './threeDRoughingLevelEligibility';
 import { buildThreeDRoughingMaterialConnectivity } from './threeDRoughingMaterialConnectivity';
@@ -36,11 +37,12 @@ export function threeDRoughingEligibilityGridStepMm(operation:ThreeDRoughingOper
  */
 export function buildThreeDRoughingPipeline(args:{
   target:CurvedFaceTarget;
+  partSafety:PartSafetySurface;
   stock:StockDefinition;
   wcs:WorkCoordinateSystem;
   operation:ThreeDRoughingOperation;
 }):ThreeDRoughingPipelineResult{
-  const {target,stock,wcs,operation}=args;
+  const {target,partSafety,stock,wcs,operation}=args;
   const errors:string[]=[];
   const warnings:string[]=[];
   const eligibilityGridStepMm=threeDRoughingEligibilityGridStepMm(operation);
@@ -65,7 +67,7 @@ export function buildThreeDRoughingPipeline(args:{
 
   for(const cutZ of schedule.levels){
     const eligibility=buildThreeDRoughingLevelEligibility(
-      target,cutZ,operation.tool.diameterMm/2,operation.finishAllowanceMm,eligibilityGridStepMm,
+      target,partSafety,cutZ,operation.tool.diameterMm/2,operation.finishAllowanceMm,eligibilityGridStepMm,
     );
     warnings.push(...eligibility.warnings);
     if(!eligibility.valid){
@@ -81,7 +83,7 @@ export function buildThreeDRoughingPipeline(args:{
     }
 
     const safe=buildThreeDRoughingSafeChains(
-      target,connectivity,operation.tool.diameterMm/2,operation.finishAllowanceMm,segmentValidationStepMm,
+      target,partSafety,connectivity,operation.tool.diameterMm/2,operation.finishAllowanceMm,segmentValidationStepMm,
     );
     warnings.push(...safe.warnings);
     if(!safe.valid){

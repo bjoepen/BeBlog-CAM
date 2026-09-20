@@ -7,7 +7,7 @@ function requireText(source,text,label){
 
 const eligibility=read('src/lib/threeDRoughingLevelEligibility.ts');
 
-requireText(eligibility,"endMillRoughingSafetyAt(target,x,y,cutterRadiusMm,finishAllowanceMm)","A4 must delegate cutter safety to A3");
+requireText(eligibility,"endMillRoughingSafetyAt(target,partSafety,x,y,cutterRadiusMm,finishAllowanceMm)","A4 must delegate cutter safety to A3");
 requireText(eligibility,"state:'unresolved'","unresolved samples must remain explicit and fail-closed");
 requireText(eligibility,"cutZ+EPS>=safety.safety.safeZ","eligibility must compare query Z against A3 safeZ");
 requireText(eligibility,"This function deliberately creates no regions, chains, toolpaths or motions.","A4 boundary comment missing");
