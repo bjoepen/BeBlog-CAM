@@ -83,6 +83,8 @@ jobs:
         run: pnpm check:008c1
       - name: 3D roughing level eligibility contract
         run: pnpm check:008h-a4
+      - name: 3D roughing material connectivity contract
+        run: pnpm check:008h-a5
       - name: Frontend build
         run: pnpm build
       - name: Rust check
