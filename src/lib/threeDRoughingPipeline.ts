@@ -58,7 +58,7 @@ export function buildThreeDRoughingPipeline(args:{
   warnings.push(...schedule.warnings);
 
   if(errors.length)return{
-    ok:false,toolpath:null,scheduledLevelCount:reachabilitySchedule.levels.length,cuttingLevelCount:0,
+    ok:false,toolpath:null,scheduledLevelCount:schedule.levels.length,cuttingLevelCount:0,
     skippedEmptyLevelCount:0,runCount:0,eligibilityGridStepMm,segmentValidationStepMm,
     errors:[...new Set(errors)],warnings:[...new Set(warnings)],
   };
