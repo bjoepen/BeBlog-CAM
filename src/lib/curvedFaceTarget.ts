@@ -7,6 +7,9 @@ export type CurvedFaceTriangle={
   c:P3;
 };
 
+type ProjectedBoundaryEdge={a:P3;b:P3};
+type VerticalBoundaryCandidate={faceId:number;triangle:CurvedFaceTriangle};
+
 type CurvedFaceSpatialIndex={
   minX:number;
   minY:number;
@@ -31,6 +34,46 @@ const EPS=1e-8;
 
 function area2(a:P3,b:P3,c:P3){
   return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+}
+
+function projectedPointDistance(a:P3,b:P3){return Math.hypot(a.x-b.x,a.y-b.y);}
+function projectedPointOnSegment(point:P3,edge:ProjectedBoundaryEdge,tolerance:number){
+  const dx=edge.b.x-edge.a.x,dy=edge.b.y-edge.a.y;
+  const length2=dx*dx+dy*dy;
+  if(length2<=EPS*EPS)return projectedPointDistance(point,edge.a)<=tolerance;
+  const t=((point.x-edge.a.x)*dx+(point.y-edge.a.y)*dy)/length2;
+  if(t<-tolerance||t>1+tolerance)return false;
+  const q={x:edge.a.x+t*dx,y:edge.a.y+t*dy,z:0};
+  return Math.hypot(point.x-q.x,point.y-q.y)<=tolerance;
+}
+
+function edgeKey(a:P3,b:P3,tolerance:number){
+  const pointKey=(p:P3)=>`${Math.round(p.x/tolerance)}:${Math.round(p.y/tolerance)}`;
+  const ka=pointKey(a),kb=pointKey(b);
+  return ka<kb?`${ka}|${kb}`:`${kb}|${ka}`;
+}
+
+function classifyProjectedBoundary(triangles:CurvedFaceTriangle[]){
+  const tolerance=1e-7;
+  const edges=new Map<string,{edge:ProjectedBoundaryEdge;count:number}>();
+  for(const triangle of triangles){
+    for(const [a,b] of [[triangle.a,triangle.b],[triangle.b,triangle.c],[triangle.c,triangle.a]] as [P3,P3][]){
+      if(projectedPointDistance(a,b)<=tolerance)continue;
+      const key=edgeKey(a,b,tolerance),entry=edges.get(key);
+      if(entry)entry.count++;
+      else edges.set(key,{edge:{a,b},count:1});
+    }
+  }
+  return [...edges.values()].filter(entry=>entry.count===1).map(entry=>entry.edge);
+}
+
+function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
+  const tolerance=1e-6;
+  const points=[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c];
+  // A vertical/XY-degenerate triangle contributes only a projected segment or point.
+  // Every projected vertex must be covered by the already proven outer boundary of
+  // regular height-field triangles. Otherwise the degeneration is internal/unproven.
+  return points.every(point=>boundaryEdges.some(edge=>projectedPointOnSegment(point,edge,tolerance)));
 }
 
 function buildSpatialIndex(triangles:CurvedFaceTriangle[],bounds:NonNullable<CurvedFaceTarget['bounds']>):CurvedFaceSpatialIndex{
@@ -143,17 +186,26 @@ export function buildCurvedFaceTarget(
   }
 
   const triangles:CurvedFaceTriangle[]=[];
+  const verticalBoundaryCandidates:VerticalBoundaryCandidate[]=[];
   for(let i=0;i+2<partTriangles.length;i+=3){
     const faceId=displayFaceIds[Math.floor(i/3)];
     if(!selected.has(faceId))continue;
     const a=partTriangles[i],b=partTriangles[i+1],c=partTriangles[i+2];
 
-    // For a height field z(x,y), each projected triangle must have non-zero XY area.
+    // Regular triangles define z(x,y). XY-degenerate triangles cannot define a
+    // height-field patch themselves; retain them for an explicit outer-boundary proof.
     if(Math.abs(area2(a,b,c))<=EPS){
-      errors.push(`Ausgewählte Fläche ${faceId} enthält eine vertikale oder XY-degenerierte Dreiecksprojektion.`);
+      verticalBoundaryCandidates.push({faceId,triangle:{a,b,c}});
       continue;
     }
     triangles.push({a,b,c});
+  }
+
+  const boundaryEdges=classifyProjectedBoundary(triangles);
+  for(const candidate of verticalBoundaryCandidates){
+    if(!candidateOnProjectedBoundary(candidate,boundaryEdges)){
+      errors.push(`Ausgewählte Fläche ${candidate.faceId}: vertikale oder XY-degenerierte Dreiecksprojektion liegt nicht nachweisbar auf der äußeren XY-Boundary.`);
+    }
   }
 
   if(!triangles.length&&!errors.length){
