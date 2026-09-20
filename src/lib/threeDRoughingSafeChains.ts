@@ -1,4 +1,5 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
+import type { PartSafetySurface } from './partSafetySurface';
 import { endMillRoughingSafetyAt } from './endMillRoughingSafety';
 import type {
   ThreeDRoughingEligibilitySample,
@@ -26,6 +27,7 @@ const EPS=1e-7;
 
 function segmentIsSafe(
   target:CurvedFaceTarget,
+  partSafety:PartSafetySurface,
   from:ThreeDRoughingEligibilitySample,
   to:ThreeDRoughingEligibilitySample,
   cutterRadiusMm:number,
@@ -46,7 +48,7 @@ function segmentIsSafe(
   for(let i=0;i<=steps;i++){
     const t=i/steps;
     const x=from.x+dx*t,y=from.y+dy*t;
-    const safety=endMillRoughingSafetyAt(target,x,y,cutterRadiusMm,finishAllowanceMm);
+    const safety=endMillRoughingSafetyAt(target,partSafety,x,y,cutterRadiusMm,finishAllowanceMm);
     if(!safety.valid||!safety.safety||from.cutZ+EPS<safety.safety.safeZ)return false;
   }
   return true;
@@ -62,6 +64,7 @@ function segmentIsSafe(
  */
 export function buildThreeDRoughingSafeChains(
   target:CurvedFaceTarget,
+  partSafety:PartSafetySurface,
   connectivity:ThreeDRoughingMaterialConnectivity,
   cutterRadiusMm:number,
   finishAllowanceMm:number,
@@ -100,7 +103,7 @@ export function buildThreeDRoughingSafeChains(
 
       for(const next of candidates){
         if(!next)continue;
-        if(segmentIsSafe(target,sample,next,cutterRadiusMm,finishAllowanceMm,validationStepMm)){
+        if(segmentIsSafe(target,partSafety,sample,next,cutterRadiusMm,finishAllowanceMm,validationStepMm)){
           chains.push({componentId:component.id,cutZ:component.cutZ,samples:[sample,next]});
         }else{
           rejectedSegmentCount++;
