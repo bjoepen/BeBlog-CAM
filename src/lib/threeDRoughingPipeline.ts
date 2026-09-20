@@ -83,7 +83,7 @@ export function buildThreeDRoughingPipeline(args:{
     }
 
     const safe=buildThreeDRoughingSafeChains(
-      target,partSafety,connectivity,operation.tool.diameterMm/2,operation.finishAllowanceMm,segmentValidationStepMm,
+      target,partSafety,connectivity,operation.tool.diameterMm/2,operation.finishAllowanceMm,segmentValidationStepMm,operation.direction??'x',
     );
     warnings.push(...safe.warnings);
     if(!safe.valid){

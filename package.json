@@ -86,7 +86,8 @@
     "check:008h-a11": "node scripts/check-008h-a11-manufacturing-release.mjs",
     "check:008h-a12": "node scripts/check-008h-a12-editing-integration.mjs",
     "check:008h-a13": "node scripts/check-008h-a13-coordinate-space.mjs",
-    "check:008h-a14": "node scripts/check-008h-a14-part-aware-safety.mjs"
+    "check:008h-a14": "node scripts/check-008h-a14-part-aware-safety.mjs",
+    "check:008h-a15": "node scripts/check-008h-a15-direction-eligibility-domain.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

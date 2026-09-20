@@ -9,6 +9,7 @@ const material=read('src/lib/threeDRoughingMaterialConnectivity.ts');
 
 requireText(material,"sample.state==='removable'","A5 may group only A4 REMOVABLE samples");
 requireText(material,'const neighbours=[',"A5 connectivity must be explicit");
+requireText(material,"OUTSIDE_TARGET-Sample","OUTSIDE_TARGET must remain outside the machining domain");
 requireText(material,"UNRESOLVED-Sample","UNRESOLVED must remain a hard material barrier");
 requireText(material,'No interpolation, region polygons,',"A5 non-manufacturing boundary comment missing");
 

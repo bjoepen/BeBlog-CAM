@@ -10,6 +10,7 @@ const chains=read('src/lib/threeDRoughingSafeChains.ts');
 requireText(chains,'endMillRoughingSafetyAt(target,partSafety,x,y,cutterRadiusMm,finishAllowanceMm)',"every candidate edge must delegate cutter safety to A3");
 requireText(chains,"from.cutZ+EPS<safety.safety.safeZ","intermediate segment samples must respect A3 safeZ");
 requireText(chains,'immediate orthogonal',"A6 must be limited to immediate orthogonal A5 edges");
+requireText(chains,"direction==='x'","A6 strategy must honor the selected X/Y roughing direction");
 requireText(chains,'samples:[sample,next]',"A6 must expose minimal proven edges, not invent path ordering");
 requireText(chains,'creates no CanonicalToolpath',"A6 non-manufacturing boundary comment missing");
 

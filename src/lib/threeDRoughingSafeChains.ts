@@ -69,6 +69,7 @@ export function buildThreeDRoughingSafeChains(
   cutterRadiusMm:number,
   finishAllowanceMm:number,
   validationStepMm:number,
+  direction:'x'|'y'='x',
 ):ThreeDRoughingSafeChains{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -96,10 +97,9 @@ export function buildThreeDRoughingSafeChains(
     for(const sample of component.samples){
       const ix=xs.findIndex(x=>Math.abs(x-sample.x)<=EPS);
       const iy=ys.findIndex(y=>Math.abs(y-sample.y)<=EPS);
-      const candidates=[
-        ix+1<xs.length?byKey.get(`${xs[ix+1].toPrecision(15)}|${sample.y.toPrecision(15)}`):undefined,
-        iy+1<ys.length?byKey.get(`${sample.x.toPrecision(15)}|${ys[iy+1].toPrecision(15)}`):undefined,
-      ];
+      const candidates=direction==='x'
+        ?[ix+1<xs.length?byKey.get(`${xs[ix+1].toPrecision(15)}|${sample.y.toPrecision(15)}`):undefined]
+        :[iy+1<ys.length?byKey.get(`${sample.x.toPrecision(15)}|${ys[iy+1].toPrecision(15)}`):undefined];
 
       for(const next of candidates){
         if(!next)continue;

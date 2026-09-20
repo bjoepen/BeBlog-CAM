@@ -16,6 +16,7 @@ for(const stage of [
   'assembleThreeDRoughingCanonicalLevels',
 ])requireText(a10,stage,`missing approved orchestration stage ${stage}`);
 
+requireText(a10,"operation.direction??'x'",'legacy 3D roughing operations must default deterministically to X direction');
 requireText(a10,'if(!safe.chains.length)','valid empty levels must be skipped before A7');
 requireText(a10,'if(!canonicalLevels.length)','all-empty schedules must not manufacture a toolpath');
 requireText(a10,'toolpath:null','all-empty result must remain non-manufacturing');
