@@ -103,6 +103,8 @@ jobs:
         run: pnpm check:008h-a13
       - name: 3D roughing part-aware cutter safety contract
         run: pnpm check:008h-a14
+      - name: 3D roughing direction and eligibility-domain contract
+        run: pnpm check:008h-a15
       - name: Frontend build
         run: pnpm build
       - name: Rust check
