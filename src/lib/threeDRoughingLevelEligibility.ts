@@ -9,6 +9,7 @@ export type ThreeDRoughingEligibilitySample={
   y:number;
   cutZ:number;
   safeZ:number|null;
+  targetZ:number|null;
   state:ThreeDRoughingEligibility;
 };
 
@@ -67,25 +68,33 @@ export function buildThreeDRoughingLevelEligibility(
       const safety=endMillRoughingSafetyAt(target,partSafety,x,y,cutterRadiusMm,finishAllowanceMm);
       if(safety.status==='outside-target'){
         outsideTargetCount++;
-        samples.push({x,y,cutZ,safeZ:null,state:'outside-target'});
+        samples.push({x,y,cutZ,safeZ:null,targetZ:null,state:'outside-target'});
         continue;
       }
       if(!safety.valid||!safety.safety){
         unresolvedCount++;
-        samples.push({x,y,cutZ,safeZ:null,state:'unresolved'});
+        samples.push({x,y,cutZ,safeZ:null,targetZ:null,state:'unresolved'});
         continue;
       }
 
       if(cutZ+EPS>=safety.safety.safeZ){
         removableCount++;
-        samples.push({x,y,cutZ,safeZ:safety.safety.safeZ,state:'removable'});
+        samples.push({x,y,cutZ,safeZ:safety.safety.safeZ,targetZ:safety.safety.targetZ,state:'removable'});
       }else{
         protectedCount++;
-        samples.push({x,y,cutZ,safeZ:safety.safety.safeZ,state:'protected'});
+        samples.push({x,y,cutZ,safeZ:safety.safety.safeZ,targetZ:safety.safety.targetZ,state:'protected'});
       }
     }
   }
 
+  const targetSamples=samples.filter(sample=>sample.targetZ!==null&&sample.safeZ!==null);
+  if(targetSamples.length){
+    const minTargetZ=Math.min(...targetSamples.map(sample=>sample.targetZ!));
+    const maxTargetZ=Math.max(...targetSamples.map(sample=>sample.targetZ!));
+    const minReachableZ=Math.min(...targetSamples.map(sample=>sample.safeZ!));
+    const maxReachableZ=Math.max(...targetSamples.map(sample=>sample.safeZ!));
+    warnings.push(`Reachability Z ${cutZ.toFixed(3)}: TARGET ${minTargetZ.toFixed(3)}…${maxTargetZ.toFixed(3)} · FLOOR ${minReachableZ.toFixed(3)}…${maxReachableZ.toFixed(3)}.`);
+  }
   warnings.push(`Eligibility Z ${cutZ.toFixed(3)}: REMOVABLE ${removableCount} · PROTECTED ${protectedCount} · OUTSIDE_TARGET ${outsideTargetCount} · UNRESOLVED ${unresolvedCount}.`);
   if(unresolvedCount)warnings.push(`${unresolvedCount} Eligibility-Sample${unresolvedCount===1?' ist':'s sind'} fail-closed UNRESOLVED.`);
 
