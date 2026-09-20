@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ZLevelRoughingOperation, SurfaceFinishingOperation, ContourOperation, PocketOperation, DrillOperation } from './types';
+  import type { Curve2, ImportSummary, Point2, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, ZLevelRoughingOperation, ThreeDRoughingOperation, SurfaceFinishingOperation, ContourOperation, PocketOperation, DrillOperation } from './types';
   import { projectPoint, projectTriangles, type P2, type P3, type View } from './stepView';
   import { orientPoint3 } from './partOrientation';
   import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
@@ -35,6 +35,7 @@
   export let preflightStepToolpaths:CanonicalToolpath[]=[];
   export let selectedDrillCurveIds:number[]=[];
   export let roughingOperation:ZLevelRoughingOperation|null=null;
+  export let threeDRoughingOperation:ThreeDRoughingOperation|null=null;
   export let surfaceFinishingOperation:SurfaceFinishingOperation|null=null;
   export let selectedFaceIds:number[]=[];
   export let onSelectedFaceIdsChange:(faceIds:number[])=>void=()=>{};
@@ -60,8 +61,9 @@
   let showBallnoseContactProof=false;
   $: dxfEditView.set({mode:drillViewMode,yawDeg:drillYawDeg,tiltDeg:drillTiltDeg});
   $: faceTargetEditing=!!roughingOperation&&(roughingOperation.roughingMode??'face-target')==='face-target';
+  $: threeDRoughingEditing=!!threeDRoughingOperation;
   $: surfaceFinishingEditing=!!surfaceFinishingOperation;
-  $: selectableSurfaceEditing=faceTargetEditing||surfaceFinishingEditing;
+  $: selectableSurfaceEditing=faceTargetEditing||threeDRoughingEditing||surfaceFinishingEditing;
   $: stepFeatureSourceResult=summary.kind==='step'?buildOrientedStepManufacturingFeatureSource(summary,orientation):null;
   $: stepHoleCandidates=stepFeatureSourceResult?.ok?recognizeStepHoles(stepFeatureSourceResult.source).holes:[];
   $: stepContourSelection=stepSelectionOperation?.kind==='contour'?buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation:stepSelectionOperation}):null;
@@ -203,7 +205,7 @@
   function reset(){yaw=-.72;pitch=.48;drillYawDeg=-12;drillTiltDeg=38;zoom=1;viewX=viewY=0;queueMicrotask(applyViewBox)}
   function stepFaceSelectable(faceId:number){if(!stepSelectionOperation)return false;if(stepSelectionOperation.kind==='contour')return !!stepContourSelection?.eligibleSideFaceIds.includes(faceId);if(stepSelectionOperation.kind==='pocket')return !!stepPocketSelection?.candidates.some(c=>c.faceId===faceId);if(stepSelectionOperation.kind==='drill')return stepHoleCandidates.some(h=>h.faceIds.includes(faceId));return false;}
   function stepFaceSelected(faceId:number){if(!stepSelectionOperation)return false;if(stepSelectionOperation.kind==='contour')return (stepSelectionOperation.stepContourFaceIds??[]).includes(faceId);if(stepSelectionOperation.kind==='pocket')return stepSelectionOperation.stepFaceId===faceId;if(stepSelectionOperation.kind==='drill')return stepHoleCandidates.some(h=>h.faceIds.includes(faceId)&&(stepSelectionOperation.stepHoleFeatureIds??[]).includes(h.featureId));return false;}
-  function toggleFace(faceId:number){if(dragMoved||!s3?.facePickingAvailable)return;if(stepSelectionOperation&&stepFaceSelectable(faceId)){if(stepSelectionOperation.kind==='contour'){const set=new Set(stepSelectionOperation.stepContourFaceIds??[]);set.has(faceId)?set.delete(faceId):set.add(faceId);onStepContourChange({topology:'open',stepContourFaceIds:[...set].sort((a,b)=>a-b),stepWireId:null,excludedSegmentIds:[]});return;}if(stepSelectionOperation.kind==='pocket'){onStepFaceIdChange(stepSelectionOperation.stepFaceId===faceId?null:faceId);return;}if(stepSelectionOperation.kind==='drill'){const hole=stepHoleCandidates.find(h=>h.faceIds.includes(faceId));if(!hole)return;const set=new Set(stepSelectionOperation.stepHoleFeatureIds??[]);set.has(hole.featureId)?set.delete(hole.featureId):set.add(hole.featureId);onStepHoleFeatureIdsChange([...set].sort());return;}}if(!selectableSurfaceEditing||(!surfaceFinishingEditing&&!showZLevels))return;const next=(selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId]).sort((a,b)=>a-b);onSelectedFaceIdsChange(next)}
+  function toggleFace(faceId:number){if(dragMoved||!s3?.facePickingAvailable)return;if(stepSelectionOperation&&stepFaceSelectable(faceId)){if(stepSelectionOperation.kind==='contour'){const set=new Set(stepSelectionOperation.stepContourFaceIds??[]);set.has(faceId)?set.delete(faceId):set.add(faceId);onStepContourChange({topology:'open',stepContourFaceIds:[...set].sort((a,b)=>a-b),stepWireId:null,excludedSegmentIds:[]});return;}if(stepSelectionOperation.kind==='pocket'){onStepFaceIdChange(stepSelectionOperation.stepFaceId===faceId?null:faceId);return;}if(stepSelectionOperation.kind==='drill'){const hole=stepHoleCandidates.find(h=>h.faceIds.includes(faceId));if(!hole)return;const set=new Set(stepSelectionOperation.stepHoleFeatureIds??[]);set.has(hole.featureId)?set.delete(hole.featureId):set.add(hole.featureId);onStepHoleFeatureIdsChange([...set].sort());return;}}if(!selectableSurfaceEditing||(!threeDRoughingEditing&&!surfaceFinishingEditing&&!showZLevels))return;const next=(selectedFaceIds.includes(faceId)?selectedFaceIds.filter(id=>id!==faceId):[...selectedFaceIds,faceId]).sort((a,b)=>a-b);onSelectedFaceIdsChange(next)}
   function selectedStepContourTarget(){if(stepSelectionOperation?.kind!=='contour'||!stepContourSelection||stepSelectionOperation.stepWireId==null)return null;return stepContourSelection.candidates.find(candidate=>candidate.wireId===stepSelectionOperation!.stepWireId)??null;}
   function stepEdgeExcluded(edgeId:number){return stepSelectionOperation?.kind==='contour'&&stepSelectionOperation.topology==='open'&&(stepSelectionOperation.excludedSegmentIds??[]).includes(edgeId);}
   function stepEdgeSelectable(edgeId:number){if(stepSelectionOperation?.kind!=='contour'||!stepContourSelection)return false;if(stepSelectionOperation.topology==='open')return stepContourSelection.selectedEdgeIds.includes(edgeId);const selected=selectedStepContourTarget();if(selected)return selected.edgeIds.includes(edgeId);const matches=stepContourSelection.candidates.filter(candidate=>candidate.edgeIds.includes(edgeId));return matches.length===1;}
