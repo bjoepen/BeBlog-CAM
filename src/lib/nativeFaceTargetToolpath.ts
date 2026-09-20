@@ -37,6 +37,16 @@ function regionsFromNative(native:NativeZLevelRegionSet,stock:StockDefinition):R
   }));
 }
 
+function targetLoopsByZ(native:NativeZLevelRegionSet){
+  return new Map(native.regions.map(region=>[
+    region.z.toFixed(6),
+    region.tzIslands.flatMap<PlanarRasterLoop>(island=>[
+      {points:island.outer.map(point=>({...point}))},
+      ...island.holes.map(points=>({points:points.map(point=>({...point}))})),
+    ]),
+  ]));
+}
+
 function cutterCenterLoopsByZ(native:NativeZLevelRegionSet){
   return new Map(native.regions.map(region=>[
     region.z.toFixed(6),
@@ -73,6 +83,7 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
 
   const regions=regionsFromNative(native,stock);
   const cutterCenterByZ=cutterCenterLoopsByZ(native);
+  const targetByZ=targetLoopsByZ(native);
   const build=(direction:'x'|'y')=>buildModelRoughingCanonicalToolpath(
     regions,
     operation.tool.diameterMm,
@@ -84,6 +95,7 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
     undefined,
     region=>cutterCenterByZ.get(region.z.toFixed(6)),
     true,
+    region=>targetByZ.get(region.z.toFixed(6)),
   );
   const requested=operation.rasterDirection??'auto';
   const candidates=requested==='auto'?[build('x'),build('y')]:[build(requested)];
@@ -100,6 +112,6 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
   });
   const chosen=valid[0];
   warnings.push(...chosen.warnings);
-  warnings.push('008H-N5: Native Tz → Kontakt-Dilatation → Cz → Az; Raster übernimmt ausschließlich die fertige Fräsermittelpunktregion.');
+  warnings.push('008H-N5: Tz bestimmt die erforderlichen Rasterlagen; Az begrenzt die sicheren Fräsermittelpunkte. Werkzeugradius erzeugt keine zusätzlichen Ziel-Rasterlagen.');
   return{ok:true,toolpath:chosen.toolpath,errors:[],warnings:[...new Set(warnings)]};
 }
