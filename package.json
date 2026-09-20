@@ -80,7 +80,8 @@
     "check:008h-a5": "node scripts/check-008h-a5-material-connectivity.mjs",
     "check:008h-a6": "node scripts/check-008h-a6-safe-roughing-chains.mjs",
     "check:008h-a7": "node scripts/check-008h-a7-canonical-safe-edges.mjs",
-    "check:008h-a8": "node scripts/check-008h-a8-z-level-schedule.mjs"
+    "check:008h-a8": "node scripts/check-008h-a8-z-level-schedule.mjs",
+    "check:008h-a9": "node scripts/check-008h-a9-multilevel-canonical.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
