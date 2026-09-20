@@ -8,6 +8,7 @@ const operation=read('src/lib/threeDRoughingOperation.ts');
 const target=read('src/lib/curvedFaceTarget.ts');
 const schedule=read('src/lib/threeDRoughingZLevelSchedule.ts');
 const safety=read('src/lib/endMillRoughingSafety.ts');
+const reachability=read('src/lib/flatEndCutterReachability.ts');
 
 requireText(operation,"z:wcs.z==='top'?stock.thickness:0",'3D roughing must resolve the same stock/WCS Z origin as 3D finishing');
 requireText(operation,'translateCurvedFaceTarget(target,{x:-origin.x,y:-origin.y,z:-origin.z})','Surface Truth must be translated as a whole into WCS');
@@ -15,9 +16,10 @@ requireText(operation,'buildThreeDRoughingPipeline({target:wcsTarget,partSafety,
 requireText(target,'export function translateCurvedFaceTarget(','CurvedFaceTarget needs an explicit rigid translation helper');
 requireText(target,'spatialIndex:buildSpatialIndex(triangles,bounds)','translated Surface Truth must rebuild its spatial index');
 requireText(schedule,'const topZ=0','A8 must keep WCS stock top at Z=0');
-requireText(safety,'safeZ:surfaceMaxZ+finishAllowanceMm','A3 safety must remain in the coordinate space of its target');
+requireText(safety,'safeZ:reachability.reachableFloorZ','A3 safety must consume A16 reachability without a coordinate conversion');
+requireText(reachability,'const reachableFloorZ=protectedMaxZ+finishAllowanceMm','A16 reachable floor must remain in the coordinate space of its WCS-normalized inputs');
 
-for(const source of [schedule,safety]){
+for(const source of [schedule,safety,reachability]){
   forbidText(source,'stock.thickness-','A13 must not introduce an ad-hoc local Z correction inside A8/A3');
 }
 for(const forbidden of ['RoughingRegion','buildPlanarRasterChains','ballnoseContactAt']){
