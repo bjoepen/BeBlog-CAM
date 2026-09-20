@@ -87,6 +87,8 @@ jobs:
         run: pnpm check:008h-a5
       - name: 3D roughing safe chains contract
         run: pnpm check:008h-a6
+      - name: 3D roughing canonical safe-edge contract
+        run: pnpm check:008h-a7
       - name: Frontend build
         run: pnpm build
       - name: Rust check
