@@ -13,7 +13,8 @@ need(a17,'flatEndCutterReachabilityAt(','A17 must consume A16 reachability truth
 need(a17,'if(reach.reachableFloorZ>topZ+EPS)continue','levels above stock top must not be proposed');
 need(a17,'reachableFloors.push(Math.max(bottomZ,reach.reachableFloorZ))','A17 must not schedule below the A8 bottom');
 need(a17,'while(z-operation.stepDownMm>floor+EPS)','candidate descent must respect maximum step-down');
-need(a17,'candidates.add(key(floor))','reachable floor must be eligible as a constant candidate level');
+need(a17,'conservativeLevelAtOrAbove(floor,topZ,quantumMm)','reachable floors may be conservatively consolidated before becoming constant candidate levels');
+need(a17,'candidates.add(key(consolidatedFloor))','consolidated reachable floor must be eligible as a constant candidate level');
 need(a17,'.sort((a,b)=>b-a)','candidate levels must be strictly descending after deduplication');
 need(pipeline,'buildThreeDRoughingReachabilityLevelSchedule({','A10 must orchestrate A17 after A8');
 need(pipeline,'for(const cutZ of reachabilitySchedule.levels)','every A17 candidate must enter the normal A4 pipeline');
