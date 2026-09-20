@@ -38,6 +38,11 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
     }
     return buildDrillCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
   }
+  if(operation.kind==='3d-roughing'){
+    // 008H-A1 establishes the operation boundary only. No manufacturing
+    // toolpath is emitted until the dedicated 3D roughing kernel is accepted.
+    return null;
+  }
   if(operation.kind==='surface-finishing'){
     const state=buildSurfaceFinishingOperationState({summary,stock,placement,orientation,wcs,operation});
     return state.ok?state.toolpath:null;
