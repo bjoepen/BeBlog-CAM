@@ -67,13 +67,60 @@ function classifyProjectedBoundary(triangles:CurvedFaceTriangle[]){
   return [...edges.values()].filter(entry=>entry.count===1).map(entry=>entry.edge);
 }
 
+function projectedCandidateExtent(candidate:VerticalBoundaryCandidate,tolerance:number):ProjectedBoundaryEdge{
+  const points=[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c];
+  let a=points[0],b=points[0],maxDistance=-1;
+  for(let i=0;i<points.length;i++)for(let j=i+1;j<points.length;j++){
+    const distance=projectedPointDistance(points[i],points[j]);
+    if(distance>maxDistance){maxDistance=distance;a=points[i];b=points[j];}
+  }
+  return maxDistance<=tolerance?{a,b:a}:{a,b};
+}
+
+function segmentCoveredByProjectedBoundary(segment:ProjectedBoundaryEdge,boundaryEdges:ProjectedBoundaryEdge[],tolerance:number){
+  const length=projectedPointDistance(segment.a,segment.b);
+  if(length<=tolerance)return boundaryEdges.some(edge=>projectedPointOnSegment(segment.a,edge,tolerance));
+
+  // Build a deterministic partition from all candidate/boundary intersections
+  // along the candidate line. Every open interval must be covered by at least
+  // one collinear outer-boundary edge; endpoint-only coincidence is insufficient.
+  const dx=segment.b.x-segment.a.x,dy=segment.b.y-segment.a.y;
+  const length2=dx*dx+dy*dy;
+  const parameter=(p:P3)=>((p.x-segment.a.x)*dx+(p.y-segment.a.y)*dy)/length2;
+  const cross=(p:P3)=>Math.abs(dx*(p.y-segment.a.y)-dy*(p.x-segment.a.x))/length;
+  const cuts=[0,1];
+
+  for(const edge of boundaryEdges){
+    if(cross(edge.a)>tolerance||cross(edge.b)>tolerance)continue;
+    const ta=parameter(edge.a),tb=parameter(edge.b);
+    const lo=Math.max(0,Math.min(ta,tb)),hi=Math.min(1,Math.max(ta,tb));
+    if(hi<lo-tolerance/Math.max(length,tolerance))continue;
+    cuts.push(Math.max(0,Math.min(1,lo)),Math.max(0,Math.min(1,hi)));
+  }
+
+  cuts.sort((a,b)=>a-b);
+  const unique=cuts.filter((value,index)=>index===0||Math.abs(value-cuts[index-1])>1e-9);
+  for(let i=1;i<unique.length;i++){
+    const lo=unique[i-1],hi=unique[i];
+    if(hi-lo<=1e-9)continue;
+    const t=(lo+hi)/2;
+    const point:P3={x:segment.a.x+dx*t,y:segment.a.y+dy*t,z:0};
+    if(!boundaryEdges.some(edge=>projectedPointOnSegment(point,edge,tolerance)))return false;
+  }
+  return projectedPointOnSegment(segment.a,segment,tolerance)
+    && projectedPointOnSegment(segment.b,segment,tolerance)
+    && boundaryEdges.some(edge=>projectedPointOnSegment(segment.a,edge,tolerance))
+    && boundaryEdges.some(edge=>projectedPointOnSegment(segment.b,edge,tolerance));
+}
+
 function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
   const tolerance=1e-6;
-  const points=[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c];
+  const extent=projectedCandidateExtent(candidate,tolerance);
   // A vertical/XY-degenerate triangle contributes only a projected segment or point.
-  // Every projected vertex must be covered by the already proven outer boundary of
-  // regular height-field triangles. Otherwise the degeneration is internal/unproven.
-  return points.every(point=>boundaryEdges.some(edge=>projectedPointOnSegment(point,edge,tolerance)));
+  // The complete projected extent, not merely its vertices, must be covered by the
+  // proven outer boundary. This prevents a chord between separate boundary edges
+  // from being accepted as a legitimate vertical boundary.
+  return segmentCoveredByProjectedBoundary(extent,boundaryEdges,tolerance);
 }
 
 function buildSpatialIndex(triangles:CurvedFaceTriangle[],bounds:NonNullable<CurvedFaceTarget['bounds']>):CurvedFaceSpatialIndex{
