@@ -1,5 +1,5 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
-import { buildCurvedFaceTarget } from './curvedFaceTarget';
+import { translateCurvedFaceTarget } from './curvedFaceTarget';
 import { buildThreeDSurfaceTargetState } from './threeDSurfaceTargetState';
 import type { CanonicalToolpath } from './canonicalToolpath';
 import type { P3 } from './stepView';
@@ -18,15 +18,7 @@ function wcsOrigin(stock:StockDefinition,wcs:WorkCoordinateSystem):P3{
 }
 
 function targetInWcs(target:CurvedFaceTarget,origin:P3):CurvedFaceTarget{
-  const triangles=target.triangles.flatMap(triangle=>[
-    {x:triangle.a.x-origin.x,y:triangle.a.y-origin.y,z:triangle.a.z-origin.z},
-    {x:triangle.b.x-origin.x,y:triangle.b.y-origin.y,z:triangle.b.z-origin.z},
-    {x:triangle.c.x-origin.x,y:triangle.c.y-origin.y,z:triangle.c.z-origin.z},
-  ]);
-  const faceIds=target.triangles.flatMap((_,index)=>[target.faceIds[index]??target.faceIds[0]??-1]);
-  // Rebuild through the shared Surface Truth constructor so bounds and spatial
-  // index are transformed together; never mutate only target.bounds.
-  return buildCurvedFaceTarget(triangles,faceIds,target.faceIds);
+  return translateCurvedFaceTarget(target,{x:-origin.x,y:-origin.y,z:-origin.z});
 }
 
 export type ThreeDRoughingOperationState={
