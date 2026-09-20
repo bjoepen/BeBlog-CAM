@@ -121,8 +121,10 @@ pub struct NativeZLevelRegionIsland {
 pub struct NativeZLevelRegion {
     pub z: f64,
     pub valid: bool,
-    #[serde(default)] pub scope_islands: Vec<NativeZLevelRegionIsland>,
-    #[serde(default)] pub safety_islands: Vec<NativeZLevelRegionIsland>,
+    #[serde(default)] pub tz_islands: Vec<NativeZLevelRegionIsland>,
+    #[serde(default)] pub contact_islands: Vec<NativeZLevelRegionIsland>,
+    #[serde(default)] pub cz_islands: Vec<NativeZLevelRegionIsland>,
+    #[serde(default)] pub az_islands: Vec<NativeZLevelRegionIsland>,
     #[serde(default)] pub errors: Vec<String>,
     #[serde(default)] pub warnings: Vec<String>,
 }
@@ -138,7 +140,7 @@ pub struct NativeZLevelRegionSet {
     #[serde(default)] pub warnings: Vec<String>,
 }
 
-pub const NATIVE_ZLEVEL_REGION_CONTRACT_VERSION: &str = "008H-N4-v2";
+pub const NATIVE_ZLEVEL_REGION_CONTRACT_VERSION: &str = "008H-N5-v3";
 pub const NATIVE_FACE_ID_CONTRACT: &str = "zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds";
 
 pub trait BrepBackend {

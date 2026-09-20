@@ -67,7 +67,7 @@ for(const token of [
 for(const token of ['regionPointFilter?', 'regionPointFilter?.(region)']){
   if(!toolpath.includes(token))throw new Error(`008H-L toolpath-region contract missing: ${token}`);
 }
-for(const token of ['PlanarRasterPointFilter','pointFilter?:PlanarRasterPointFilter','safeAt(scopeLoops,safetyLoops,point(primary,rowValue),radius,profile,pointFilter)','buildPlanarRasterStayDownConnector(scopeLoops,from,to,toolDiameterMm,sampleStep,profile,pointFilter,safetyLoops)']){
+for(const token of ['PlanarRasterPointFilter','pointFilter?:PlanarRasterPointFilter','safeAt(scopeLoops,safetyLoops,point(primary,rowValue),radius,profile,pointFilter)','buildPlanarRasterStayDownConnector(scopeLoops,from,to,toolDiameterMm,sampleStep,profile,pointFilter,safetyLoops,clearanceAlreadyApplied)']){
   if(!raster.includes(token))throw new Error(`008H-L raster-region contract missing: ${token}`);
 }
 for(const token of ['ZLevelFaceSegment','sliceFaceSegmentsAtZ','faceId=faceIds[triangleIndex]','triangleNormal','outward:xyLength>EPS']){
@@ -125,7 +125,7 @@ for(const token of [
   'NativeZLevelRegionSet',
   'NativeZLevelRegionIsland',
   'NATIVE_ZLEVEL_REGION_CONTRACT_VERSION',
-  '008H-N4-v2',
+  '008H-N5-v3',
   'NATIVE_FACE_ID_CONTRACT',
   'zero-based TopExp_Explorer(shape, TopAbs_FACE) order',
 ]){
@@ -135,7 +135,7 @@ for(const token of [
   'NativeZLevelRegionRequest',
   'NativeZLevelRegionSet',
   'NativeZLevelRegionIsland',
-  "NATIVE_ZLEVEL_REGION_CONTRACT_VERSION='008H-N4-v2'",
+  "NATIVE_ZLEVEL_REGION_CONTRACT_VERSION='008H-N5-v3'",
   'NATIVE_FACE_ID_CONTRACT',
 ]){
   if(!types.includes(token))throw new Error(`008H-N1 TypeScript contract missing: ${token}`);
@@ -156,13 +156,13 @@ for(const token of [
   'BOPAlgo_Tools::EdgesToWires',
   'BOPAlgo_Tools::WiresToFaces',
   'BRepPrimAPI_MakeBox',
-  'face_target_material_region',
+  'face_sublevel_shadow',
   'transform_shape(source,request)',
   'transform_shape(faces[id],request)',
   'total.PreMultiply(r)',
   'total.PreMultiply(tr)',
-  'OCCT Face-target stage=',
-  'no mixed-dimensional solid subtraction or display triangulation used',
+  'OCCT N5 stage=Tz/',
+  'selected-Face Tz, cutter-contact dilation, complete-solid Cz, Az intersection',
 ]){
   if(!nativeCpp.includes(token))throw new Error(`008H-N2 native geometry kernel missing: ${token}`);
 }
@@ -184,7 +184,7 @@ const diagnosticApp=fs.readFileSync('src/App.svelte','utf8');
 for(const token of [
   'runNativeRegionDiagnostic',
   "invoke<NativeZLevelRegionSet>('build_native_zlevel_regions'",
-  '008H-N2 · Native Region Diagnose',
+  '008H-N5 · Native Region Diagnose',
   'Diagnose aktiv:',
   "canonicalToolpath={activeStep==='Bearbeiten'&&!nativeRegionDiagnostic?activeCanonicalToolpath:null}",
   'nativeRegionDiagnostic={activeStep',
@@ -197,7 +197,7 @@ if(nativeCpp.includes('TopoDS_Shape project_wires_to_plane('))throw new Error('0
 if(nativeCpp.includes('if(surface.GetType()==GeomAbs_Plane)return project_face_wires_to_plane(face,target);'))throw new Error('008H-N2c superseded blanket curved-Face HLR dispatch must not return');
 if(nativeCpp.includes('projected_face_footprint'))throw new Error('008H-N2b forbids rejected sampled Face-footprint projection');
 if(nativeCpp.includes('BRepAlgoAPI_Cut material(inStock.Shape(),fullModel)'))throw new Error('008H-N2b forbids rejected 2D-minus-3D mixed-dimensional Boolean');
-if(!nativeCpp.includes('BRepAlgoAPI_Cut material(selectedInStock.Shape(),above.shape)'))throw new Error('008H-N2b must subtract solid-above planar projection from selected planar projection');
+if(nativeCpp.includes('BRepAlgoAPI_Cut material(selectedInStock.Shape(),above.shape)'))throw new Error('008H-N5 forbids solid-above subtraction from selected-Face Tz');
 const nativeRegionStart=nativeCpp.indexOf('extern "C" char* beblog_occt_build_zlevel_regions');
 const nativeRegionEnd=nativeCpp.indexOf('extern "C" void beblog_occt_free_string',nativeRegionStart);
 if(nativeRegionStart<0||nativeRegionEnd<=nativeRegionStart){
@@ -215,10 +215,10 @@ if(faceIdMentions>1){
   throw new Error('008H-N2 native region builder contains unexpected displayFaceIds usage beyond Face-ID contract metadata');
 }
 
-console.log('PASS 008H native projection contract: FreeCAD-style selected planar projection minus solid-above planar projection is enforced. Rejected sampled footprint and mixed-dimensional 2D-minus-3D Boolean are forbidden; display triangulation remains excluded.');
+console.log('PASS 008H native projection contract: selected-Face sublevel shadow and independent complete-solid safety are enforced; display triangulation remains excluded.');
 
 const nativeProduction=fs.readFileSync('src/lib/nativeFaceTargetToolpath.ts','utf8');
-for(const token of ['buildNativeFaceTargetCanonicalToolpath','regionsFromNative','buildModelRoughingCanonicalToolpath','008H-N4 production boundary']){
+for(const token of ['buildNativeFaceTargetCanonicalToolpath','regionsFromNative','buildModelRoughingCanonicalToolpath','008H-N5 production boundary']){
   if(!nativeProduction.includes(token))throw new Error(`008H-N3 production adapter missing: ${token}`);
 }
 const zLevelState=fs.readFileSync('src/lib/zLevelOperationState.ts','utf8');
@@ -239,11 +239,11 @@ for(const token of ['Z=${region.z.toFixed(3)} mm','region.errors.map']){
 if(!preflight.includes('canonicalOverrideErrors?:Record<string,string[]>')||!preflight.includes('args.canonicalOverrideErrors?.[operation.id]'))throw new Error('008H-N3 preflight must expose concrete native Face-target errors');
 if(!diagnosticApp.includes('canonicalOverrideErrors:nativeFaceTargetErrors'))throw new Error('008H-N3 App must pass concrete native Face-target errors into preflight');
 
-for(const token of ['FaceTargetRegionProbe','failedStage','selectedProjectionFaces','selectedInStockFaces','aboveProjectionFaces','materialFaces','OCCT Face-target stage=']){
+for(const token of ['FaceTargetRegionProbe','failedStage','selectedProjectionFaces','selectedInStockFaces','materialFaces','OCCT N5 stage=Tz/']){
   if(!nativeCpp.includes(token))throw new Error(`008H-N3 native stage diagnostics missing: ${token}`);
 }
 
-for(const token of ['const TopoDS_Shape trimmedBoundary=project_face_wires_to_plane(face,target);','if(!trimmedBoundary.IsNull()&&count_subshapes(trimmedBoundary,TopAbs_FACE)>0)return trimmedBoundary;','case GeomAbs_Cylinder:','case GeomAbs_Cone:','case GeomAbs_Sphere:','return project_face_outline_to_plane(face,target);','projectionDispatch="trimmed-wires-first"']){
+for(const token of ['const TopoDS_Shape trimmedBoundary=project_face_wires_to_plane(face,target);','if(!trimmedBoundary.IsNull()&&count_subshapes(trimmedBoundary,TopAbs_FACE)>0)return trimmedBoundary;','case GeomAbs_Cylinder:','case GeomAbs_Cone:','case GeomAbs_Sphere:','return project_face_outline_to_plane(face,target);','projectionDispatch="selected-face-sublevel"']){
   if(!nativeCpp.includes(token))throw new Error(`008H-N2d trimmed Face boundary / HLR fallback contract missing: ${token}`);
 }
 
@@ -251,21 +251,15 @@ for(const token of ['surfaceType','projectionDispatch','sourceWires','closedSour
   if(!nativeCpp.includes(token))throw new Error(`008H-N2 selected Face projection probe missing: ${token}`);
 }
 
-// 008H-N4: native Face scope and complete-solid cutter safety remain distinct
-// until raster acceptance. Face loops may constrain containment, never clearance.
-for(const token of ['scopeIslands','safetyIslands','toolDiameterMm','finishAllowanceMm'])if(!types.includes(token))throw new Error(`008H-N4 TypeScript wire contract missing: ${token}`);
-for(const token of ['scope_islands','safety_islands','tool_diameter_mm','finish_allowance_mm'])if(!rustOcct.includes(token))throw new Error(`008H-N4 Rust wire contract missing: ${token}`);
-for(const token of ['cutter_safety_region','cutZ-finishAllowance','toolDiameter/2+finishAllowance','stockMargin=2*clearanceRadius','safetySolidAboveProjection']){
-  if(!nativeCpp.includes(token))throw new Error(`008H-N4 native complete-solid safety missing: ${token}`);
+// 008H-N5: Tz is selected-Face-only; native contact dilation and complete-solid
+// Cz produce the final cutter-center Az region before rastering.
+for(const token of ['tzIslands','contactIslands','czIslands','azIslands','toolDiameterMm','finishAllowanceMm'])if(!types.includes(token))throw new Error(`008H-N5 TypeScript wire contract missing: ${token}`);
+for(const token of ['tz_islands','contact_islands','cz_islands','az_islands','tool_diameter_mm','finish_allowance_mm'])if(!rustOcct.includes(token))throw new Error(`008H-N5 Rust wire contract missing: ${token}`);
+for(const token of ['face_sublevel_shadow','BRepAlgoAPI_Common common(selected,lowerBox)','IntCurvesFace_Intersector','tzVerticalRayAmbiguity','offset_planar_region(tzShape,toolDiameter/2)','cutter_safety_region','cutZ-finishAllowance','toolDiameter/2+finishAllowance','stockMargin=2*clearanceRadius','offset_planar_region(safety.material,-clearanceRadius)','BRepAlgoAPI_Common common(contactShape,czShape)']){
+  if(!nativeCpp.includes(token))throw new Error(`008H-N5 native geometry stage missing: ${token}`);
 }
-for(const token of ['pointInEvenOdd(scopeLoops,p)','pointInEvenOdd(safetyLoops,p)','clearanceToBoundary(safetyLoops,p,profile)','const b=bounds(scopeLoops)','const scopeInset=safetyLoops===scopeLoops?radius:0','rowMin+scopeInset','primaryMin+scopeInset']){
-  if(!raster.includes(token))throw new Error(`008H-N4 split scope/safety raster contract missing: ${token}`);
-}
-if(raster.includes('clearanceToBoundary(scopeLoops,p,profile)'))throw new Error('008H-N4 forbids Face-scope boundary cutter-radius erosion');
-for(const token of ['regionSafetyLoops?','const safetyLoops=regionSafetyLoops?.(region)??loops']){
-  if(!toolpath.includes(token))throw new Error(`008H-N4 toolpath safety-loop adapter missing: ${token}`);
-}
-for(const token of ['safetyLoopsByZ','region.scopeIslands','region.safetyIslands','region=>safetyByZ.get(region.z.toFixed(6))']){
-  if(!nativeProduction.includes(token))throw new Error(`008H-N4 native production separation missing: ${token}`);
-}
-if(!diagnosticApp.includes('finishAllowanceMm:Math.max(0,op.finishAllowanceMm),toolDiameterMm:op.tool.diameterMm'))throw new Error('008H-N4 production request must carry physical tool and real finish allowance');
+if(nativeCpp.includes('face_target_material_region('))throw new Error('008H-N5 forbids selectedProjection - solidAboveProjection as Tz');
+for(const token of ['clearanceAlreadyApplied','const radius=clearanceAlreadyApplied?0:toolDiameterMm/2','const scopeInset=clearanceAlreadyApplied?0:','nativeCutterCenterRegion'])if(!(raster+toolpath).includes(token))throw new Error(`008H-N5 pre-clearanced raster contract missing: ${token}`);
+for(const token of ['region.azIslands','cutterCenterLoopsByZ','region=>cutterCenterByZ.get(region.z.toFixed(6))','true,'])if(!nativeProduction.includes(token))throw new Error(`008H-N5 native Az production adapter missing: ${token}`);
+for(const token of ['stage=Tz/','stage=contactDilation','stage=Cz/','stage=Az/intersection'])if(!nativeCpp.includes(token))throw new Error(`008H-N5 stage diagnostic missing: ${token}`);
+if(!diagnosticApp.includes('finishAllowanceMm:Math.max(0,op.finishAllowanceMm),toolDiameterMm:op.tool.diameterMm'))throw new Error('008H-N5 production request must carry physical tool and real finish allowance');

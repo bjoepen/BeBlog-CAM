@@ -25,7 +25,7 @@ function regionsFromNative(native:NativeZLevelRegionSet,stock:StockDefinition):R
     z:region.z,
     valid:region.valid,
     stock:stockRect,
-    islands:region.scopeIslands.map(island=>({
+    islands:region.azIslands.map(island=>({
       outer:island.outer.map(point=>({...point})),
       holes:island.holes.map(hole=>hole.map(point=>({...point}))),
       source:'model-void' as const,
@@ -37,10 +37,10 @@ function regionsFromNative(native:NativeZLevelRegionSet,stock:StockDefinition):R
   }));
 }
 
-function safetyLoopsByZ(native:NativeZLevelRegionSet){
+function cutterCenterLoopsByZ(native:NativeZLevelRegionSet){
   return new Map(native.regions.map(region=>[
     region.z.toFixed(6),
-    region.safetyIslands.flatMap<PlanarRasterLoop>(island=>[
+    region.azIslands.flatMap<PlanarRasterLoop>(island=>[
       {points:island.outer.map(point=>({...point}))},
       ...island.holes.map(points=>({points:points.map(point=>({...point}))})),
     ]),
@@ -48,10 +48,9 @@ function safetyLoopsByZ(native:NativeZLevelRegionSet){
 }
 
 /**
- * 008H-N4 production boundary.
- * Native OCCT owns both Face-target scope and complete-solid safety geometry.
- * TypeScript only rasterises those independent planar truths; it must not infer
- * Face ownership or reinterpret either boundary.
+ * 008H-N5 production boundary. Native OCCT constructs Tz, contact dilation,
+ * complete-solid Cz and their cutter-center Az intersection. TypeScript only
+ * rasterises Az and never reinterprets Face ownership or cutter clearance.
  */
 export function buildNativeFaceTargetCanonicalToolpath(args:{
   native:NativeZLevelRegionSet;
@@ -73,7 +72,7 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
   if(errors.length)return{ok:false,toolpath:null,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
 
   const regions=regionsFromNative(native,stock);
-  const safetyByZ=safetyLoopsByZ(native);
+  const cutterCenterByZ=cutterCenterLoopsByZ(native);
   const build=(direction:'x'|'y')=>buildModelRoughingCanonicalToolpath(
     regions,
     operation.tool.diameterMm,
@@ -83,7 +82,8 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
     Math.max(0,operation.finishAllowanceMm),
     direction,
     undefined,
-    region=>safetyByZ.get(region.z.toFixed(6)),
+    region=>cutterCenterByZ.get(region.z.toFixed(6)),
+    true,
   );
   const requested=operation.rasterDirection??'auto';
   const candidates=requested==='auto'?[build('x'),build('y')]:[build(requested)];
@@ -100,6 +100,6 @@ export function buildNativeFaceTargetCanonicalToolpath(args:{
   });
   const chosen=valid[0];
   warnings.push(...chosen.warnings);
-  warnings.push('008H-N4: Native trimmed-Face-Scope und vollständige Solid-Cuttersicherheit bleiben bis zum Raster getrennt.');
+  warnings.push('008H-N5: Native Tz → Kontakt-Dilatation → Cz → Az; Raster übernimmt ausschließlich die fertige Fräsermittelpunktregion.');
   return{ok:true,toolpath:chosen.toolpath,errors:[],warnings:[...new Set(warnings)]};
 }

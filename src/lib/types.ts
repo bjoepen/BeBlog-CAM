@@ -10,12 +10,12 @@ export interface ManufacturingFaceSummary {faceId:number;kind:string;orientation
 export interface BrepSummary {backend:string;nativeBrep:boolean;faces:number;edges:number;vertices:number;solids:number;surfaceTypes:SurfaceTypeSummary[];cylinderRadiiMm:number[];manufacturingFaces?:ManufacturingFaceSummary[];displayTriangles:number;displayVertices:number[];displayFaceIds?:number[];displayEdges?:number[][];note:string;}
 export interface ImportSummary {kind:ImportKind;fileName:string;backend:string;status:'ready'|'native-adapter-pending';entities:Record<string,number>;planarGeometry?:PlanarGeometry;brep?:BrepSummary;note?:string;}
 
-export const NATIVE_ZLEVEL_REGION_CONTRACT_VERSION='008H-N4-v2' as const;
+export const NATIVE_ZLEVEL_REGION_CONTRACT_VERSION='008H-N5-v3' as const;
 export const NATIVE_FACE_ID_CONTRACT='zero-based TopExp_Explorer(shape, TopAbs_FACE) order; identical to manufacturingFaces.faceId and displayFaceIds' as const;
 export interface NativePartTransform {orientation:PartOrientation;translationMm:[number,number,number];}
 export interface NativeZLevelRegionRequest {contractVersion:typeof NATIVE_ZLEVEL_REGION_CONTRACT_VERSION;sourcePath:string;sourceFingerprint:string;faceIds:number[];transform:NativePartTransform;stock:StockDefinition;zLevelsMm:number[];finishAllowanceMm:number;toolDiameterMm:number;}
 export interface NativeZLevelRegionIsland {outer:Point2[];holes:Point2[][];}
-export interface NativeZLevelRegion {z:number;valid:boolean;scopeIslands:NativeZLevelRegionIsland[];safetyIslands:NativeZLevelRegionIsland[];errors:string[];warnings:string[];}
+export interface NativeZLevelRegion {z:number;valid:boolean;tzIslands:NativeZLevelRegionIsland[];contactIslands:NativeZLevelRegionIsland[];czIslands:NativeZLevelRegionIsland[];azIslands:NativeZLevelRegionIsland[];errors:string[];warnings:string[];}
 export interface NativeZLevelRegionSet {contractVersion:typeof NATIVE_ZLEVEL_REGION_CONTRACT_VERSION;sourceFingerprint:string;faceIdContract:typeof NATIVE_FACE_ID_CONTRACT;regions:NativeZLevelRegion[];errors:string[];warnings:string[];}
 
 export type StockMode='manual'|'part-bounds'|'none';

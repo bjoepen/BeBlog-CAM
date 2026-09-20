@@ -137,7 +137,7 @@
     const regionWorld=target?target.levels.map(z=>target.loops.map(loop=>loop.points.map(point=>({x:point.x,y:point.y,z})))):[];
     const activeToolWorld=toolpath?.runs.map(run=>run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z})))??[];
     const jobToolWorld=jobToolpaths.flatMap(toolpath=>toolpath.runs.flatMap(run=>run.cutSegments3?.length?run.cutSegments3.map(segment=>sampleMachineMotion(segment).map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:point.z+wp.z}))):[run.points.map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:run.z+wp.z}))]));
-    const nativeRegionWorld=(nativeRegionDiagnostic?.regions??[]).flatMap(region=>region.valid?region.scopeIslands.flatMap(island=>[island.outer.map(point=>({x:point.x,y:point.y,z:region.z+0.08})),...island.holes.map(hole=>hole.map(point=>({x:point.x,y:point.y,z:region.z+0.08})))]):[]);
+    const nativeRegionWorld=(nativeRegionDiagnostic?.regions??[]).flatMap(region=>region.valid?region.azIslands.flatMap(island=>[island.outer.map(point=>({x:point.x,y:point.y,z:region.z+0.08})),...island.holes.map(hole=>hole.map(point=>({x:point.x,y:point.y,z:region.z+0.08})))]):[]);
 
     const jobEntryWorld=jobToolpaths.flatMap(toolpath=>toolpath.runs.flatMap(run=>(run.entrySegments??[]).map(segment=>sampleMachineMotion(segment).map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:point.z+wp.z})))));
     const jobMotionWorld=jobToolpaths.flatMap(toolpath=>(toolpath.motions??[]).filter(motion=>motion.kind!=='rapid3').map(motion=>sampleMachineMotion(motion).map(point=>({x:point.x+wp.x,y:point.y+wp.y,z:point.z+wp.z}))));

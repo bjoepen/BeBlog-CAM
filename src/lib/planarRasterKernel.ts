@@ -110,9 +110,10 @@ export function buildPlanarRasterStayDownConnector(
   profile?:ZLevelPerformanceProfile,
   pointFilter?:PlanarRasterPointFilter,
   safetyLoops:PlanarRasterLoop[]=scopeLoops,
+  clearanceAlreadyApplied=false,
 ):ToolpathPoint2[]|null{
   if(!(toolDiameterMm>0)||!scopeLoops.length||!safetyLoops.length)return null;
-  const radius=toolDiameterMm/2;
+  const radius=clearanceAlreadyApplied?0:toolDiameterMm/2;
   const step=sampleStep??Math.max(.15,Math.min(.75,toolDiameterMm/8));
   const candidates:ToolpathPoint2[][]=[
     [a,b],
@@ -144,15 +145,16 @@ export function buildPlanarRasterChains(
   direction:'x'|'y'='x',
   pointFilter?:PlanarRasterPointFilter,
   safetyLoops:PlanarRasterLoop[]=scopeLoops,
+  clearanceAlreadyApplied=false,
 ):PlanarRasterChain[]{
   if(!(toolDiameterMm>0)||!(stepoverPercent>0&&stepoverPercent<=100)||!scopeLoops.length||!safetyLoops.length)return[];
   const b=bounds(scopeLoops);if(!b)return[];
 
-  const radius=toolDiameterMm/2;
+  const radius=clearanceAlreadyApplied?0:toolDiameterMm/2;
   // A standalone region uses its own boundary for cutter clearance and keeps
   // the historical radius inset. With N4 split geometry, scope boundaries are
   // containment-only; only the independent safety loops may reject the cutter.
-  const scopeInset=safetyLoops===scopeLoops?radius:0;
+  const scopeInset=clearanceAlreadyApplied?0:safetyLoops===scopeLoops?radius:0;
   const stepover=Math.max(.05,toolDiameterMm*stepoverPercent/100);
   const sampleStep=Math.max(.15,Math.min(.75,toolDiameterMm/8));
 
@@ -197,7 +199,7 @@ export function buildPlanarRasterChains(
       continue;
     }
     const from=current[current.length-1],to=segment.points[0];
-    const connector=buildPlanarRasterStayDownConnector(scopeLoops,from,to,toolDiameterMm,sampleStep,profile,pointFilter,safetyLoops);
+    const connector=buildPlanarRasterStayDownConnector(scopeLoops,from,to,toolDiameterMm,sampleStep,profile,pointFilter,safetyLoops,clearanceAlreadyApplied);
     if(connector){
       for(const point of connector.slice(1)){
         const previous=current[current.length-1];

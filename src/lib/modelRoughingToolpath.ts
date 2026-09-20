@@ -24,6 +24,7 @@ export function buildModelRoughingCanonicalToolpath(
   rasterDirection:'x'|'y'='x',
   regionPointFilter?:(region:RoughingRegion)=>PlanarRasterPointFilter|undefined,
   regionSafetyLoops?:(region:RoughingRegion)=>PlanarRasterLoop[]|undefined,
+  nativeCutterCenterRegion=false,
 ):ModelRoughingToolpathResult{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -58,7 +59,7 @@ export function buildModelRoughingCanonicalToolpath(
         ...island.holes.map(points=>({points})),
       ];
       const safetyLoops=regionSafetyLoops?.(region)??loops;
-      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection,regionPointFilter?.(region),safetyLoops);
+      const chains=buildPlanarRasterChains(loops,clearanceDiameterMm,stepoverPercent,profile,rasterDirection,regionPointFilter?.(region),safetyLoops,nativeCutterCenterRegion);
       if(!chains.length){
         warnings.push(`Z ${region.z.toFixed(3)} · Schruppinsel ${islandCount}: kein werkzeugradius-sicherer Rasterpfad.`);
         continue;
