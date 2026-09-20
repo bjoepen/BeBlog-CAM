@@ -15,6 +15,14 @@ export type ThreeDRoughingReachabilityLevelSchedule={
 
 const EPS=1e-7;
 const key=(z:number)=>Number(z.toFixed(7));
+export const THREE_D_ROUGHING_REACHABILITY_LEVEL_FRACTION=.125;
+
+function conservativeLevelAtOrAbove(floor:number,topZ:number,quantumMm:number):number{
+  // Quantization is always upward (towards stock top). It can therefore only
+  // make a candidate more conservative than the sampled A16 reachable floor.
+  const depth=Math.max(0,topZ-floor);
+  return topZ-Math.floor((depth+EPS)/quantumMm)*quantumMm;
+}
 
 /**
  * 008H-A17: candidate-height proposal only.
@@ -81,17 +89,21 @@ export function buildThreeDRoughingReachabilityLevelSchedule(args:{
 
   const candidates=new Set<number>(baseSchedule.levels.map(key));
   const baseKeys=new Set(candidates);
+  const quantumMm=Math.max(.01,operation.stepDownMm*THREE_D_ROUGHING_REACHABILITY_LEVEL_FRACTION);
 
-  // A reachability floor is a safe candidate height, but large vertical gaps
-  // are split so no proposed descent exceeds the operation step-down.
+  // A18 consolidates the potentially dense continuum of A16 floors onto a
+  // deterministic vertical lattice. Quantization is conservative: a floor is
+  // rounded UP only, never down into protected material. A4/A6 still prove
+  // every resulting constant-Z candidate before manufacturing.
   for(const floor of reachableFloors){
     if(floor>=topZ-EPS)continue;
+    const consolidatedFloor=Math.max(bottomZ,conservativeLevelAtOrAbove(floor,topZ,quantumMm));
     let z=topZ;
-    while(z-operation.stepDownMm>floor+EPS){
+    while(z-operation.stepDownMm>consolidatedFloor+EPS){
       z-=operation.stepDownMm;
       candidates.add(key(z));
     }
-    candidates.add(key(floor));
+    if(consolidatedFloor<topZ-EPS)candidates.add(key(consolidatedFloor));
   }
 
   const levels=[...candidates]
@@ -100,7 +112,7 @@ export function buildThreeDRoughingReachabilityLevelSchedule(args:{
 
   const addedReachabilityLevelCount=levels.filter(z=>!baseKeys.has(z)).length;
   if(addedReachabilityLevelCount)warnings.push(
-    `A17: ${addedReachabilityLevelCount} zusätzliche konstante Reachability-Z-Level vorgeschlagen; jeder Level bleibt A4/A5/A6-prüfpflichtig.`,
+    `A18: ${addedReachabilityLevelCount} konsolidierte konstante Reachability-Z-Level vorgeschlagen (Raster ${quantumMm.toFixed(3)} mm); jeder Level bleibt A4/A5/A6-prüfpflichtig.`,
   );
 
   return{valid:true,levels,sampledReachabilityCount,addedReachabilityLevelCount,errors:[],warnings};

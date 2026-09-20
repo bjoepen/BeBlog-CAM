@@ -109,6 +109,8 @@ jobs:
         run: pnpm check:008h-a16
       - name: 3D roughing reachability-aware Z-level schedule contract
         run: pnpm check:008h-a17
+      - name: 3D roughing reachability level consolidation contract
+        run: pnpm check:008h-a18
       - name: Frontend build
         run: pnpm build
       - name: Rust check
