@@ -19,7 +19,6 @@ export type ThreeDRoughingLevelEligibility={
   removableCount:number;
   protectedCount:number;
   outsideTargetCount:number;
-  outsideTargetCount:number;
   unresolvedCount:number;
   errors:string[];
   warnings:string[];
@@ -71,11 +70,6 @@ export function buildThreeDRoughingLevelEligibility(
         samples.push({x,y,cutZ,safeZ:null,state:'outside-target'});
         continue;
       }
-      if(safety.status==='outside-target'){
-        outsideTargetCount++;
-        samples.push({x,y,cutZ,safeZ:null,state:'outside-target'});
-        continue;
-      }
       if(!safety.valid||!safety.safety){
         unresolvedCount++;
         samples.push({x,y,cutZ,safeZ:null,state:'unresolved'});
@@ -92,7 +86,6 @@ export function buildThreeDRoughingLevelEligibility(
     }
   }
 
-  warnings.push(`Eligibility Z ${cutZ.toFixed(3)}: REMOVABLE ${removableCount} · PROTECTED ${protectedCount} · OUTSIDE_TARGET ${outsideTargetCount} · UNRESOLVED ${unresolvedCount}.`);
   warnings.push(`Eligibility Z ${cutZ.toFixed(3)}: REMOVABLE ${removableCount} · PROTECTED ${protectedCount} · OUTSIDE_TARGET ${outsideTargetCount} · UNRESOLVED ${unresolvedCount}.`);
   if(unresolvedCount)warnings.push(`${unresolvedCount} Eligibility-Sample${unresolvedCount===1?' ist':'s sind'} fail-closed UNRESOLVED.`);
 
