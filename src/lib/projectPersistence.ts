@@ -31,7 +31,7 @@ export type CamProject=CamProjectV1;
 const clone=<T>(value:T):T=>JSON.parse(JSON.stringify(value)) as T;
 const object=(value:unknown):value is Record<string,unknown>=>typeof value==='object'&&value!==null&&!Array.isArray(value);
 const nonEmptyString=(value:unknown):value is string=>typeof value==='string'&&value.trim().length>0;
-const operationKinds=new Set(['facing','contour','pocket','carve','drill','z-level-roughing','surface-finishing']);
+const operationKinds=new Set(['facing','contour','pocket','carve','drill','z-level-roughing','3d-roughing','surface-finishing']);
 
 function validateOperationsProject(project:CamProjectV1):void{
   const operationsProject=project.operationsProject as unknown as Record<string,unknown>;
