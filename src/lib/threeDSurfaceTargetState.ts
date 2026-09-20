@@ -22,7 +22,7 @@ function bounds(points:P3[]){
   return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys),minZ:Math.min(...zs),maxZ:Math.max(...zs)};
 }
 
-function placedPart(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation):P3[]|null{
+export function buildPlacedPartTriangles(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation):P3[]|null{
   if(summary.kind!=='step')return null;
   const values=summary.brep?.displayVertices??[],raw:P3[]=[];
   for(let i=0;i+2<values.length;i+=3)raw.push(orientPoint3({x:values[i],y:values[i+1],z:values[i+2]},orientation));
@@ -50,7 +50,7 @@ export function buildThreeDSurfaceTargetState(args:{
   if(!faceIds.length)errors.push(`Keine STEP/BRep-Fläche für ${operationLabel} gewählt.`);
   if(errors.length)return{ok:false,target:null,errors,warnings,triangleCount:0};
 
-  const part=placedPart(summary,stock,placement,orientation);
+  const part=buildPlacedPartTriangles(summary,stock,placement,orientation);
   const displayFaceIds=summary.brep?.displayFaceIds??[];
   if(!part||displayFaceIds.length!==Math.floor(part.length/3)){
     return{ok:false,target:null,errors:['STEP/BRep-Triangulation oder Face-ID-Zuordnung konnte nicht rekonstruiert werden.'],warnings,triangleCount:0};
