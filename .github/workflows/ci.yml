@@ -95,6 +95,8 @@ jobs:
         run: pnpm check:008h-a9
       - name: 3D roughing pipeline orchestration contract
         run: pnpm check:008h-a10
+      - name: 3D roughing manufacturing release contract
+        run: pnpm check:008h-a11
       - name: Frontend build
         run: pnpm build
       - name: Rust check
