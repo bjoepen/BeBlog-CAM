@@ -3,6 +3,7 @@ import type { CurvedFaceTarget } from './curvedFaceTarget';
 import type { PartSafetySurface } from './partSafetySurface';
 import { buildThreeDRoughingZLevelSchedule } from './threeDRoughingZLevelSchedule';
 import { buildThreeDRoughingLevelEligibility } from './threeDRoughingLevelEligibility';
+import { buildThreeDRoughingReachabilityLevelSchedule } from './threeDRoughingReachabilityLevelSchedule';
 import { buildThreeDRoughingMaterialConnectivity } from './threeDRoughingMaterialConnectivity';
 import { buildThreeDRoughingSafeChains } from './threeDRoughingSafeChains';
 import { buildThreeDRoughingCanonicalSafeEdges, type ThreeDRoughingCanonicalResult } from './threeDRoughingCanonicalSafeEdges';
@@ -62,10 +63,21 @@ export function buildThreeDRoughingPipeline(args:{
     errors:[...new Set(errors)],warnings:[...new Set(warnings)],
   };
 
+  const reachabilitySchedule=buildThreeDRoughingReachabilityLevelSchedule({
+    target,partSafety,baseSchedule:schedule,operation,gridStepMm:eligibilityGridStepMm,
+  });
+  errors.push(...reachabilitySchedule.errors);
+  warnings.push(...reachabilitySchedule.warnings);
+  if(errors.length)return{
+    ok:false,toolpath:null,scheduledLevelCount:reachabilitySchedule.levels.length,cuttingLevelCount:0,
+    skippedEmptyLevelCount:0,runCount:0,eligibilityGridStepMm,segmentValidationStepMm,
+    errors:[...new Set(errors)],warnings:[...new Set(warnings)],
+  };
+
   const canonicalLevels:ThreeDRoughingCanonicalResult[]=[];
   let skippedEmptyLevelCount=0;
 
-  for(const cutZ of schedule.levels){
+  for(const cutZ of reachabilitySchedule.levels){
     const eligibility=buildThreeDRoughingLevelEligibility(
       target,partSafety,cutZ,operation.tool.diameterMm/2,operation.finishAllowanceMm,eligibilityGridStepMm,
     );
@@ -108,13 +120,13 @@ export function buildThreeDRoughingPipeline(args:{
   }
 
   if(errors.length)return{
-    ok:false,toolpath:null,scheduledLevelCount:schedule.levels.length,cuttingLevelCount:canonicalLevels.length,
+    ok:false,toolpath:null,scheduledLevelCount:reachabilitySchedule.levels.length,cuttingLevelCount:canonicalLevels.length,
     skippedEmptyLevelCount,runCount:0,eligibilityGridStepMm,segmentValidationStepMm,
     errors:[...new Set(errors)],warnings:[...new Set(warnings)],
   };
 
   if(!canonicalLevels.length)return{
-    ok:true,toolpath:null,scheduledLevelCount:schedule.levels.length,cuttingLevelCount:0,
+    ok:true,toolpath:null,scheduledLevelCount:reachabilitySchedule.levels.length,cuttingLevelCount:0,
     skippedEmptyLevelCount,runCount:0,eligibilityGridStepMm,segmentValidationStepMm,
     errors:[],warnings:[...new Set([...warnings,'3D Schruppen: Kein bewiesener Schnitt auf den geplanten Z-Leveln.'])],
   };
@@ -122,13 +134,13 @@ export function buildThreeDRoughingPipeline(args:{
   const assembled=assembleThreeDRoughingCanonicalLevels(canonicalLevels,operation);
   warnings.push(...assembled.warnings);
   if(!assembled.ok||!assembled.toolpath)return{
-    ok:false,toolpath:null,scheduledLevelCount:schedule.levels.length,cuttingLevelCount:canonicalLevels.length,
+    ok:false,toolpath:null,scheduledLevelCount:reachabilitySchedule.levels.length,cuttingLevelCount:canonicalLevels.length,
     skippedEmptyLevelCount,runCount:0,eligibilityGridStepMm,segmentValidationStepMm,
     errors:[...new Set(assembled.errors)],warnings:[...new Set(warnings)],
   };
 
   return{
-    ok:true,toolpath:assembled.toolpath,scheduledLevelCount:schedule.levels.length,
+    ok:true,toolpath:assembled.toolpath,scheduledLevelCount:reachabilitySchedule.levels.length,
     cuttingLevelCount:canonicalLevels.length,skippedEmptyLevelCount,runCount:assembled.runCount,
     eligibilityGridStepMm,segmentValidationStepMm,errors:[],warnings:[...new Set(warnings)],
   };
