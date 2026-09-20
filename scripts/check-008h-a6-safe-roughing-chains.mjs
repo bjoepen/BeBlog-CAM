@@ -23,6 +23,10 @@ for(const forbidden of ['RoughingRegion','buildPlanarRasterChains','ballnoseCont
 requireText(operation,'toolpath:null;','3D roughing operation must remain non-manufacturing in A6');
 requireText(active,"if(operation.kind==='3d-roughing')","3D roughing dispatch missing");
 requireText(active,'return null;','A6 must not emit active canonical toolpath');
-if(canonical.includes("'3d-roughing'"))throw new Error('008H-A6 contract failed: CanonicalToolpath must not yet admit 3d-roughing');
+// A6 owns no canonical output itself. Later approved stages may extend the
+// shared CanonicalToolpath union; this historical gate must not veto them.
+if(chains.includes("operationKind:'3d-roughing'")||chains.includes('CanonicalToolpath')){
+  throw new Error('008H-A6 contract failed: A6 itself must not emit CanonicalToolpath output');
+}
 
 console.log('008H-A6 safe roughing chains contract PASS');
