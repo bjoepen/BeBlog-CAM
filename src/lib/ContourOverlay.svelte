@@ -130,7 +130,7 @@
   }
 
   function buildScene(..._deps: unknown[]){
-    if(operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='surface-finishing')return null;
+    if(operation.kind==='facing'||operation.kind==='z-level-roughing'||operation.kind==='3d-roughing'||operation.kind==='surface-finishing')return null;
     const curves=summary.planarGeometry?.curves??[];if(summary.kind!=='dxf'||!curves.length)return null;
     const rotatedCurves=curves.map((curve,id)=>({id,curve,points:sampleCurve(curve).map(rotate)}));
     const all=rotatedCurves.flatMap(c=>c.points);if(!all.length)return null;const partB=bounds(all);
