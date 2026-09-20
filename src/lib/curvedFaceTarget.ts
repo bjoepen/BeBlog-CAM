@@ -75,6 +75,27 @@ function barycentricXY(t:CurvedFaceTriangle,x:number,y:number){
   return{u,v,w};
 }
 
+
+export function translateCurvedFaceTarget(
+  target:CurvedFaceTarget,
+  offset:{x:number;y:number;z:number},
+):CurvedFaceTarget{
+  if(!target.valid||!target.bounds)return target;
+  const shift=(point:P3):P3=>({x:point.x+offset.x,y:point.y+offset.y,z:point.z+offset.z});
+  const triangles=target.triangles.map(triangle=>({a:shift(triangle.a),b:shift(triangle.b),c:shift(triangle.c)}));
+  const bounds={
+    minX:target.bounds.minX+offset.x,maxX:target.bounds.maxX+offset.x,
+    minY:target.bounds.minY+offset.y,maxY:target.bounds.maxY+offset.y,
+    minZ:target.bounds.minZ+offset.z,maxZ:target.bounds.maxZ+offset.z,
+  };
+  return{
+    ...target,
+    triangles,
+    bounds,
+    spatialIndex:buildSpatialIndex(triangles,bounds),
+  };
+}
+
 export function curvedFaceTargetZAt(
   target:CurvedFaceTarget,
   x:number,
