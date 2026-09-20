@@ -90,7 +90,8 @@
     "check:008h-a15": "node scripts/check-008h-a15-direction-eligibility-domain.mjs",
     "check:008h-a16": "node scripts/check-008h-a16-flat-end-reachability.mjs",
     "check:008h-a17": "node scripts/check-008h-a17-reachability-level-schedule.mjs",
-    "check:008h-a18": "node scripts/check-008h-a18-reachability-level-consolidation.mjs"
+    "check:008h-a18": "node scripts/check-008h-a18-reachability-level-consolidation.mjs",
+    "check:008h-a19": "node scripts/check-008h-a19-vertical-boundary-surface-semantics.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
