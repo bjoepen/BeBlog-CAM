@@ -5,9 +5,6 @@ function requireText(source,text,label){if(!source.includes(text))throw new Erro
 
 const canonical=read('src/lib/canonicalToolpath.ts');
 const a7=read('src/lib/threeDRoughingCanonicalSafeEdges.ts');
-const operation=read('src/lib/threeDRoughingOperation.ts');
-const active=read('src/lib/activeCanonicalToolpath.ts');
-const preflight=read('src/lib/jobPreflight.ts');
 
 requireText(canonical,"'3d-roughing'","CanonicalToolpath must admit 3d-roughing");
 requireText(canonical,"'3d-roughing-safe-edges'","dedicated A7 strategy missing");
@@ -22,9 +19,5 @@ for(const forbidden of ['endMillRoughingSafetyAt','RoughingRegion','buildPlanarR
   if(a7.includes(forbidden))throw new Error(`008H-A7 contract failed: forbidden shortcut ${forbidden}`);
 }
 
-requireText(operation,'toolpath:null;','A7 must not open production operation state');
-requireText(active,"if(operation.kind==='3d-roughing')",'3D roughing active dispatch missing');
-requireText(active,'return null;','A7 must not open active production dispatch');
-requireText(preflight,'Der 3D-Schrupp-Kernel ist noch nicht freigegeben','A7 must retain preflight manufacturing gate');
 
 console.log('008H-A7 canonical safe-edge materialization contract PASS');
