@@ -39,6 +39,7 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
+#include <Precision.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Poly_Triangle.hxx>
 #include <Poly_Triangulation.hxx>
@@ -247,6 +248,10 @@ struct FaceTargetRegionProbe{
  std::size_t selectedInStockFaces=0;
  std::size_t aboveProjectionFaces=0;
  std::size_t materialFaces=0;
+ std::size_t rayUniqueBelow=0;
+ std::size_t rayUniqueAbove=0;
+ std::size_t rayBoundary=0;
+ std::size_t rayNoContact=0;
 };
 std::size_t planar_face_count(const TopoDS_Shape& shape){
  if(shape.IsNull())return 0;
@@ -256,39 +261,57 @@ TopoDS_Shape translate_planar_shape_to_z(const TopoDS_Shape& shape,double fromZ,
  if(shape.IsNull()||std::abs(toZ-fromZ)<=1e-12)return shape;
  gp_Trsf lift;lift.SetTranslation(gp_Vec(0,0,toZ-fromZ));return BRepBuilderAPI_Transform(shape,lift,true).Shape();
 }
-enum class VerticalContact{KernelFailure,None,UniqueBelow,UniqueAbove,Ambiguous};
+enum class VerticalContact{KernelFailure,None,UniqueBelow,UniqueAbove,BoundaryBelow,BoundaryAbove,GenuineInteriorAmbiguous};
+double selected_face_contact_tolerance(const TopoDS_Face& selected){
+ double tolerance=std::max(Precision::Confusion(),BRep_Tool::Tolerance(selected));
+ for(TopExp_Explorer edge(selected,TopAbs_EDGE);edge.More();edge.Next())tolerance=std::max(tolerance,BRep_Tool::Tolerance(TopoDS::Edge(edge.Current())));
+ for(TopExp_Explorer vertex(selected,TopAbs_VERTEX);vertex.More();vertex.Next())tolerance=std::max(tolerance,BRep_Tool::Tolerance(TopoDS::Vertex(vertex.Current())));
+ return 4*tolerance;
+}
 VerticalContact vertical_face_contact(const TopoDS_Face& selected,double x,double y,double low,double high,double cutZ){
- IntCurvesFace_Intersector ray(selected,1e-7,true,true);
+ const double tolerance=selected_face_contact_tolerance(selected);
+ IntCurvesFace_Intersector ray(selected,tolerance,true,true);
  ray.Perform(gp_Lin(gp_Pnt(x,y,low),gp_Dir(0,0,1)),0,std::max(0.0,high-low));
  if(!ray.IsDone())return VerticalContact::KernelFailure;
- std::vector<double> contacts;
+ struct PhysicalContact{gp_Pnt point;double z;bool interior=false;bool boundary=false;};
+ std::vector<PhysicalContact> contacts;
  for(int i=1;i<=ray.NbPnt();++i){
-  const double z=ray.Pnt(i).Z();
-  bool distinct=true;for(double contactZ:contacts)if(std::abs(contactZ-z)<=1e-6){distinct=false;break;}if(distinct)contacts.push_back(z);
+  const gp_Pnt point=ray.Pnt(i);const TopAbs_State state=ray.State(i);
+  if(state!=TopAbs_IN&&state!=TopAbs_ON)continue;
+  auto same=std::find_if(contacts.begin(),contacts.end(),[&](const PhysicalContact& contact){return contact.point.Distance(point)<=tolerance;});
+  if(same==contacts.end())contacts.push_back({point,point.Z(),state==TopAbs_IN,state==TopAbs_ON});
+  else{same->interior=state==TopAbs_IN||same->interior;same->boundary=state==TopAbs_ON||same->boundary;}
  }
  if(contacts.empty())return VerticalContact::None;
- if(contacts.size()>1)return VerticalContact::Ambiguous;
- return contacts.front()<=cutZ+1e-7?VerticalContact::UniqueBelow:VerticalContact::UniqueAbove;
+ std::vector<const PhysicalContact*> interior;
+ for(const auto& contact:contacts)if(contact.interior&&!contact.boundary)interior.push_back(&contact);
+ if(interior.size()>1)return VerticalContact::GenuineInteriorAmbiguous;
+ if(interior.size()==1)return interior.front()->z<=cutZ+tolerance?VerticalContact::UniqueBelow:VerticalContact::UniqueAbove;
+ const bool boundaryBelow=std::any_of(contacts.begin(),contacts.end(),[&](const PhysicalContact& contact){return contact.boundary&&contact.z<=cutZ+tolerance;});
+ return boundaryBelow?VerticalContact::BoundaryBelow:VerticalContact::BoundaryAbove;
 }
-bool validate_sublevel_cells(const TopoDS_Shape& planar,const TopoDS_Face& selected,double low,double high,double cutZ){
+enum class SublevelProof{Valid,KernelFailure,GenuineInteriorAmbiguous};
+SublevelProof validate_sublevel_cells(const TopoDS_Shape& planar,const TopoDS_Face& selected,double low,double high,double cutZ,FaceTargetRegionProbe& probe){
  // Projected trim/section topology partitions the vertical shadow. Validate an
  // interior point in every exact planar cell against the source Face itself.
  for(TopExp_Explorer fit(planar,TopAbs_FACE);fit.More();fit.Next()){
-  Bnd_Box box;BRepBndLib::Add(fit.Current(),box);if(box.IsVoid())return false;
+  Bnd_Box box;BRepBndLib::Add(fit.Current(),box);if(box.IsVoid())return SublevelProof::KernelFailure;
   double xmin,ymin,zmin,xmax,ymax,zmax;box.Get(xmin,ymin,zmin,xmax,ymax,zmax);
-  bool classified=false;
   const TopoDS_Face planarFace=TopoDS::Face(fit.Current());
   for(int iy=1;iy<=11;++iy)for(int ix=1;ix<=11;++ix){
    const double x=xmin+(xmax-xmin)*ix/12.0,y=ymin+(ymax-ymin)*iy/12.0;
    BRepClass_FaceClassifier inside(planarFace,gp_Pnt(x,y,(zmin+zmax)/2),1e-7,true);
    if(inside.State()!=TopAbs_IN)continue;
    const VerticalContact contact=vertical_face_contact(selected,x,y,low,high,cutZ);
-   if(contact==VerticalContact::Ambiguous||contact==VerticalContact::KernelFailure||contact==VerticalContact::None||contact==VerticalContact::UniqueAbove)return false;
-   classified=true;
+   if(contact==VerticalContact::KernelFailure)return SublevelProof::KernelFailure;
+   if(contact==VerticalContact::GenuineInteriorAmbiguous)return SublevelProof::GenuineInteriorAmbiguous;
+   if(contact==VerticalContact::UniqueBelow)++probe.rayUniqueBelow;
+   else if(contact==VerticalContact::UniqueAbove)++probe.rayUniqueAbove;
+   else if(contact==VerticalContact::BoundaryBelow||contact==VerticalContact::BoundaryAbove)++probe.rayBoundary;
+   else if(contact==VerticalContact::None)++probe.rayNoContact;
   }
-  if(!classified)return false;
  }
- return true;
+ return SublevelProof::Valid;
 }
 FaceTargetRegionProbe face_sublevel_shadow(const TopoDS_Face& selected,const std::string& json,double z){
  FaceTargetRegionProbe probe;
@@ -322,7 +345,9 @@ FaceTargetRegionProbe face_sublevel_shadow(const TopoDS_Face& selected,const std
  if(!selectedInStock.IsDone()||selectedInStock.Shape().IsNull()){probe.failedStage="tzStockClip";return probe;}
  probe.selectedInStockFaces=planar_face_count(selectedInStock.Shape());
  if(probe.selectedInStockFaces==0)return probe;
- if(!validate_sublevel_cells(selectedInStock.Shape(),selected,zmin-span-1,zmax+span+1,z)){probe.failedStage="tzVerticalRayAmbiguity";return probe;}
+ const SublevelProof proof=validate_sublevel_cells(selectedInStock.Shape(),selected,zmin-span-1,zmax+span+1,z,probe);
+ if(proof==SublevelProof::KernelFailure){probe.failedStage="tzKernelFailure";return probe;}
+ if(proof==SublevelProof::GenuineInteriorAmbiguous){probe.failedStage="tzInteriorMultiZ";return probe;}
  probe.material=selectedInStock.Shape();probe.materialFaces=probe.selectedInStockFaces;
  return probe;
 }
@@ -464,11 +489,14 @@ extern "C" char* beblog_occt_build_zlevel_regions(const char* request_json){try{
   out<<"],\"azIslands\":[";append_planar_islands(out,azIslands);
   out<<"],\"errors\":[";
   bool first_error=true;
-  if(tzKernelFailed){for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(probe.failedStage.empty())continue;if(!first_error)out<<',';first_error=false;std::ostringstream detail;detail<<"OCCT N5 stage=Tz/"<<probe.failedStage<<" faceIndex="<<i<<" surface="<<probe.surfaceType<<" dispatch="<<probe.projectionDispatch<<" sourceWires="<<probe.sourceWires<<" closedSourceWires="<<probe.closedSourceWires<<" sourceEdges="<<probe.sourceEdges<<" projectedShapes="<<probe.projectedShapes<<" projectedFaces="<<probe.selectedProjectionFaces<<" stockFaces="<<probe.selectedInStockFaces<<" materialFaces="<<probe.materialFaces<<"; fail-closed";append_json_string(out,detail.str());}}
+  if(tzKernelFailed){for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(probe.failedStage.empty())continue;if(!first_error)out<<',';first_error=false;std::ostringstream detail;detail<<"OCCT N5 stage=Tz/"<<probe.failedStage<<" faceIndex="<<i<<" surface="<<probe.surfaceType<<" dispatch="<<probe.projectionDispatch<<" sourceWires="<<probe.sourceWires<<" closedSourceWires="<<probe.closedSourceWires<<" sourceEdges="<<probe.sourceEdges<<" projectedShapes="<<probe.projectedShapes<<" projectedFaces="<<probe.selectedProjectionFaces<<" stockFaces="<<probe.selectedInStockFaces<<" materialFaces="<<probe.materialFaces<<" rayBelow="<<probe.rayUniqueBelow<<" rayAbove="<<probe.rayUniqueAbove<<" rayBoundary="<<probe.rayBoundary<<" rayNone="<<probe.rayNoContact<<"; fail-closed";append_json_string(out,detail.str());}}
   if(!boundaryOnly&&contactIslands.empty()){if(!first_error)out<<',';first_error=false;append_json_string(out,"OCCT N5 stage=contactDilation islands=0; fail-closed");}
   if(!boundaryOnly&&(!safety.failedStage.empty()||czIslands.empty())){if(!first_error)out<<',';first_error=false;std::ostringstream detail;detail<<"OCCT N5 stage=Cz/"<<(safety.failedStage.empty()?"clearanceOffset":safety.failedStage)<<" aboveProjectionFaces="<<safety.aboveProjectionFaces<<" materialFaces="<<safety.materialFaces<<" islands="<<czIslands.size()<<"; fail-closed";append_json_string(out,detail.str());}
   if(!boundaryOnly&&!contactIslands.empty()&&!czIslands.empty()&&azIslands.empty()){if(!first_error)out<<',';first_error=false;append_json_string(out,"OCCT N5 stage=Az/intersection islands=0; fail-closed");}
-  out<<"],\"warnings\":[";if(boundaryOnly)append_json_string(out,"OCCT N5 stage=Tz boundary-only/empty planar measure; legal level skipped by raster");out<<"]}";
+  out<<"],\"warnings\":[";bool first_warning=true;
+  if(boundaryOnly){append_json_string(out,"OCCT N5 stage=Tz boundary-only/empty planar measure; legal level skipped by raster");first_warning=false;}
+  for(std::size_t i=0;i<probes.size();++i){const auto& probe=probes[i];if(!(probe.rayUniqueAbove||probe.rayBoundary||probe.rayNoContact))continue;if(!first_warning)out<<',';first_warning=false;std::ostringstream detail;detail<<"OCCT N5 stage=Tz/rayProof faceIndex="<<i<<" below="<<probe.rayUniqueBelow<<" aboveOutsideTz="<<probe.rayUniqueAbove<<" boundary="<<probe.rayBoundary<<" noContactOutsideTz="<<probe.rayNoContact;append_json_string(out,detail.str());}
+  out<<"]}";
  }
  out<<"],\"errors\":[],\"warnings\":[\"008H-N5 native stages active: selected-Face Tz, cutter-contact dilation, complete-solid Cz, Az intersection; no ownership heuristic or selectedProjection-minus-solidAbove construction used\"]}";
  return copy_result(out.str());
