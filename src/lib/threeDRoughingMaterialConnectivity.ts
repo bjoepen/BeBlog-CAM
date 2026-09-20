@@ -30,7 +30,7 @@ function uniqueSorted(values:number[]){
  * 008H-A5: sampled material-connectivity truth for one approved A4 level.
  *
  * This stage groups only A4 REMOVABLE samples into orthogonally connected
- * components. PROTECTED and UNRESOLVED samples are hard barriers. Diagonal
+ * components. PROTECTED, OUTSIDE_TARGET and UNRESOLVED samples are hard barriers. Diagonal
  * contact alone is not connectivity. No interpolation, region polygons,
  * cutting chains, toolpaths or machine motions are created here.
  */
@@ -110,6 +110,7 @@ export function buildThreeDRoughingMaterialConnectivity(
   }
 
   const removableSampleCount=level.samples.filter(sample=>sample.state==='removable').length;
+  if(level.outsideTargetCount)warnings.push(`${level.outsideTargetCount} OUTSIDE_TARGET-Sample${level.outsideTargetCount===1?' bleibt':'s bleiben'} außerhalb der Bearbeitungsdomain.`);
   if(level.unresolvedCount)warnings.push(`${level.unresolvedCount} UNRESOLVED-Sample${level.unresolvedCount===1?' bleibt':'s bleiben'} harte Material-Barriere.`);
   if(removableSampleCount&&!components.length&&!errors.length)errors.push('REMOVABLE-Samples konnten keiner sicheren Materialkomponente zugeordnet werden.');
 
