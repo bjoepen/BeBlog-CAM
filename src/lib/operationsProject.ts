@@ -90,7 +90,7 @@ export function operationSummary(operation:CamOperation):string {
     return `${method} · ${depth} · ${source} · ${count} Bohrung${count===1?'':'en'} · ${tool}`;
   }
   if(operation.kind==='3d-roughing'){
-    return `${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${operation.stepDownMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Aufmaß · ${tool}`;
+    return `${(operation.direction??'x')==='x'?'Parallel X':'Parallel Y'} · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${operation.stepDownMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Aufmaß · ${tool}`;
   }
   if(operation.kind==='surface-finishing'){
     return `${operation.direction==='x'?'Parallel X':'Parallel Y'} · ${operation.stepoverPercent}% Stepover · ${operation.faceIds.length} Fläche${operation.faceIds.length===1?'':'n'} · ${tool}`;
