@@ -327,7 +327,7 @@ FaceTargetRegionProbe face_sublevel_shadow(const TopoDS_Face& selected,const std
  TopoDS_Shape clipped=selected;
  if(z<zmax-1e-7){
   const TopoDS_Shape lowerBox=BRepPrimAPI_MakeBox(gp_Pnt(xmin-span,ymin-span,planeZ-span),
-    (xmax-xmin)+2*span,(ymax-ymin)+2*span,(z-planeZ)+2*span).Shape();
+    (xmax-xmin)+2*span,(ymax-ymin)+2*span,(z-planeZ)+span).Shape();
   BRepAlgoAPI_Common common(selected,lowerBox);common.Build();
   if(!common.IsDone()){probe.failedStage="tzSublevelSection";return probe;}
   clipped=common.Shape();
