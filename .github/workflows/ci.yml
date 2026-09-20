@@ -101,6 +101,8 @@ jobs:
         run: pnpm check:008h-a12
       - name: 3D roughing coordinate-space integration contract
         run: pnpm check:008h-a13
+      - name: 3D roughing part-aware cutter safety contract
+        run: pnpm check:008h-a14
       - name: Frontend build
         run: pnpm build
       - name: Rust check
