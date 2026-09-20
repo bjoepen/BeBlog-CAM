@@ -7,6 +7,7 @@ import type {
   WorkCoordinateSystem,
 } from './types';
 import type { CanonicalToolpath } from './canonicalToolpath';
+import type { P3 } from './stepView';
 import { buildThreeDSurfaceTargetState } from './threeDSurfaceTargetState';
 import { buildSurfaceFinishingCanonicalToolpath } from './surfaceFinishingToolpath';
 
