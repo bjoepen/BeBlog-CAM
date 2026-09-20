@@ -8,6 +8,7 @@ import { buildDrillCanonicalToolpath } from './drillCanonicalToolpath';
 import { buildStepDrillOperationState } from './stepDrillOperation';
 import { buildZLevelOperationState } from './zLevelOperationState';
 import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation';
+import { buildThreeDRoughingOperationState } from './threeDRoughingOperation';
 import { buildDxfMultiTargetContourState, buildDxfMultiTargetPocketState } from './dxfMultiTargetToolpath';
 import type { CamOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
 import { createZLevelPerformanceProfile, type ZLevelPerformanceProfile } from './zLevelPerformance';
@@ -39,8 +40,9 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
     return buildDrillCanonicalToolpath({summary,stock,stockMode,placement,orientation,wcs,operation});
   }
   if(operation.kind==='3d-roughing'){
-    // 008H-A1 establishes the operation boundary only. No manufacturing
-    // toolpath is emitted until the dedicated 3D roughing kernel is accepted.
+    // 008H-A2 resolves the same fail-closed CurvedFaceTarget truth used by
+    // 3D finishing, but still emits no manufacturing toolpath.
+    buildThreeDRoughingOperationState({summary,stock,placement,orientation,wcs,operation});
     return null;
   }
   if(operation.kind==='surface-finishing'){
