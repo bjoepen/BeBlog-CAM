@@ -11,8 +11,11 @@ export type EndMillRoughingSafetyPoint={
   finishAllowanceMm:number;
 };
 
+export type EndMillRoughingSafetyStatus='safe'|'outside-target'|'unresolved';
+
 export type EndMillRoughingSafetyResult={
   valid:boolean;
+  status:EndMillRoughingSafetyStatus;
   safety:EndMillRoughingSafetyPoint|null;
   error:string|null;
 };
@@ -38,16 +41,16 @@ export function endMillRoughingSafetyAt(
   finishAllowanceMm:number,
   sampleStepMm=.25,
 ):EndMillRoughingSafetyResult{
-  if(!target.valid||!target.bounds)return{valid:false,safety:null,error:'Gekrümmte Zielfläche ist ungültig.'};
-  if(!partSafety.valid||!partSafety.bounds)return{valid:false,safety:null,error:'Part Safety Truth ist ungültig.'};
-  if(!(cutterRadiusMm>0))return{valid:false,safety:null,error:'Fräserradius muss größer als 0 sein.'};
-  if(!(finishAllowanceMm>=0))return{valid:false,safety:null,error:'Schlichtaufmaß darf nicht negativ sein.'};
-  if(!(sampleStepMm>0))return{valid:false,safety:null,error:'Abtastschritt muss größer als 0 sein.'};
+  if(!target.valid||!target.bounds)return{valid:false,status:'unresolved',safety:null,error:'Gekrümmte Zielfläche ist ungültig.'};
+  if(!partSafety.valid||!partSafety.bounds)return{valid:false,status:'unresolved',safety:null,error:'Part Safety Truth ist ungültig.'};
+  if(!(cutterRadiusMm>0))return{valid:false,status:'unresolved',safety:null,error:'Fräserradius muss größer als 0 sein.'};
+  if(!(finishAllowanceMm>=0))return{valid:false,status:'unresolved',safety:null,error:'Schlichtaufmaß darf nicht negativ sein.'};
+  if(!(sampleStepMm>0))return{valid:false,status:'unresolved',safety:null,error:'Abtastschritt muss größer als 0 sein.'};
 
   // Selection still owns machining intent. Part Safety must never expand the
   // operation centre domain beyond the selected target faces.
   const centerZ=curvedFaceTargetZAt(target,x,y);
-  if(centerZ===null)return{valid:false,safety:null,error:'XY liegt außerhalb der ausgewählten Zielfläche.'};
+  if(centerZ===null)return{valid:false,status:'outside-target',safety:null,error:null};
 
   const step=Math.min(sampleStepMm,Math.max(.05,cutterRadiusMm/8));
   const samples=Math.max(1,Math.ceil((cutterRadiusMm*2)/step));
@@ -63,10 +66,11 @@ export function endMillRoughingSafetyAt(
     }
   }
 
-  if(!Number.isFinite(surfaceMaxZ))return{valid:false,safety:null,error:'Für die Fräser-Stirnfläche konnte keine sichere 3D-Höhe bestimmt werden.'};
+  if(!Number.isFinite(surfaceMaxZ))return{valid:false,status:'unresolved',safety:null,error:'Für die Fräser-Stirnfläche konnte keine sichere 3D-Höhe bestimmt werden.'};
 
   return{
     valid:true,
+    status:'safe',
     safety:{x,y,safeZ:surfaceMaxZ+finishAllowanceMm,surfaceMaxZ,finishAllowanceMm},
     error:null,
   };
