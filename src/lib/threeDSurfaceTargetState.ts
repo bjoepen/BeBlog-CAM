@@ -92,7 +92,7 @@ export function buildThreeDSurfaceTargetState(args:{
   }
 
   const outerBoundary=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
-  if(!outerBoundary.ok){
+  if(outerBoundary.ok===false){
     return{ok:false,target:null,errors:[outerBoundary.error],warnings,triangleCount:0,boundaryDiagnostics:[]};
   }
   const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,outerBoundary.geometry);
