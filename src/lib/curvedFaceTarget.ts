@@ -126,9 +126,19 @@ function pointOnAnalyticBoundary(point:P3,boundary:CurvedFaceBoundaryGeometry,to
 function candidateOnAnalyticBoundary(candidate:VerticalBoundaryCandidate,boundaries:CurvedFaceBoundaryGeometry[]){
   const tolerance=1e-6;
   const extent=projectedCandidateExtent(candidate,tolerance);
-  const length=projectedPointDistance(extent.a,extent.b);
-  const samples=length<=tolerance?[extent.a]:Array.from({length:17},(_,i)=>({x:extent.a.x+(extent.b.x-extent.a.x)*i/16,y:extent.a.y+(extent.b.y-extent.a.y)*i/16,z:0}));
-  return samples.every(point=>boundaries.some(boundary=>pointOnAnalyticBoundary(point,boundary,tolerance)));
+
+  // A degenerate display triangle is a tessellation chord/point, not the
+  // analytic BRep boundary itself.  Prove ownership by one and the same
+  // authorized outer BRep edge.  Requiring chord interior points to lie on a
+  // circle would incorrectly reject every non-zero circular tessellation chord.
+  return boundaries.some(boundary=>{
+    if(boundary.kind==='line'){
+      return segmentCoveredByProjectedBoundary(extent,[{a:boundary.start,b:boundary.end}],tolerance);
+    }
+    if(Math.abs(Math.abs(boundary.axisDirection.z)-1)>1e-5)return false;
+    return pointOnAnalyticBoundary(extent.a,boundary,tolerance)
+      && pointOnAnalyticBoundary(extent.b,boundary,tolerance);
+  });
 }
 
 function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
