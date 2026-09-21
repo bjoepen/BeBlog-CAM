@@ -25,6 +25,7 @@
   import { activeOperation, addOperation, cloneOperation, dxfTargetIds, operationSummary, removeOperation, replaceOperation, selectOperation } from './lib/operationsProject';
   import { toggleDxfTargetId } from './lib/dxfMultiTargetSelection';
   import { buildActiveCanonicalToolpath } from './lib/activeCanonicalToolpath';
+  import { buildThreeDRoughingDeterminismProbe } from './lib/threeDRoughingDiagnostics';
   import type { ZLevelPerformanceProfile } from './lib/zLevelPerformance';
   import { buildZLevelOperationState, zLevelMode } from './lib/zLevelOperationState';
   import { resolveContourDepth } from './lib/contourDepth';
@@ -55,6 +56,8 @@
   let jobPreflight:JobPreflightResult|null=null;
   let faceTargetState:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null=null;
   let activeCanonicalToolpath:CanonicalToolpath|null=null;
+  // 008H-A21 diagnostic helper is intentionally side-effect free and does not participate in manufacturing.
+  void buildThreeDRoughingDeterminismProbe;
   function receiveFaceTargetState(state:{toolpath:CanonicalToolpath;targetZ:number;roughBottomZ:number}|null){faceTargetState=state;}
   function buildOrderedActiveCanonicalToolpath(summary:ImportSummary|null,currentStock:StockDefinition,currentStockMode:StockMode,currentPlacement:PartPlacement,currentOrientation:PartOrientation,currentWcs:WorkCoordinateSystem,currentOperation:CamOperation,project:OperationsProject,profile?:ZLevelPerformanceProfile){
     if(!summary)return null;
