@@ -92,7 +92,8 @@
     "check:008h-a17": "node scripts/check-008h-a17-reachability-level-schedule.mjs",
     "check:008h-a18": "node scripts/check-008h-a18-reachability-level-consolidation.mjs",
     "check:008h-a19": "node scripts/check-008h-a19-vertical-boundary-surface-semantics.mjs",
-    "check:008h-a20": "node scripts/check-008h-a20-brep-boundary-truth.mjs"
+    "check:008h-a20": "node scripts/check-008h-a20-brep-boundary-truth.mjs",
+    "check:008h-a21": "node scripts/check-008h-a21-regression-diagnostics.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

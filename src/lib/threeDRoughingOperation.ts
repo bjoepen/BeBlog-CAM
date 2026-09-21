@@ -5,6 +5,7 @@ import { buildPartSafetySurface, translatePartSafetySurface } from './partSafety
 import type { CanonicalToolpath } from './canonicalToolpath';
 import type { P3 } from './stepView';
 import { buildThreeDRoughingPipeline } from './threeDRoughingPipeline';
+import { emitThreeDRoughingBoundaryDiagnostics } from './threeDRoughingDiagnostics';
 import type {
   ImportSummary,
   PartOrientation,
@@ -30,6 +31,7 @@ export type ThreeDRoughingOperationState={
   warnings:string[];
   triangleCount:number;
   safetyProbeCount:number;
+  boundaryDiagnostics:import('./curvedFaceTarget').CurvedFaceTarget['boundaryDiagnostics'];
 };
 
 export function buildThreeDRoughingOperationState(args:{
@@ -58,6 +60,7 @@ export function buildThreeDRoughingOperationState(args:{
   });
   warnings.push(...surface.warnings);
   errors.push(...surface.errors);
+  emitThreeDRoughingBoundaryDiagnostics({operationId:operation.id,diagnostics:surface.boundaryDiagnostics});
 
   let toolpath:CanonicalToolpath|null=null;
   let safetyProbeCount=0;
@@ -87,5 +90,6 @@ export function buildThreeDRoughingOperationState(args:{
     warnings:[...new Set(warnings)],
     triangleCount:surface.triangleCount,
     safetyProbeCount,
+    boundaryDiagnostics:surface.boundaryDiagnostics,
   };
 }

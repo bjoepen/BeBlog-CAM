@@ -9,8 +9,8 @@ export type CurvedFaceTriangle={
 
 type ProjectedBoundaryEdge={a:P3;b:P3};
 type VerticalBoundaryCandidate={faceId:number;triangle:CurvedFaceTriangle};
-export type CurvedFaceBoundaryLine={kind:'line';start:P3;end:P3};
-export type CurvedFaceBoundaryCircle={kind:'circle';center:P3;axisDirection:P3;radiusMm:number};
+export type CurvedFaceBoundaryLine={kind:'line';wireId?:number;edgeId?:number;start:P3;end:P3};
+export type CurvedFaceBoundaryCircle={kind:'circle';wireId?:number;edgeId?:number;center:P3;axisDirection:P3;radiusMm:number};
 export type CurvedFaceBoundaryGeometry=CurvedFaceBoundaryLine|CurvedFaceBoundaryCircle;
 
 type CurvedFaceSpatialIndex={
@@ -31,6 +31,7 @@ export type CurvedFaceTarget={
   spatialIndex:CurvedFaceSpatialIndex|null;
   errors:string[];
   warnings:string[];
+  boundaryDiagnostics:{faceId:number;candidatePoints:P3[];outerBoundaryEdges:{wireId:number|null;edgeId:number|null;kind:string}[]}[];
 };
 
 const EPS=1e-8;
@@ -255,6 +256,7 @@ export function buildCurvedFaceTarget(
   const errors:string[]=[];
   const warnings:string[]=[];
   const selected=new Set(selectedFaceIds);
+  const boundaryDiagnostics:CurvedFaceTarget['boundaryDiagnostics']=[];
 
   if(!selected.size)errors.push('Keine STEP/BRep-Fläche ausgewählt.');
   if(displayFaceIds.length!==Math.floor(partTriangles.length/3)){
@@ -284,6 +286,11 @@ export function buildCurvedFaceTarget(
       ?candidateOnAnalyticBoundary(candidate,brepOuterBoundaryGeometry)
       :candidateOnProjectedBoundary(candidate,meshBoundaryEdges??[]);
     if(!proven){
+      boundaryDiagnostics.push({
+        faceId:candidate.faceId,
+        candidatePoints:[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c].map(point=>({...point})),
+        outerBoundaryEdges:(brepOuterBoundaryGeometry??[]).map(edge=>({wireId:edge.wireId??null,edgeId:edge.edgeId??null,kind:edge.kind})),
+      });
       errors.push(`Ausgewählte Fläche ${candidate.faceId}: vertikale oder XY-degenerierte Dreiecksprojektion liegt nicht nachweisbar auf der äußeren XY-Boundary.`);
     }
   }
@@ -316,7 +323,7 @@ export function buildCurvedFaceTarget(
       for(let ix=0;ix<=nx;ix++){
         const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;
         let hit:number|null=null;
-        const candidates=spatialIndex?candidateTriangleIndices({valid:true,faceIds:[],triangles,bounds,spatialIndex,errors:[],warnings:[]},x,y):null;
+        const candidates=spatialIndex?candidateTriangleIndices({valid:true,faceIds:[],triangles,bounds,spatialIndex,errors:[],warnings:[],boundaryDiagnostics:[]},x,y):null;
         const triangleIndices=candidates??triangles.map((_,index)=>index);
         for(const triangleIndex of triangleIndices){
           const triangle=triangles[triangleIndex];
@@ -343,5 +350,6 @@ export function buildCurvedFaceTarget(
     spatialIndex,
     errors:[...new Set(errors)],
     warnings:[...new Set(warnings)],
+    boundaryDiagnostics,
   };
 }

@@ -25,6 +25,7 @@
   import { activeOperation, addOperation, cloneOperation, dxfTargetIds, operationSummary, removeOperation, replaceOperation, selectOperation } from './lib/operationsProject';
   import { toggleDxfTargetId } from './lib/dxfMultiTargetSelection';
   import { buildActiveCanonicalToolpath } from './lib/activeCanonicalToolpath';
+  import { captureThreeDRoughingAppDiagnostic, emitThreeDRoughingAppDiagnostic } from './lib/threeDRoughingDiagnostics';
   import type { ZLevelPerformanceProfile } from './lib/zLevelPerformance';
   import { buildZLevelOperationState, zLevelMode } from './lib/zLevelOperationState';
   import { resolveContourDepth } from './lib/contourDepth';
@@ -78,6 +79,7 @@
     return toolpaths;
   }
   $: activeCanonicalToolpath=buildOrderedActiveCanonicalToolpath(importSummary,stock,stockMode,placement,orientation,wcs,operation,operationsProject);
+  $: emitThreeDRoughingAppDiagnostic(captureThreeDRoughingAppDiagnostic({event:'canonical-rebuild',operation,project:operationsProject,canonical:activeCanonicalToolpath}));
   // 008E-C1: Editing must not eagerly rebuild expensive Z-level states that are
   // only consumed by Prüfen/Fräsen. The active canonical path above remains the
   // single manufacturing truth while Bearbeiten is active.
@@ -124,7 +126,7 @@
   function appendOperation(kind:OperationKind){operationsProject=addOperation(operationsProject,kind);const next=activeOperation(operationsProject);if(next)operation=cloneOperation(next);}
   function deleteOperation(id:string){if(operationsProject.operations.length<=1)return;operationsProject=removeOperation(operationsProject,id);const next=activeOperation(operationsProject);if(next)operation=cloneOperation(next);}
   function resetOperations(){operationsProject={operations:[cloneOperation(defaultContourOperation)],activeOperationId:defaultContourOperation.id};operation=cloneOperation(defaultContourOperation);}
-  function applyToolOperationTransfer(transfer:{operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number;cuttingLengthMm:number;stickoutMm:number;shaftDiameterMm:number;holderDiameterMm:number}){if(!(transfer.diameterMm>0&&transfer.feedMmMin>0&&transfer.spindleRpm>0))return;const target=operationsProject.operations.find(op=>op.id===transfer.operationId);if(!target)return;if(target.kind==='surface-finishing'&&transfer.toolKind!=='ball-nose'){error='3D Schlichten erlaubt ausschließlich Vollradiusfräser.';return;}const updated={...target,tool:{id:transfer.toolId,name:transfer.toolName,diameterMm:transfer.diameterMm,kind:transfer.toolKind,cuttingLengthMm:transfer.cuttingLengthMm,stickoutMm:transfer.stickoutMm,shaftDiameterMm:transfer.shaftDiameterMm,holderDiameterMm:transfer.holderDiameterMm},feedMmMin:transfer.feedMmMin,spindleRpm:transfer.spindleRpm} as CamOperation;operationsProject=replaceOperation(operationsProject,updated);if(operation.id===updated.id)operation=cloneOperation(operationsProject.operations.find(op=>op.id===updated.id)??updated);}
+  function applyToolOperationTransfer(transfer:{operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number;cuttingLengthMm:number;stickoutMm:number;shaftDiameterMm:number;holderDiameterMm:number}){if(!(transfer.diameterMm>0&&transfer.feedMmMin>0&&transfer.spindleRpm>0))return;emitThreeDRoughingAppDiagnostic(captureThreeDRoughingAppDiagnostic({event:'tool-transfer-before',operation,project:operationsProject,canonical:activeCanonicalToolpath}));const target=operationsProject.operations.find(op=>op.id===transfer.operationId);if(!target)return;if(target.kind==='surface-finishing'&&transfer.toolKind!=='ball-nose'){error='3D Schlichten erlaubt ausschließlich Vollradiusfräser.';return;}const updated={...target,tool:{id:transfer.toolId,name:transfer.toolName,diameterMm:transfer.diameterMm,kind:transfer.toolKind,cuttingLengthMm:transfer.cuttingLengthMm,stickoutMm:transfer.stickoutMm,shaftDiameterMm:transfer.shaftDiameterMm,holderDiameterMm:transfer.holderDiameterMm},feedMmMin:transfer.feedMmMin,spindleRpm:transfer.spindleRpm} as CamOperation;operationsProject=replaceOperation(operationsProject,updated);if(operation.id===updated.id)operation=cloneOperation(operationsProject.operations.find(op=>op.id===updated.id)??updated);emitThreeDRoughingAppDiagnostic(captureThreeDRoughingAppDiagnostic({event:'tool-transfer-after',operation,project:operationsProject,canonical:activeCanonicalToolpath}));}
   function setToolTargetOperation(id:string){if(operationsProject.operations.some(op=>op.id===id))toolTargetOperationId=id;}
   function goToStep(step:string){if(step==='Werkzeuge')toolTargetOperationId=operationsProject.activeOperationId;activeStep=step;}
   $: if(!toolTargetOperationId||!operationsProject.operations.some(op=>op.id===toolTargetOperationId))toolTargetOperationId=operationsProject.activeOperationId;

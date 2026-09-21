@@ -115,6 +115,8 @@ jobs:
         run: pnpm check:008h-a19
       - name: 3D Surface Truth BRep boundary contract
         run: pnpm check:008h-a20
+      - name: 3D roughing regression diagnostics contract
+        run: pnpm check:008h-a21
       - name: Frontend build
         run: pnpm build
       - name: Rust check
