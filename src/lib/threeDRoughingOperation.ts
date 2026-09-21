@@ -5,6 +5,7 @@ import { buildPartSafetySurface, translatePartSafetySurface } from './partSafety
 import type { CanonicalToolpath } from './canonicalToolpath';
 import type { P3 } from './stepView';
 import { buildThreeDRoughingPipeline } from './threeDRoughingPipeline';
+import { emitThreeDRoughingBoundaryDiagnostics } from './threeDRoughingDiagnostics';
 import type {
   ImportSummary,
   PartOrientation,
@@ -59,6 +60,7 @@ export function buildThreeDRoughingOperationState(args:{
   });
   warnings.push(...surface.warnings);
   errors.push(...surface.errors);
+  emitThreeDRoughingBoundaryDiagnostics({operationId:operation.id,diagnostics:surface.boundaryDiagnostics});
 
   let toolpath:CanonicalToolpath|null=null;
   let safetyProbeCount=0;
