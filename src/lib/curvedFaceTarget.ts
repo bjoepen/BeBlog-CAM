@@ -9,7 +9,9 @@ export type CurvedFaceTriangle={
 
 type ProjectedBoundaryEdge={a:P3;b:P3};
 type VerticalBoundaryCandidate={faceId:number;triangle:CurvedFaceTriangle};
-export type CurvedFaceBoundaryPolyline=P3[];
+export type CurvedFaceBoundaryLine={kind:'line';start:P3;end:P3};
+export type CurvedFaceBoundaryCircle={kind:'circle';center:P3;axisDirection:P3;radiusMm:number};
+export type CurvedFaceBoundaryGeometry=CurvedFaceBoundaryLine|CurvedFaceBoundaryCircle;
 
 type CurvedFaceSpatialIndex={
   minX:number;
@@ -114,12 +116,19 @@ function segmentCoveredByProjectedBoundary(segment:ProjectedBoundaryEdge,boundar
     && boundaryEdges.some(edge=>projectedPointOnSegment(segment.b,edge,tolerance));
 }
 
-function polylineBoundaryEdges(polylines:CurvedFaceBoundaryPolyline[]){
-  const edges:ProjectedBoundaryEdge[]=[];
-  for(const points of polylines)for(let i=1;i<points.length;i++){
-    if(projectedPointDistance(points[i-1],points[i])>EPS)edges.push({a:points[i-1],b:points[i]});
-  }
-  return edges;
+function pointOnAnalyticBoundary(point:P3,boundary:CurvedFaceBoundaryGeometry,tolerance:number){
+  if(boundary.kind==='line')return projectedPointOnSegment(point,{a:boundary.start,b:boundary.end},tolerance);
+  if(Math.abs(Math.abs(boundary.axisDirection.z)-1)>1e-5)return false;
+  const radius=Math.hypot(point.x-boundary.center.x,point.y-boundary.center.y);
+  return Math.abs(radius-boundary.radiusMm)<=tolerance;
+}
+
+function candidateOnAnalyticBoundary(candidate:VerticalBoundaryCandidate,boundaries:CurvedFaceBoundaryGeometry[]){
+  const tolerance=1e-6;
+  const extent=projectedCandidateExtent(candidate,tolerance);
+  const length=projectedPointDistance(extent.a,extent.b);
+  const samples=length<=tolerance?[extent.a]:Array.from({length:17},(_,i)=>({x:extent.a.x+(extent.b.x-extent.a.x)*i/16,y:extent.a.y+(extent.b.y-extent.a.y)*i/16,z:0}));
+  return samples.every(point=>boundaries.some(boundary=>pointOnAnalyticBoundary(point,boundary,tolerance)));
 }
 
 function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
@@ -231,7 +240,7 @@ export function buildCurvedFaceTarget(
   displayFaceIds:number[],
   selectedFaceIds:number[],
   profile?:ZLevelPerformanceProfile,
-  brepOuterBoundaryPolylines?:CurvedFaceBoundaryPolyline[],
+  brepOuterBoundaryGeometry?:CurvedFaceBoundaryGeometry[],
 ):CurvedFaceTarget{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -258,12 +267,13 @@ export function buildCurvedFaceTarget(
     triangles.push({a,b,c});
   }
 
-  // Native BRep outer-wire topology is authoritative when supplied.
-  const boundaryEdges=brepOuterBoundaryPolylines
-    ?polylineBoundaryEdges(brepOuterBoundaryPolylines)
-    :classifyProjectedBoundary(triangles);
+  // Native BRep outer-wire topology plus analytic edge geometry is authoritative when supplied.
+  const meshBoundaryEdges=brepOuterBoundaryGeometry?null:classifyProjectedBoundary(triangles);
   for(const candidate of verticalBoundaryCandidates){
-    if(!candidateOnProjectedBoundary(candidate,boundaryEdges)){
+    const proven=brepOuterBoundaryGeometry
+      ?candidateOnAnalyticBoundary(candidate,brepOuterBoundaryGeometry)
+      :candidateOnProjectedBoundary(candidate,meshBoundaryEdges??[]);
+    if(!proven){
       errors.push(`Ausgewählte Fläche ${candidate.faceId}: vertikale oder XY-degenerierte Dreiecksprojektion liegt nicht nachweisbar auf der äußeren XY-Boundary.`);
     }
   }
