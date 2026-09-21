@@ -16,6 +16,7 @@ export type ThreeDSurfaceTargetState={
   errors:string[];
   warnings:string[];
   triangleCount:number;
+  boundaryDiagnostics:CurvedFaceTarget['boundaryDiagnostics'];
 };
 
 function bounds(points:P3[]){
@@ -42,9 +43,9 @@ function placedOuterBoundaryGeometry(summary:ImportSummary,orientation:PartOrien
   for(const wire of outerWires)for(const edgeId of wire.edgeIds){
     const edge=source.source.edges[edgeId];
     if(!edge)return null;
-    if(edge.kind==='line'){boundaries.push({kind:'line',start:place(edge.start),end:place(edge.end)});continue;}
+    if(edge.kind==='line'){boundaries.push({kind:'line',wireId:wire.wireId,edgeId,start:place(edge.start),end:place(edge.end)});continue;}
     if(edge.kind==='circle'&&edge.center&&edge.radiusMm&&edge.axisDirection){
-      boundaries.push({kind:'circle',center:place(edge.center),axisDirection:{x:edge.axisDirection[0],y:edge.axisDirection[1],z:edge.axisDirection[2]},radiusMm:edge.radiusMm});
+      boundaries.push({kind:'circle',wireId:wire.wireId,edgeId,center:place(edge.center),axisDirection:{x:edge.axisDirection[0],y:edge.axisDirection[1],z:edge.axisDirection[2]},radiusMm:edge.radiusMm});
       continue;
     }
     return null;
@@ -78,12 +79,12 @@ export function buildThreeDSurfaceTargetState(args:{
 
   if(summary.kind!=='step')errors.push(`${operationLabel} benötigt ein STEP/BRep-Modell.`);
   if(!faceIds.length)errors.push(`Keine STEP/BRep-Fläche für ${operationLabel} gewählt.`);
-  if(errors.length)return{ok:false,target:null,errors,warnings,triangleCount:0};
+  if(errors.length)return{ok:false,target:null,errors,warnings,triangleCount:0,boundaryDiagnostics:[]};
 
   const part=buildPlacedPartTriangles(summary,stock,placement,orientation);
   const displayFaceIds=summary.brep?.displayFaceIds??[];
   if(!part||displayFaceIds.length!==Math.floor(part.length/3)){
-    return{ok:false,target:null,errors:['STEP/BRep-Triangulation oder Face-ID-Zuordnung konnte nicht rekonstruiert werden.'],warnings,triangleCount:0};
+    return{ok:false,target:null,errors:['STEP/BRep-Triangulation oder Face-ID-Zuordnung konnte nicht rekonstruiert werden.'],warnings,triangleCount:0,boundaryDiagnostics:[]};
   }
 
   const outerBoundaryGeometry=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
@@ -96,5 +97,6 @@ export function buildThreeDSurfaceTargetState(args:{
     errors:[...new Set(errors)],
     warnings:[...new Set(warnings)],
     triangleCount:target.triangles.length,
+    boundaryDiagnostics:target.boundaryDiagnostics,
   };
 }
