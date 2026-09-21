@@ -121,6 +121,8 @@ jobs:
         run: pnpm check:008h-a22
       - name: 3D Surface Truth BRep boundary authority contract
         run: pnpm check:008h-a23
+      - name: 3D Surface Truth sphere semantics contract
+        run: pnpm check:008h-a24-a1
       - name: Frontend build
         run: pnpm build
       - name: Rust check
