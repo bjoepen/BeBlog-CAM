@@ -30,6 +30,7 @@ export type ThreeDRoughingOperationState={
   warnings:string[];
   triangleCount:number;
   safetyProbeCount:number;
+  boundaryDiagnostics:import('./curvedFaceTarget').CurvedFaceTarget['boundaryDiagnostics'];
 };
 
 export function buildThreeDRoughingOperationState(args:{
@@ -87,5 +88,6 @@ export function buildThreeDRoughingOperationState(args:{
     warnings:[...new Set(warnings)],
     triangleCount:surface.triangleCount,
     safetyProbeCount,
+    boundaryDiagnostics:surface.boundaryDiagnostics,
   };
 }
