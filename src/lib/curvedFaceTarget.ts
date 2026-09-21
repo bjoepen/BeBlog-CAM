@@ -9,6 +9,9 @@ export type CurvedFaceTriangle={
 
 type ProjectedBoundaryEdge={a:P3;b:P3};
 type VerticalBoundaryCandidate={faceId:number;triangle:CurvedFaceTriangle};
+export type CurvedFaceBoundaryLine={kind:'line';start:P3;end:P3};
+export type CurvedFaceBoundaryCircle={kind:'circle';center:P3;axisDirection:P3;radiusMm:number};
+export type CurvedFaceBoundaryGeometry=CurvedFaceBoundaryLine|CurvedFaceBoundaryCircle;
 
 type CurvedFaceSpatialIndex={
   minX:number;
@@ -111,6 +114,31 @@ function segmentCoveredByProjectedBoundary(segment:ProjectedBoundaryEdge,boundar
     && projectedPointOnSegment(segment.b,segment,tolerance)
     && boundaryEdges.some(edge=>projectedPointOnSegment(segment.a,edge,tolerance))
     && boundaryEdges.some(edge=>projectedPointOnSegment(segment.b,edge,tolerance));
+}
+
+function pointOnAnalyticBoundary(point:P3,boundary:CurvedFaceBoundaryGeometry,tolerance:number){
+  if(boundary.kind==='line')return projectedPointOnSegment(point,{a:boundary.start,b:boundary.end},tolerance);
+  if(Math.abs(Math.abs(boundary.axisDirection.z)-1)>1e-5)return false;
+  const radius=Math.hypot(point.x-boundary.center.x,point.y-boundary.center.y);
+  return Math.abs(radius-boundary.radiusMm)<=tolerance;
+}
+
+function candidateOnAnalyticBoundary(candidate:VerticalBoundaryCandidate,boundaries:CurvedFaceBoundaryGeometry[]){
+  const tolerance=1e-6;
+  const extent=projectedCandidateExtent(candidate,tolerance);
+
+  // A degenerate display triangle is a tessellation chord/point, not the
+  // analytic BRep boundary itself.  Prove ownership by one and the same
+  // authorized outer BRep edge.  Requiring chord interior points to lie on a
+  // circle would incorrectly reject every non-zero circular tessellation chord.
+  return boundaries.some(boundary=>{
+    if(boundary.kind==='line'){
+      return segmentCoveredByProjectedBoundary(extent,[{a:boundary.start,b:boundary.end}],tolerance);
+    }
+    if(Math.abs(Math.abs(boundary.axisDirection.z)-1)>1e-5)return false;
+    return pointOnAnalyticBoundary(extent.a,boundary,tolerance)
+      && pointOnAnalyticBoundary(extent.b,boundary,tolerance);
+  });
 }
 
 function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
@@ -222,6 +250,7 @@ export function buildCurvedFaceTarget(
   displayFaceIds:number[],
   selectedFaceIds:number[],
   profile?:ZLevelPerformanceProfile,
+  brepOuterBoundaryGeometry?:CurvedFaceBoundaryGeometry[],
 ):CurvedFaceTarget{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -248,9 +277,13 @@ export function buildCurvedFaceTarget(
     triangles.push({a,b,c});
   }
 
-  const boundaryEdges=classifyProjectedBoundary(triangles);
+  // Native BRep outer-wire topology plus analytic edge geometry is authoritative when supplied.
+  const meshBoundaryEdges=brepOuterBoundaryGeometry?null:classifyProjectedBoundary(triangles);
   for(const candidate of verticalBoundaryCandidates){
-    if(!candidateOnProjectedBoundary(candidate,boundaryEdges)){
+    const proven=brepOuterBoundaryGeometry
+      ?candidateOnAnalyticBoundary(candidate,brepOuterBoundaryGeometry)
+      :candidateOnProjectedBoundary(candidate,meshBoundaryEdges??[]);
+    if(!proven){
       errors.push(`Ausgewählte Fläche ${candidate.faceId}: vertikale oder XY-degenerierte Dreiecksprojektion liegt nicht nachweisbar auf der äußeren XY-Boundary.`);
     }
   }

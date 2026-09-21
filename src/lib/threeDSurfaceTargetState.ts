@@ -1,6 +1,7 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
 import { buildCurvedFaceTarget } from './curvedFaceTarget';
 import { orientPoint3 } from './partOrientation';
+import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
 import type { P3 } from './stepView';
 import type {
   ImportSummary,
@@ -20,6 +21,35 @@ export type ThreeDSurfaceTargetState={
 function bounds(points:P3[]){
   const xs=points.map(p=>p.x),ys=points.map(p=>p.y),zs=points.map(p=>p.z);
   return{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys),minZ:Math.min(...zs),maxZ:Math.max(...zs)};
+}
+
+
+function placedOuterBoundaryGeometry(summary:ImportSummary,orientation:PartOrientation,faceIds:number[],part:P3[]):import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]|null{
+  const source=buildOrientedStepManufacturingFeatureSource(summary,orientation);
+  if(!source.ok)return null;
+  const selected=new Set(faceIds);
+  const outerWires=source.source.wires.filter(wire=>selected.has(wire.faceId)&&wire.outer===true);
+  if(!outerWires.length)return null;
+
+  const rawValues=summary.brep?.displayVertices??[],orientedRaw:P3[]=[];
+  for(let i=0;i+2<rawValues.length;i+=3)orientedRaw.push(orientPoint3({x:rawValues[i],y:rawValues[i+1],z:rawValues[i+2]},orientation));
+  if(!orientedRaw.length||!part.length)return null;
+  const rawBounds=bounds(orientedRaw),placedBounds=bounds(part);
+  const offset={x:placedBounds.minX-rawBounds.minX,y:placedBounds.minY-rawBounds.minY,z:placedBounds.minZ-rawBounds.minZ};
+  const place=(tuple:[number,number,number]):P3=>({x:tuple[0]+offset.x,y:tuple[1]+offset.y,z:tuple[2]+offset.z});
+
+  const boundaries:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]=[];
+  for(const wire of outerWires)for(const edgeId of wire.edgeIds){
+    const edge=source.source.edges[edgeId];
+    if(!edge)return null;
+    if(edge.kind==='line'){boundaries.push({kind:'line',start:place(edge.start),end:place(edge.end)});continue;}
+    if(edge.kind==='circle'&&edge.center&&edge.radiusMm&&edge.axisDirection){
+      boundaries.push({kind:'circle',center:place(edge.center),axisDirection:{x:edge.axisDirection[0],y:edge.axisDirection[1],z:edge.axisDirection[2]},radiusMm:edge.radiusMm});
+      continue;
+    }
+    return null;
+  }
+  return boundaries.length?boundaries:null;
 }
 
 export function buildPlacedPartTriangles(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation):P3[]|null{
@@ -56,7 +86,8 @@ export function buildThreeDSurfaceTargetState(args:{
     return{ok:false,target:null,errors:['STEP/BRep-Triangulation oder Face-ID-Zuordnung konnte nicht rekonstruiert werden.'],warnings,triangleCount:0};
   }
 
-  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds);
+  const outerBoundaryGeometry=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
+  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,outerBoundaryGeometry??undefined);
   warnings.push(...target.warnings);
   errors.push(...target.errors);
   return{
