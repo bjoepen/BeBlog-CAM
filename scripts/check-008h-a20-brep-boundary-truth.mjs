@@ -18,9 +18,12 @@ need(state,"kind:'circle'",'analytic circle boundary must remain analytic');
 need(target,'brepOuterBoundaryGeometry','CurvedFaceTarget must accept analytic BRep boundary truth');
 need(target,'candidateOnAnalyticBoundary','degenerate candidates must be proven against analytic BRep edges');
 need(target,'pointOnAnalyticBoundary','analytic boundary membership proof missing');
-need(target,"Math.abs(radius-boundary.radiusMm)<=tolerance",'circle proof must use analytic radius, not sampled chords');
+need(target,"Math.abs(radius-boundary.radiusMm)<=tolerance",'circle proof must use analytic radius');
+need(target,"pointOnAnalyticBoundary(extent.a,boundary,tolerance)",'circular chord start must belong to the same analytic outer edge');
+need(target,"pointOnAnalyticBoundary(extent.b,boundary,tolerance)",'circular chord end must belong to the same analytic outer edge');
+need(target,"segmentCoveredByProjectedBoundary(extent,[{a:boundary.start,b:boundary.end}],tolerance)",'line boundaries must retain full-segment coverage proof');
 need(target,'segmentCoveredByProjectedBoundary','A19 full-segment proof must remain');
 need(target,'if(Math.abs(hit-z)>1e-4)return null','multi-Z ambiguity must remain fail closed');
 
-for(const bad of ['wire.outer!==false','Math.max(hit,z)','Math.min(hit,z)','Array.from({length:257}'])forbid(state+target,bad,`forbidden shortcut ${bad}`);
+for(const bad of ['wire.outer!==false','Math.max(hit,z)','Math.min(hit,z)','Array.from({length:257}','Array.from({length:17}'])forbid(state+target,bad,`forbidden shortcut ${bad}`);
 console.log('008H-A20 BRep boundary truth contract PASS');
