@@ -9,6 +9,7 @@ export type CurvedFaceTriangle={
 
 type ProjectedBoundaryEdge={a:P3;b:P3};
 type VerticalBoundaryCandidate={faceId:number;triangle:CurvedFaceTriangle};
+export type CurvedFaceBoundaryPolyline=P3[];
 
 type CurvedFaceSpatialIndex={
   minX:number;
@@ -111,6 +112,14 @@ function segmentCoveredByProjectedBoundary(segment:ProjectedBoundaryEdge,boundar
     && projectedPointOnSegment(segment.b,segment,tolerance)
     && boundaryEdges.some(edge=>projectedPointOnSegment(segment.a,edge,tolerance))
     && boundaryEdges.some(edge=>projectedPointOnSegment(segment.b,edge,tolerance));
+}
+
+function polylineBoundaryEdges(polylines:CurvedFaceBoundaryPolyline[]){
+  const edges:ProjectedBoundaryEdge[]=[];
+  for(const points of polylines)for(let i=1;i<points.length;i++){
+    if(projectedPointDistance(points[i-1],points[i])>EPS)edges.push({a:points[i-1],b:points[i]});
+  }
+  return edges;
 }
 
 function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
@@ -222,6 +231,7 @@ export function buildCurvedFaceTarget(
   displayFaceIds:number[],
   selectedFaceIds:number[],
   profile?:ZLevelPerformanceProfile,
+  brepOuterBoundaryPolylines?:CurvedFaceBoundaryPolyline[],
 ):CurvedFaceTarget{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -248,7 +258,10 @@ export function buildCurvedFaceTarget(
     triangles.push({a,b,c});
   }
 
-  const boundaryEdges=classifyProjectedBoundary(triangles);
+  // Native BRep outer-wire topology is authoritative when supplied.
+  const boundaryEdges=brepOuterBoundaryPolylines
+    ?polylineBoundaryEdges(brepOuterBoundaryPolylines)
+    :classifyProjectedBoundary(triangles);
   for(const candidate of verticalBoundaryCandidates){
     if(!candidateOnProjectedBoundary(candidate,boundaryEdges)){
       errors.push(`Ausgewählte Fläche ${candidate.faceId}: vertikale oder XY-degenerierte Dreiecksprojektion liegt nicht nachweisbar auf der äußeren XY-Boundary.`);
