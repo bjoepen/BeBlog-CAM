@@ -95,7 +95,8 @@
     "check:008h-a20": "node scripts/check-008h-a20-brep-boundary-truth.mjs",
     "check:008h-a21": "node scripts/check-008h-a21-regression-diagnostics.mjs",
     "check:008h-a22": "node scripts/check-008h-a22-production-determinism.mjs",
-    "check:008h-a23": "node scripts/check-008h-a23-brep-boundary-authority.mjs"
+    "check:008h-a23": "node scripts/check-008h-a23-brep-boundary-authority.mjs",
+    "check:008h-a24-a1": "node scripts/check-008h-a24-a1-sphere-semantics.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
