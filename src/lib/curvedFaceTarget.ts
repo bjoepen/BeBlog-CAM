@@ -255,6 +255,7 @@ export function buildCurvedFaceTarget(
   const errors:string[]=[];
   const warnings:string[]=[];
   const selected=new Set(selectedFaceIds);
+  const boundaryDiagnostics:CurvedFaceTarget['boundaryDiagnostics']=[];
 
   if(!selected.size)errors.push('Keine STEP/BRep-Fläche ausgewählt.');
   if(displayFaceIds.length!==Math.floor(partTriangles.length/3)){
@@ -284,6 +285,11 @@ export function buildCurvedFaceTarget(
       ?candidateOnAnalyticBoundary(candidate,brepOuterBoundaryGeometry)
       :candidateOnProjectedBoundary(candidate,meshBoundaryEdges??[]);
     if(!proven){
+      boundaryDiagnostics.push({
+        faceId:candidate.faceId,
+        candidatePoints:[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c].map(point=>({...point})),
+        outerBoundaryEdges:(brepOuterBoundaryGeometry??[]).map(edge=>({wireId:edge.wireId??null,edgeId:edge.edgeId??null,kind:edge.kind})),
+      });
       errors.push(`Ausgewählte Fläche ${candidate.faceId}: vertikale oder XY-degenerierte Dreiecksprojektion liegt nicht nachweisbar auf der äußeren XY-Boundary.`);
     }
   }
@@ -316,7 +322,7 @@ export function buildCurvedFaceTarget(
       for(let ix=0;ix<=nx;ix++){
         const x=bounds.minX+(bounds.maxX-bounds.minX)*ix/nx;
         let hit:number|null=null;
-        const candidates=spatialIndex?candidateTriangleIndices({valid:true,faceIds:[],triangles,bounds,spatialIndex,errors:[],warnings:[]},x,y):null;
+        const candidates=spatialIndex?candidateTriangleIndices({valid:true,faceIds:[],triangles,bounds,spatialIndex,errors:[],warnings:[],boundaryDiagnostics:[]},x,y):null;
         const triangleIndices=candidates??triangles.map((_,index)=>index);
         for(const triangleIndex of triangleIndices){
           const triangle=triangles[triangleIndex];
@@ -343,5 +349,6 @@ export function buildCurvedFaceTarget(
     spatialIndex,
     errors:[...new Set(errors)],
     warnings:[...new Set(warnings)],
+    boundaryDiagnostics,
   };
 }
