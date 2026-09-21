@@ -1,0 +1,20 @@
+import fs from 'node:fs';
+const read=p=>fs.readFileSync(p,'utf8');
+const need=(s,n,m)=>{if(!s.includes(n))throw new Error(m)};
+const app=read('src/App.svelte');
+const target=read('src/lib/curvedFaceTarget.ts');
+const state=read('src/lib/threeDSurfaceTargetState.ts');
+const diag=read('src/lib/threeDRoughingDiagnostics.ts');
+
+need(diag,'threeDRoughingDeterminismSignature','A21 must expose a deterministic roughing result signature');
+need(diag,'buildThreeDRoughingDeterminismProbe','A21 must expose A→B→A diagnostic rebuild probe');
+need(diag,'firstA===secondA','A21 must compare identical A inputs before/after B');
+need(diag,'describeRejectedVerticalBoundaryCandidate','A21 must expose rejected boundary diagnostics');
+need(diag,'faceId','boundary diagnostic must retain face id');
+need(diag,'edgeId','boundary diagnostic must retain BRep edge id');
+need(diag,'wireId','boundary diagnostic must retain BRep wire id');
+need(target,'boundaryDiagnostics','CurvedFaceTarget must retain fail-closed boundary diagnostics');
+need(state,'boundaryDiagnostics','shared 3D surface state must preserve boundary diagnostics');
+need(app,'buildThreeDRoughingDeterminismProbe','UI must make the diagnostic probe available without changing manufacturing truth');
+for(const bad of ['roughingMode = \'3d\'','ballnoseContactAt(target']) if(diag.includes(bad)) throw new Error('A21 must not create manufacturing shortcuts');
+console.log('008H-A21 regression diagnostics contract PASS');
