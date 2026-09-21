@@ -9,8 +9,8 @@ export type CurvedFaceTriangle={
 
 type ProjectedBoundaryEdge={a:P3;b:P3};
 type VerticalBoundaryCandidate={faceId:number;triangle:CurvedFaceTriangle};
-export type CurvedFaceBoundaryLine={kind:'line';start:P3;end:P3};
-export type CurvedFaceBoundaryCircle={kind:'circle';center:P3;axisDirection:P3;radiusMm:number};
+export type CurvedFaceBoundaryLine={kind:'line';wireId?:number;edgeId?:number;start:P3;end:P3};
+export type CurvedFaceBoundaryCircle={kind:'circle';wireId?:number;edgeId?:number;center:P3;axisDirection:P3;radiusMm:number};
 export type CurvedFaceBoundaryGeometry=CurvedFaceBoundaryLine|CurvedFaceBoundaryCircle;
 
 type CurvedFaceSpatialIndex={
@@ -31,6 +31,7 @@ export type CurvedFaceTarget={
   spatialIndex:CurvedFaceSpatialIndex|null;
   errors:string[];
   warnings:string[];
+  boundaryDiagnostics:{faceId:number;candidatePoints:P3[];outerBoundaryEdges:{wireId:number|null;edgeId:number|null;kind:string}[]}[];
 };
 
 const EPS=1e-8;
