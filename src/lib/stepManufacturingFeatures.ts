@@ -29,6 +29,7 @@ export interface StepManufacturingWireSource{
   orientation:StepFaceOrientation;
   closed:boolean;
   edgeIds:number[];
+  outer?:boolean;
 }
 
 export interface StepManufacturingFeatureSource{
