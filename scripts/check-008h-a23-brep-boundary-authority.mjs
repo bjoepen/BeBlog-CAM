@@ -10,7 +10,7 @@ const finishing=read('src/lib/surfaceFinishingOperation.ts');
 
 need(state,'type PlacedOuterBoundaryResult=','BRep boundary construction needs an explicit result state');
 need(state,"|{ok:false;error:string}","boundary failure must carry an explicit reason");
-need(state,"if(!outerBoundary.ok){","unavailable BRep boundary truth must stop shared 3D target construction");
+need(state,"if(outerBoundary.ok===false){","unavailable BRep boundary truth must stop shared 3D target construction");
 need(state,"errors:[outerBoundary.error]","boundary failure reason must reach the shared 3D surface state");
 need(state,"outerBoundary.geometry","only proven BRep boundary geometry may enter CurvedFaceTarget");
 need(state,"wire.outer===true","native outer-wire identity must remain authoritative");
