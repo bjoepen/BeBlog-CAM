@@ -26,6 +26,7 @@
   import { toggleDxfTargetId } from './lib/dxfMultiTargetSelection';
   import { buildActiveCanonicalToolpath } from './lib/activeCanonicalToolpath';
   import { captureThreeDRoughingAppDiagnostic, emitThreeDRoughingAppDiagnostic } from './lib/threeDRoughingDiagnostics';
+  import { buildThreeDRoughingProductionDeterminismProbe, emitThreeDRoughingProductionDeterminismProbe } from './lib/threeDRoughingProductionDeterminismProbe';
   import type { ZLevelPerformanceProfile } from './lib/zLevelPerformance';
   import { buildZLevelOperationState, zLevelMode } from './lib/zLevelOperationState';
   import { resolveContourDepth } from './lib/contourDepth';
@@ -135,7 +136,7 @@
   function updateStock(field:'width'|'height'|'thickness',event:Event){if(stockMode!=='manual'&&!(importSummary?.kind==='dxf'&&stockMode==='part-bounds'&&field==='thickness'))return;const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>0)stock={...stock,[field]:value};}
   function updatePlacementOffset(field:'offsetX'|'offsetY'|'offsetZ',event:Event){const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value))placement={...placement,[field]:value};}
   function updateNumber(field:'totalDepthMm'|'stepDownMm'|'feedMmMin'|'plungeMmMin'|'spindleRpm'|'safeZMm'|'rampAngleDeg',event:Event){const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value))setOperation({...operation,[field]:value} as CamOperation);}
-  function updateToolDiameter(event:Event){const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>0)setOperation({...operation,tool:{...operation.tool,diameterMm:value}} as CamOperation);}
+  function updateToolDiameter(event:Event){const value=Number((event.currentTarget as HTMLInputElement).value);if(!Number.isFinite(value)||value<=0)return;const next={...operation,tool:{...operation.tool,diameterMm:value}} as CamOperation;if(next.kind==='3d-roughing'&&importSummary&&Math.abs(value-6)<=1e-9)emitThreeDRoughingProductionDeterminismProbe(buildThreeDRoughingProductionDeterminismProbe({summary:importSummary,stock,placement,orientation,wcs,operation:next,diameterA:6,diameterB:3}));setOperation(next);}
   function updateFacingStepover(event:Event){if(operation.kind!=='facing')return;const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value))setOperation({...operation,stepoverPercent:value});}
   function updatePocketStepover(event:Event){if(operation.kind!=='pocket')return;const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value))setOperation({...operation,stepoverPercent:value});}
   function updateZLevelStepover(event:Event){if(operation.kind!=='z-level-roughing')return;const value=Number((event.currentTarget as HTMLInputElement).value);if(Number.isFinite(value)&&value>=1&&value<=100)updateZLevelRoughing({stepoverPercent:value});}
