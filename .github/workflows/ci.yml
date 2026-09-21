@@ -113,6 +113,8 @@ jobs:
         run: pnpm check:008h-a18
       - name: 3D Surface Truth vertical-boundary contract
         run: pnpm check:008h-a19
+      - name: 3D Surface Truth BRep boundary contract
+        run: pnpm check:008h-a20
       - name: Frontend build
         run: pnpm build
       - name: Rust check
