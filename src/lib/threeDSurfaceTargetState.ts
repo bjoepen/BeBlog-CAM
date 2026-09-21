@@ -1,5 +1,5 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
-import { buildCurvedFaceTarget } from './curvedFaceTarget';
+import { buildCurvedFaceTarget, selectedCurvedFaceTargetNeedsBoundaryProof } from './curvedFaceTarget';
 import { orientPoint3 } from './partOrientation';
 import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
 import type { P3 } from './stepView';
@@ -25,16 +25,20 @@ function bounds(points:P3[]){
 }
 
 
-function placedOuterBoundaryGeometry(summary:ImportSummary,orientation:PartOrientation,faceIds:number[],part:P3[]):import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]|null{
+type PlacedOuterBoundaryResult=
+  |{ok:true;geometry:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]}
+  |{ok:false;error:string};
+
+function placedOuterBoundaryGeometry(summary:ImportSummary,orientation:PartOrientation,faceIds:number[],part:P3[]):PlacedOuterBoundaryResult{
   const source=buildOrientedStepManufacturingFeatureSource(summary,orientation);
-  if(!source.ok)return null;
+  if(!source.ok)return{ok:false,error:`BRep Boundary Truth nicht verfügbar: ${source.errors.join(' ')}`};
   const selected=new Set(faceIds);
   const outerWires=source.source.wires.filter(wire=>selected.has(wire.faceId)&&wire.outer===true);
-  if(!outerWires.length)return null;
+  if(!outerWires.length)return{ok:false,error:'BRep Boundary Truth nicht verfügbar: Für die ausgewählte Fläche wurde kein nativer OuterWire geliefert.'};
 
   const rawValues=summary.brep?.displayVertices??[],orientedRaw:P3[]=[];
   for(let i=0;i+2<rawValues.length;i+=3)orientedRaw.push(orientPoint3({x:rawValues[i],y:rawValues[i+1],z:rawValues[i+2]},orientation));
-  if(!orientedRaw.length||!part.length)return null;
+  if(!orientedRaw.length||!part.length)return{ok:false,error:'BRep Boundary Truth konnte nicht in den platzierten Modellraum überführt werden.'};
   const rawBounds=bounds(orientedRaw),placedBounds=bounds(part);
   const offset={x:placedBounds.minX-rawBounds.minX,y:placedBounds.minY-rawBounds.minY,z:placedBounds.minZ-rawBounds.minZ};
   const place=(tuple:[number,number,number]):P3=>({x:tuple[0]+offset.x,y:tuple[1]+offset.y,z:tuple[2]+offset.z});
@@ -42,15 +46,15 @@ function placedOuterBoundaryGeometry(summary:ImportSummary,orientation:PartOrien
   const boundaries:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]=[];
   for(const wire of outerWires)for(const edgeId of wire.edgeIds){
     const edge=source.source.edges[edgeId];
-    if(!edge)return null;
+    if(!edge)return{ok:false,error:`BRep Boundary Truth unvollständig: Edge ${edgeId} des OuterWire ${wire.wireId} fehlt.`};
     if(edge.kind==='line'){boundaries.push({kind:'line',wireId:wire.wireId,edgeId,start:place(edge.start),end:place(edge.end)});continue;}
     if(edge.kind==='circle'&&edge.center&&edge.radiusMm&&edge.axisDirection){
       boundaries.push({kind:'circle',wireId:wire.wireId,edgeId,center:place(edge.center),axisDirection:{x:edge.axisDirection[0],y:edge.axisDirection[1],z:edge.axisDirection[2]},radiusMm:edge.radiusMm});
       continue;
     }
-    return null;
+    return{ok:false,error:`BRep Boundary Truth unterstützt OuterWire ${wire.wireId} / Edge ${edgeId} (${edge.kind}) noch nicht analytisch.`};
   }
-  return boundaries.length?boundaries:null;
+  return boundaries.length?{ok:true,geometry:boundaries}:{ok:false,error:'BRep Boundary Truth enthält keine beweisbare analytische Außenkante.'};
 }
 
 export function buildPlacedPartTriangles(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation):P3[]|null{
@@ -87,8 +91,16 @@ export function buildThreeDSurfaceTargetState(args:{
     return{ok:false,target:null,errors:['STEP/BRep-Triangulation oder Face-ID-Zuordnung konnte nicht rekonstruiert werden.'],warnings,triangleCount:0,boundaryDiagnostics:[]};
   }
 
-  const outerBoundaryGeometry=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
-  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,outerBoundaryGeometry??undefined);
+  const needsBoundaryProof=selectedCurvedFaceTargetNeedsBoundaryProof(part,displayFaceIds,faceIds);
+  let boundaryGeometry:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]|undefined;
+  if(needsBoundaryProof){
+    const outerBoundary=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
+    if(outerBoundary.ok===false){
+      return{ok:false,target:null,errors:[outerBoundary.error],warnings,triangleCount:0,boundaryDiagnostics:[]};
+    }
+    boundaryGeometry=outerBoundary.geometry;
+  }
+  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry);
   warnings.push(...target.warnings);
   errors.push(...target.errors);
   return{
