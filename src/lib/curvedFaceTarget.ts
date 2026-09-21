@@ -246,6 +246,20 @@ export function curvedFaceTargetZAt(
   return hit;
 }
 
+export function selectedCurvedFaceTargetNeedsBoundaryProof(
+  partTriangles:P3[],
+  displayFaceIds:number[],
+  selectedFaceIds:number[],
+):boolean{
+  if(displayFaceIds.length!==Math.floor(partTriangles.length/3))return false;
+  const selected=new Set(selectedFaceIds);
+  for(let i=0;i+2<partTriangles.length;i+=3){
+    if(!selected.has(displayFaceIds[Math.floor(i/3)]))continue;
+    if(Math.abs(area2(partTriangles[i],partTriangles[i+1],partTriangles[i+2]))<=EPS)return true;
+  }
+  return false;
+}
+
 export function buildCurvedFaceTarget(
   partTriangles:P3[],
   displayFaceIds:number[],
