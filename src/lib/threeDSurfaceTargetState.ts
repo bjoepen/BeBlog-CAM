@@ -1,5 +1,5 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
-import { buildCurvedFaceTarget } from './curvedFaceTarget';
+import { buildCurvedFaceTarget, selectedCurvedFaceTargetNeedsBoundaryProof } from './curvedFaceTarget';
 import { orientPoint3 } from './partOrientation';
 import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
 import type { P3 } from './stepView';
@@ -91,11 +91,16 @@ export function buildThreeDSurfaceTargetState(args:{
     return{ok:false,target:null,errors:['STEP/BRep-Triangulation oder Face-ID-Zuordnung konnte nicht rekonstruiert werden.'],warnings,triangleCount:0,boundaryDiagnostics:[]};
   }
 
-  const outerBoundary=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
-  if(outerBoundary.ok===false){
-    return{ok:false,target:null,errors:[outerBoundary.error],warnings,triangleCount:0,boundaryDiagnostics:[]};
+  const needsBoundaryProof=selectedCurvedFaceTargetNeedsBoundaryProof(part,displayFaceIds,faceIds);
+  let boundaryGeometry:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]|undefined;
+  if(needsBoundaryProof){
+    const outerBoundary=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
+    if(outerBoundary.ok===false){
+      return{ok:false,target:null,errors:[outerBoundary.error],warnings,triangleCount:0,boundaryDiagnostics:[]};
+    }
+    boundaryGeometry=outerBoundary.geometry;
   }
-  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,outerBoundary.geometry);
+  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry);
   warnings.push(...target.warnings);
   errors.push(...target.errors);
   return{
