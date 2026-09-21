@@ -24,7 +24,7 @@ function bounds(points:P3[]){
 }
 
 
-function placedOuterBoundaryPolylines(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation,faceIds:number[],part:P3[]):P3[][]|null{
+function placedOuterBoundaryGeometry(summary:ImportSummary,orientation:PartOrientation,faceIds:number[],part:P3[]):import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]|null{
   const source=buildOrientedStepManufacturingFeatureSource(summary,orientation);
   if(!source.ok)return null;
   const selected=new Set(faceIds);
@@ -35,33 +35,21 @@ function placedOuterBoundaryPolylines(summary:ImportSummary,stock:StockDefinitio
   for(let i=0;i+2<rawValues.length;i+=3)orientedRaw.push(orientPoint3({x:rawValues[i],y:rawValues[i+1],z:rawValues[i+2]},orientation));
   if(!orientedRaw.length||!part.length)return null;
   const rawBounds=bounds(orientedRaw),placedBounds=bounds(part);
-  const dx=placedBounds.minX-rawBounds.minX,dy=placedBounds.minY-rawBounds.minY,dz=placedBounds.minZ-rawBounds.minZ;
-  const place=(tuple:[number,number,number]):P3=>({x:tuple[0]+dx,y:tuple[1]+dy,z:tuple[2]+dz});
+  const offset={x:placedBounds.minX-rawBounds.minX,y:placedBounds.minY-rawBounds.minY,z:placedBounds.minZ-rawBounds.minZ};
+  const place=(tuple:[number,number,number]):P3=>({x:tuple[0]+offset.x,y:tuple[1]+offset.y,z:tuple[2]+offset.z});
 
-  const polylines:P3[][]=[];
-  for(const wire of outerWires){
-    for(const edgeId of wire.edgeIds){
-      const edge=source.source.edges[edgeId];
-      if(!edge)return null;
-      if(edge.kind==='line'){polylines.push([place(edge.start),place(edge.end)]);continue;}
-      if(edge.kind==='circle'&&edge.center&&edge.radiusMm&&edge.axisDirection&&Math.abs(Math.abs(edge.axisDirection[2])-1)<=1e-5){
-        const center=place(edge.center),r=edge.radiusMm;
-        const start=place(edge.start),end=place(edge.end);
-        if(edge.closed||Math.hypot(start.x-end.x,start.y-end.y)<=1e-5){
-          polylines.push(Array.from({length:257},(_,i)=>{const a=i/256*Math.PI*2;return{x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r,z:center.z};}));
-          continue;
-        }
-        const a0=Math.atan2(start.y-center.y,start.x-center.x),a1=Math.atan2(end.y-center.y,end.x-center.x);
-        let ccw=edge.axisDirection[2]>=0;if(edge.orientation==='reversed')ccw=!ccw;
-        let d=a1-a0;if(ccw){while(d<=0)d+=Math.PI*2}else{while(d>=0)d-=Math.PI*2}
-        const steps=Math.max(32,Math.ceil(Math.abs(d)/(Math.PI/128)));
-        polylines.push(Array.from({length:steps+1},(_,i)=>{const a=a0+d*i/steps;return{x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r,z:center.z};}));
-        continue;
-      }
-      return null;
+  const boundaries:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]=[];
+  for(const wire of outerWires)for(const edgeId of wire.edgeIds){
+    const edge=source.source.edges[edgeId];
+    if(!edge)return null;
+    if(edge.kind==='line'){boundaries.push({kind:'line',start:place(edge.start),end:place(edge.end)});continue;}
+    if(edge.kind==='circle'&&edge.center&&edge.radiusMm&&edge.axisDirection){
+      boundaries.push({kind:'circle',center:place(edge.center),axisDirection:{x:edge.axisDirection[0],y:edge.axisDirection[1],z:edge.axisDirection[2]},radiusMm:edge.radiusMm});
+      continue;
     }
+    return null;
   }
-  return polylines.length?polylines:null;
+  return boundaries.length?boundaries:null;
 }
 
 export function buildPlacedPartTriangles(summary:ImportSummary,stock:StockDefinition,placement:PartPlacement,orientation:PartOrientation):P3[]|null{
@@ -98,8 +86,8 @@ export function buildThreeDSurfaceTargetState(args:{
     return{ok:false,target:null,errors:['STEP/BRep-Triangulation oder Face-ID-Zuordnung konnte nicht rekonstruiert werden.'],warnings,triangleCount:0};
   }
 
-  const outerBoundaryPolylines=placedOuterBoundaryPolylines(summary,stock,placement,orientation,faceIds,part);
-  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,outerBoundaryPolylines??undefined);
+  const outerBoundaryGeometry=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
+  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,outerBoundaryGeometry??undefined);
   warnings.push(...target.warnings);
   errors.push(...target.errors);
   return{
