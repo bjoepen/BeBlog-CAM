@@ -19,7 +19,11 @@ need(state,"kind:'surface-singularity'","only the proof producer may emit a sing
 need(state,'provenAnalyticBoundaryForCandidate(candidate,boundaryGeometry)','BOUNDARY must reuse A20/A23 analytic boundary proof');
 need(state,"kind:'boundary'","boundary proof must be explicit");
 need(state,'classifyProvenDegeneracy(proofs)','all candidate evidence must pass through the shared A2b2 classifier');
-need(target,"classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY'",'only proven boundary or singularity may be excluded from heightfield triangles');
+need(target,'if(degeneracyClassifications){','manufacturing classifications must disable legacy mesh fallback');
+need(target,'classification?.proof?.candidate.faceId===candidate.faceId','classification proof must belong to the same face');
+need(target,'classification.proof.candidate.triangleIndex===candidate.triangleIndex','classification proof must belong to the same display triangle');
+need(target,"classification&&identityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY')",'only identity-matched proven boundary or singularity may be excluded from heightfield triangles');
+need(target,"classification?.classification??'UNRESOLVED'",'missing classification must fail closed as unresolved');
 need(target,"classification.classification","unresolved/invalid candidates must fail closed');
 need(target,'triangleIndex:Math.floor(i/3)','candidate identity must remain tied to display triangle index');
 need(target,'if(Math.abs(hit-z)>1e-4)return null','multi-Z runtime fail-closed must remain');
