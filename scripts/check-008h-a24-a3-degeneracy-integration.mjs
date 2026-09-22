@@ -5,6 +5,7 @@ const forbid=(s,t,l)=>{if(s.includes(t))throw new Error(`008H-A24-A3 contract fa
 const state=read('src/lib/threeDSurfaceTargetState.ts');
 const target=read('src/lib/curvedFaceTarget.ts');
 const classifier=read('src/lib/threeDDegeneracyClassification.ts');
+const analytic=read('src/lib/threeDAnalyticSingularity.ts');
 
 need(state,'selectedCurvedFaceDegeneracyCandidates','shared target must expose concrete candidate identity');
 need(state,'placedSphereSingularityProofs','singularity proof must be isolated from classifier');
