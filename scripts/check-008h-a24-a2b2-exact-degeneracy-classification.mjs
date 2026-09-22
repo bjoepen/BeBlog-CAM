@@ -11,7 +11,11 @@ const features=read('src/lib/stepManufacturingFeatures.ts');
 for(const stateName of ['BOUNDARY','SURFACE_SINGULARITY','INVALID_FOR_HEIGHTFIELD','UNRESOLVED'])
   need(classifier,`'${stateName}'`,`four-state classifier must contain ${stateName}`);
 
-need(classifier,"proofs.length!==1",'zero or competing proofs must remain unresolved');
+need(classifier,'DegeneracyCandidateIdentity','every proof must bind to a concrete candidate identity');
+need(classifier,'triangleIndex:number','candidate identity must distinguish degenerate triangles on the same face');
+need(classifier,'proof.candidate.faceId===proofs[0].candidate.faceId','mixed-face proofs must not be classified together');
+need(classifier,'proof.candidate.triangleIndex===proofs[0].candidate.triangleIndex','mixed-candidate proofs must not be classified together');
+need(classifier,"proofs.length!==1||!sameCandidate",'zero, competing, or mismatched proofs must remain unresolved');
 need(classifier,"proof:null",'unresolved classification must not retain an arbitrary proof');
 need(classifier,"proof.kind==='boundary'",'boundary classification consumes an explicit boundary proof');
 need(classifier,"proof.kind==='surface-singularity'",'singularity classification consumes an explicit singularity proof');
