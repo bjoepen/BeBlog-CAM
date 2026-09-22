@@ -19,7 +19,12 @@ need(acceptance,'classification?.proof?.candidate.faceId===candidate.faceId','A4
 need(acceptance,'classification?.proof?.candidate.triangleIndex===candidate.triangleIndex','A4 evidence must recheck triangle identity');
 need(acceptance,"acceptedCount=counts.BOUNDARY+counts.SURFACE_SINGULARITY",'only A24 accepted classes may count as accepted');
 need(acceptance,"'[008H-A24-A4][3D-degeneracy-acceptance]'",'real-world evidence must have a stable console marker');
+need(acceptance,'surfaceTargetValid:boolean','A4 evidence must include the actual shared Surface Truth outcome');
+need(acceptance,'surfaceTargetErrors:string[]','A4 evidence must retain actual Surface Truth rejection reasons');
 need(state,'buildThreeDDegeneracyAcceptanceSnapshot(degeneracyCandidates,degeneracyClassifications)','A4 must observe the exact classifications passed to Surface Truth');
+need(state,'const target=buildCurvedFaceTarget','A4 must evaluate the authoritative shared target before emitting acceptance evidence');
+need(state,'surfaceTargetValid:target.valid&&errors.length===0','A4 PASS evidence must derive from the actual shared Surface Truth result');
+need(state,"surfaceTargetErrors:[...new Set(errors)]",'A4 FAIL evidence must preserve the actual shared Surface Truth errors');
 need(state,'emitThreeDDegeneracyAcceptanceSnapshot','A4 must expose real-world evidence without a parallel geometry path');
 need(state,'buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry,degeneracyClassifications)','A3 manufacturing integration must remain unchanged');
 need(target,"classification&&identityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY')",'A3 acceptance gate must remain authoritative');
