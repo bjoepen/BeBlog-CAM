@@ -169,7 +169,10 @@ export function buildThreeDSurfaceTargetState(args:{
           edgeId:boundary.edgeId,
         });
       }
-      degeneracyClassifications.set(candidate.triangleIndex,classifyProvenDegeneracy(proofs));
+      degeneracyClassifications.set(candidate.triangleIndex,classifyProvenDegeneracy(
+        {faceId:candidate.faceId,triangleIndex:candidate.triangleIndex},
+        proofs,
+      ));
     }
   }
   const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry,degeneracyClassifications);
