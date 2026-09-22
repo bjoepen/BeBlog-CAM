@@ -10,7 +10,8 @@ const target=read('src/lib/curvedFaceTarget.ts');
 
 need(native,'s.GetType()==GeomAbs_Sphere','native bridge must identify analytic spheres');
 need(native,'sphere.Location()','native sphere center must be exported');
-need(native,'sphere.Axis().Direction()','native sphere axis must be exported');
+need(native,'sphere.Position().Direction()','native sphere axis must be exported from the OCCT 8 sphere position frame');
+forbid(native,'sphere.Axis().Direction()','OCCT 8 gp_Sphere has no direct Axis() accessor');
 need(native,'sphere.XAxis().Direction()','native sphere X direction must be exported');
 need(native,'sphere.YAxis().Direction()','native sphere Y direction must be exported');
 need(native,'sphere.Radius()','native sphere radius must be exported');
