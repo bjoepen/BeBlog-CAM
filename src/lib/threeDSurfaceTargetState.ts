@@ -1,7 +1,9 @@
 import type { CurvedFaceTarget } from './curvedFaceTarget';
-import { buildCurvedFaceTarget, selectedCurvedFaceTargetNeedsBoundaryProof } from './curvedFaceTarget';
+import { buildCurvedFaceTarget, provenAnalyticBoundaryForCandidate, selectedCurvedFaceDegeneracyCandidates, selectedCurvedFaceTargetNeedsBoundaryProof } from './curvedFaceTarget';
 import { orientPoint3 } from './partOrientation';
 import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
+import { classifyProvenDegeneracy } from './threeDDegeneracyClassification';
+import type { DegeneracyProof } from './threeDDegeneracyClassification';
 import type { P3 } from './stepView';
 import type {
   ImportSummary,
@@ -25,6 +27,61 @@ function bounds(points:P3[]){
 }
 
 
+function placementOffset(summary:ImportSummary,orientation:PartOrientation,part:P3[]):{x:number;y:number;z:number}|null{
+  const rawValues=summary.brep?.displayVertices??[],orientedRaw:P3[]=[];
+  for(let i=0;i+2<rawValues.length;i+=3)orientedRaw.push(orientPoint3({x:rawValues[i],y:rawValues[i+1],z:rawValues[i+2]},orientation));
+  if(!orientedRaw.length||!part.length)return null;
+  const rawBounds=bounds(orientedRaw),placedBounds=bounds(part);
+  return{x:placedBounds.minX-rawBounds.minX,y:placedBounds.minY-rawBounds.minY,z:placedBounds.minZ-rawBounds.minZ};
+}
+
+function distance3(a:P3,b:P3){return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);}
+
+function placedSphereSingularityProofs(
+  summary:ImportSummary,
+  orientation:PartOrientation,
+  part:P3[],
+  candidates:ReturnType<typeof selectedCurvedFaceDegeneracyCandidates>,
+):Map<number,DegeneracyProof[]>{
+  const result=new Map<number,DegeneracyProof[]>();
+  const source=buildOrientedStepManufacturingFeatureSource(summary,orientation);
+  const offset=placementOffset(summary,orientation,part);
+  if(!source.ok||!offset)return result;
+  const place=(tuple:[number,number,number]):P3=>({x:tuple[0]+offset.x,y:tuple[1]+offset.y,z:tuple[2]+offset.z});
+  const tolerance=1e-6;
+
+  for(const candidate of candidates){
+    const face=source.source.faces.find(item=>item.faceId===candidate.faceId);
+    if(!face||face.kind!=='sphere')continue;
+    const center=place(face.center);
+    const axis={x:face.axisDirection[0],y:face.axisDirection[1],z:face.axisDirection[2]};
+    const poles=[
+      {x:center.x+axis.x*face.radiusMm,y:center.y+axis.y*face.radiusMm,z:center.z+axis.z*face.radiusMm},
+      {x:center.x-axis.x*face.radiusMm,y:center.y-axis.y*face.radiusMm,z:center.z-axis.z*face.radiusMm},
+    ];
+    const faceWires=source.source.wiresByFace.get(candidate.faceId)??[];
+    const edgeIds=new Set(faceWires.flatMap(wire=>wire.edgeIds));
+    for(const edgeId of edgeIds){
+      const edge=source.source.edges[edgeId];
+      if(!edge?.degenerated||!edge.degeneratedPoint)continue;
+      const point=place(edge.degeneratedPoint);
+      if(!poles.some(pole=>distance3(point,pole)<=tolerance))continue;
+      const points=[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c];
+      if(points.filter(vertex=>distance3(vertex,point)<=tolerance).length<2)continue;
+      const proof:DegeneracyProof={
+        kind:'surface-singularity',
+        candidate:{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex},
+        candidatePoints:points.map(vertex=>({...vertex})),
+        edgeId,
+        degeneratedPoint:{...point},
+      };
+      result.set(candidate.triangleIndex,[...(result.get(candidate.triangleIndex)??[]),proof]);
+    }
+  }
+  return result;
+}
+
+
 type PlacedOuterBoundaryResult=
   |{ok:true;geometry:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]}
   |{ok:false;error:string};
@@ -36,11 +93,8 @@ function placedOuterBoundaryGeometry(summary:ImportSummary,orientation:PartOrien
   const outerWires=source.source.wires.filter(wire=>selected.has(wire.faceId)&&wire.outer===true);
   if(!outerWires.length)return{ok:false,error:'BRep Boundary Truth nicht verfügbar: Für die ausgewählte Fläche wurde kein nativer OuterWire geliefert.'};
 
-  const rawValues=summary.brep?.displayVertices??[],orientedRaw:P3[]=[];
-  for(let i=0;i+2<rawValues.length;i+=3)orientedRaw.push(orientPoint3({x:rawValues[i],y:rawValues[i+1],z:rawValues[i+2]},orientation));
-  if(!orientedRaw.length||!part.length)return{ok:false,error:'BRep Boundary Truth konnte nicht in den platzierten Modellraum überführt werden.'};
-  const rawBounds=bounds(orientedRaw),placedBounds=bounds(part);
-  const offset={x:placedBounds.minX-rawBounds.minX,y:placedBounds.minY-rawBounds.minY,z:placedBounds.minZ-rawBounds.minZ};
+  const offset=placementOffset(summary,orientation,part);
+  if(!offset)return{ok:false,error:'BRep Boundary Truth konnte nicht in den platzierten Modellraum überführt werden.'};
   const place=(tuple:[number,number,number]):P3=>({x:tuple[0]+offset.x,y:tuple[1]+offset.y,z:tuple[2]+offset.z});
 
   const boundaries:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]=[];
@@ -93,14 +147,29 @@ export function buildThreeDSurfaceTargetState(args:{
 
   const needsBoundaryProof=selectedCurvedFaceTargetNeedsBoundaryProof(part,displayFaceIds,faceIds);
   let boundaryGeometry:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]|undefined;
+  const degeneracyClassifications=new Map<number,ReturnType<typeof classifyProvenDegeneracy>>();
   if(needsBoundaryProof){
+    const candidates=selectedCurvedFaceDegeneracyCandidates(part,displayFaceIds,faceIds);
+    const singularityProofs=placedSphereSingularityProofs(summary,orientation,part,candidates);
     const outerBoundary=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
-    if(outerBoundary.ok===false){
-      return{ok:false,target:null,errors:[outerBoundary.error],warnings,triangleCount:0,boundaryDiagnostics:[]};
+    if(outerBoundary.ok)boundaryGeometry=outerBoundary.geometry;
+
+    for(const candidate of candidates){
+      const proofs:DegeneracyProof[]=[...(singularityProofs.get(candidate.triangleIndex)??[])];
+      if(boundaryGeometry){
+        const boundary=provenAnalyticBoundaryForCandidate(candidate,boundaryGeometry);
+        if(boundary&&boundary.wireId!==undefined&&boundary.edgeId!==undefined)proofs.push({
+          kind:'boundary',
+          candidate:{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex},
+          candidatePoints:[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c].map(point=>({...point})),
+          wireId:boundary.wireId,
+          edgeId:boundary.edgeId,
+        });
+      }
+      degeneracyClassifications.set(candidate.triangleIndex,classifyProvenDegeneracy(proofs));
     }
-    boundaryGeometry=outerBoundary.geometry;
   }
-  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry);
+  const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry,degeneracyClassifications);
   warnings.push(...target.warnings);
   errors.push(...target.errors);
   return{
