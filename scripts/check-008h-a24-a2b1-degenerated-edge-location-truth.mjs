@@ -24,10 +24,10 @@ need(target,'verticalBoundaryCandidates','A19 candidates remain pending classifi
 need(target,'if(Math.abs(hit-z)>1e-4)return null','multi-Z ambiguity remains fail closed');
 
 for(const bad of [
-  "SURFACE_SINGULARITY",
-  "INVALID_FOR_HEIGHTFIELD",
   "kind==='sphere'&&edge.degenerated",
   "face.kind==='sphere'&&edge.degenerated",
-])forbid(state+target+features,bad,`A2b1 exports location truth only; classification is forbidden: ${bad}`);
+])forbid(features,bad,`A2b1 native source must not infer classification from exported truth: ${bad}`);
+need(state,'edge.degeneratedPoint','A3 may consume A2b1 location truth only explicitly');
+need(state,'distance3(point,pole)<=tolerance','later singularity integration must compare the native location to independent analytic surface truth');
 
 console.log('008H-A24-A2b1 native degenerated-edge location truth contract PASS');

@@ -1,5 +1,6 @@
 import type { P3 } from './stepView';
 import type { ZLevelPerformanceProfile } from './zLevelPerformance';
+import type { DegeneracyClassificationResult } from './threeDDegeneracyClassification';
 
 export type CurvedFaceTriangle={
   a:P3;
@@ -8,7 +9,8 @@ export type CurvedFaceTriangle={
 };
 
 type ProjectedBoundaryEdge={a:P3;b:P3};
-type VerticalBoundaryCandidate={faceId:number;triangle:CurvedFaceTriangle};
+export type CurvedFaceDegeneracyCandidate={faceId:number;triangleIndex:number;triangle:CurvedFaceTriangle};
+type VerticalBoundaryCandidate=CurvedFaceDegeneracyCandidate;
 export type CurvedFaceBoundaryLine={kind:'line';wireId?:number;edgeId?:number;start:P3;end:P3};
 export type CurvedFaceBoundaryCircle={kind:'circle';wireId?:number;edgeId?:number;center:P3;axisDirection:P3;radiusMm:number};
 export type CurvedFaceBoundaryGeometry=CurvedFaceBoundaryLine|CurvedFaceBoundaryCircle;
@@ -124,7 +126,7 @@ function pointOnAnalyticBoundary(point:P3,boundary:CurvedFaceBoundaryGeometry,to
   return Math.abs(radius-boundary.radiusMm)<=tolerance;
 }
 
-function candidateOnAnalyticBoundary(candidate:VerticalBoundaryCandidate,boundaries:CurvedFaceBoundaryGeometry[]){
+export function provenAnalyticBoundaryForCandidate(candidate:CurvedFaceDegeneracyCandidate,boundaries:CurvedFaceBoundaryGeometry[]):CurvedFaceBoundaryGeometry|null{
   const tolerance=1e-6;
   const extent=projectedCandidateExtent(candidate,tolerance);
 
@@ -132,14 +134,18 @@ function candidateOnAnalyticBoundary(candidate:VerticalBoundaryCandidate,boundar
   // analytic BRep boundary itself.  Prove ownership by one and the same
   // authorized outer BRep edge.  Requiring chord interior points to lie on a
   // circle would incorrectly reject every non-zero circular tessellation chord.
-  return boundaries.some(boundary=>{
+  return boundaries.find(boundary=>{
     if(boundary.kind==='line'){
       return segmentCoveredByProjectedBoundary(extent,[{a:boundary.start,b:boundary.end}],tolerance);
     }
     if(Math.abs(Math.abs(boundary.axisDirection.z)-1)>1e-5)return false;
     return pointOnAnalyticBoundary(extent.a,boundary,tolerance)
       && pointOnAnalyticBoundary(extent.b,boundary,tolerance);
-  });
+  })??null;
+}
+
+function candidateOnAnalyticBoundary(candidate:VerticalBoundaryCandidate,boundaries:CurvedFaceBoundaryGeometry[]){
+  return provenAnalyticBoundaryForCandidate(candidate,boundaries)!==null;
 }
 
 function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
@@ -246,18 +252,28 @@ export function curvedFaceTargetZAt(
   return hit;
 }
 
+export function selectedCurvedFaceDegeneracyCandidates(
+  partTriangles:P3[],
+  displayFaceIds:number[],
+  selectedFaceIds:number[],
+):CurvedFaceDegeneracyCandidate[]{
+  if(displayFaceIds.length!==Math.floor(partTriangles.length/3))return[];
+  const selected=new Set(selectedFaceIds),out:CurvedFaceDegeneracyCandidate[]=[];
+  for(let i=0;i+2<partTriangles.length;i+=3){
+    const triangleIndex=Math.floor(i/3),faceId=displayFaceIds[triangleIndex];
+    if(!selected.has(faceId))continue;
+    const triangle={a:partTriangles[i],b:partTriangles[i+1],c:partTriangles[i+2]};
+    if(Math.abs(area2(triangle.a,triangle.b,triangle.c))<=EPS)out.push({faceId,triangleIndex,triangle});
+  }
+  return out;
+}
+
 export function selectedCurvedFaceTargetNeedsBoundaryProof(
   partTriangles:P3[],
   displayFaceIds:number[],
   selectedFaceIds:number[],
 ):boolean{
-  if(displayFaceIds.length!==Math.floor(partTriangles.length/3))return false;
-  const selected=new Set(selectedFaceIds);
-  for(let i=0;i+2<partTriangles.length;i+=3){
-    if(!selected.has(displayFaceIds[Math.floor(i/3)]))continue;
-    if(Math.abs(area2(partTriangles[i],partTriangles[i+1],partTriangles[i+2]))<=EPS)return true;
-  }
-  return false;
+  return selectedCurvedFaceDegeneracyCandidates(partTriangles,displayFaceIds,selectedFaceIds).length>0;
 }
 
 export function buildCurvedFaceTarget(
@@ -266,6 +282,7 @@ export function buildCurvedFaceTarget(
   selectedFaceIds:number[],
   profile?:ZLevelPerformanceProfile,
   brepOuterBoundaryGeometry?:CurvedFaceBoundaryGeometry[],
+  degeneracyClassifications?:Map<number,DegeneracyClassificationResult>,
 ):CurvedFaceTarget{
   const errors:string[]=[];
   const warnings:string[]=[];
@@ -287,15 +304,33 @@ export function buildCurvedFaceTarget(
     // Regular triangles define z(x,y). XY-degenerate triangles cannot define a
     // height-field patch themselves; retain them for an explicit outer-boundary proof.
     if(Math.abs(area2(a,b,c))<=EPS){
-      verticalBoundaryCandidates.push({faceId,triangle:{a,b,c}});
+      verticalBoundaryCandidates.push({faceId,triangleIndex:Math.floor(i/3),triangle:{a,b,c}});
       continue;
     }
     triangles.push({a,b,c});
   }
 
-  // Native BRep outer-wire topology plus analytic edge geometry is authoritative when supplied.
+  // A24-A3: every XY-degenerate display candidate must arrive with exactly one
+  // proof-only classification from the shared BRep truth.  Legacy mesh boundary
+  // reconstruction remains available only to callers that do not provide A24
+  // classifications; the manufacturing state always provides them.
   const meshBoundaryEdges=brepOuterBoundaryGeometry?null:classifyProjectedBoundary(triangles);
   for(const candidate of verticalBoundaryCandidates){
+    const classification=degeneracyClassifications?.get(candidate.triangleIndex);
+    if(degeneracyClassifications){
+      const identityMatches=classification?.proof?.candidate.faceId===candidate.faceId
+        &&classification?.proof?.candidate.triangleIndex===candidate.triangleIndex;
+      if(classification&&identityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY'))continue;
+      boundaryDiagnostics.push({
+        faceId:candidate.faceId,
+        candidatePoints:[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c].map(point=>({...point})),
+        outerBoundaryEdges:(brepOuterBoundaryGeometry??[]).map(edge=>({wireId:edge.wireId??null,edgeId:edge.edgeId??null,kind:edge.kind})),
+      });
+      errors.push(classification&&!identityMatches
+        ?`Ausgewählte Fläche ${candidate.faceId}: Degeneracy-Klassifikation gehört nicht zum Kandidaten ${candidate.triangleIndex}.`
+        :`Ausgewählte Fläche ${candidate.faceId}: XY-degenerierter Kandidat ${candidate.triangleIndex} ist ${classification?.classification??'UNRESOLVED'}: ${classification?.reason??'Keine Klassifikation geliefert.'}`);
+      continue;
+    }
     const proven=brepOuterBoundaryGeometry
       ?candidateOnAnalyticBoundary(candidate,brepOuterBoundaryGeometry)
       :candidateOnProjectedBoundary(candidate,meshBoundaryEdges??[]);

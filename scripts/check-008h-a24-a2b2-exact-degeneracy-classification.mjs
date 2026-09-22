@@ -34,7 +34,8 @@ need(target,'verticalBoundaryCandidates','A19 candidate handling remains unchang
 need(target,'if(Math.abs(hit-z)>1e-4)return null','multi-Z fail-closed remains unchanged');
 need(features,'degeneratedPoint?:Point3Tuple','A2b1 native location truth remains available');
 
-forbid(state,"classifyProvenDegeneracy",'A2b2 must not integrate classification into manufacturing state yet');
-forbid(target,"classifyProvenDegeneracy",'A2b2 must not bypass A19/A20/A23 yet');
+need(state,"classifyProvenDegeneracy",'A3 manufacturing integration must consume the shared A2b2 proof-only classifier');
+forbid(classifier,"face.kind",'A2b2 classifier itself must remain free of surface-geometry discovery');
+forbid(classifier,"edge.degenerated",'A2b2 classifier itself must remain free of native-edge discovery');
 
 console.log('008H-A24-A2b2 proof-only four-state degeneracy classifier contract PASS');

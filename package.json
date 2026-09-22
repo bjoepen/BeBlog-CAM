@@ -99,7 +99,8 @@
     "check:008h-a24-a1": "node scripts/check-008h-a24-a1-sphere-semantics.mjs",
     "check:008h-a24-a2a": "node scripts/check-008h-a24-a2a-degenerated-edge-truth.mjs",
     "check:008h-a24-a2b1": "node scripts/check-008h-a24-a2b1-degenerated-edge-location-truth.mjs",
-    "check:008h-a24-a2b2": "node scripts/check-008h-a24-a2b2-exact-degeneracy-classification.mjs"
+    "check:008h-a24-a2b2": "node scripts/check-008h-a24-a2b2-exact-degeneracy-classification.mjs",
+    "check:008h-a24-a3": "node scripts/check-008h-a24-a3-degeneracy-integration.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
