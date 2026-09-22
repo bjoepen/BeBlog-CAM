@@ -137,3 +137,12 @@ jobs:
         run: pnpm build
       - name: Rust check
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+      - name: Cache pinned OCCT 8.0.1
+        uses: actions/cache@v4
+        with:
+          path: .cache/occt
+          key: ${{ runner.os }}-${{ runner.arch }}-occt-V8_0_1-${{ hashFiles('scripts/build-occt-macos.sh') }}
+      - name: Prepare pinned OCCT 8.0.1
+        run: pnpm native:setup
+      - name: Native OCCT build and transport integrity
+        run: pnpm native:test
