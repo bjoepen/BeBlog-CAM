@@ -18,11 +18,12 @@ need(state,'points.filter(vertex=>distance3(vertex,point)<=tolerance).length<2',
 need(state,"kind:'surface-singularity'","only the proof producer may emit a singularity proof");
 need(state,'provenAnalyticBoundaryForCandidate(candidate,boundaryGeometry)','BOUNDARY must reuse A20/A23 analytic boundary proof');
 need(state,"kind:'boundary'","boundary proof must be explicit");
-need(state,'classifyProvenDegeneracy(proofs)','all candidate evidence must pass through the shared A2b2 classifier');
+need(state,'classifyProvenDegeneracy(','all candidate evidence must pass through the shared A2b2 classifier');
+need(state,'{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex}','classification result must be bound to the concrete display candidate');
 need(target,'if(degeneracyClassifications){','manufacturing classifications must disable legacy mesh fallback');
-need(target,'classification?.proof?.candidate.faceId===candidate.faceId','classification proof must belong to the same face');
-need(target,'classification?.proof?.candidate.triangleIndex===candidate.triangleIndex','classification proof must belong to the same display triangle');
-need(target,"classification&&identityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY')",'only identity-matched proven boundary or singularity may be excluded from heightfield triangles');
+need(target,'degeneracyResultMatchesCandidate(classification,{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex})','classification result must belong to the same display candidate');
+need(target,'degeneracyProofMatchesResult(classification)','classification proof identity must be checked independently');
+need(target,"classification&&resultIdentityMatches&&proofIdentityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY')&&classification.proof",'only identity-matched proven boundary or singularity may be excluded from heightfield triangles');
 need(target,"classification?.classification??'UNRESOLVED'",'missing classification must fail closed as unresolved');
 need(target,"classification.classification",'unresolved/invalid candidates must fail closed');
 need(target,'triangleIndex:Math.floor(i/3)','candidate identity must remain tied to display triangle index');
