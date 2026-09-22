@@ -1,5 +1,6 @@
 import type { P3 } from './stepView';
 import type { ZLevelPerformanceProfile } from './zLevelPerformance';
+import { degeneracyProofMatchesResult, degeneracyResultMatchesCandidate } from './threeDDegeneracyClassification';
 import type { DegeneracyClassificationResult } from './threeDDegeneracyClassification';
 
 export type CurvedFaceTriangle={
@@ -318,17 +319,21 @@ export function buildCurvedFaceTarget(
   for(const candidate of verticalBoundaryCandidates){
     const classification=degeneracyClassifications?.get(candidate.triangleIndex);
     if(degeneracyClassifications){
-      const identityMatches=classification?.proof?.candidate.faceId===candidate.faceId
-        &&classification?.proof?.candidate.triangleIndex===candidate.triangleIndex;
-      if(classification&&identityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY'))continue;
+      const resultIdentityMatches=classification
+        ?degeneracyResultMatchesCandidate(classification,{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex})
+        :false;
+      const proofIdentityMatches=classification?degeneracyProofMatchesResult(classification):false;
+      if(classification&&resultIdentityMatches&&proofIdentityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY')&&classification.proof)continue;
       boundaryDiagnostics.push({
         faceId:candidate.faceId,
         candidatePoints:[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c].map(point=>({...point})),
         outerBoundaryEdges:(brepOuterBoundaryGeometry??[]).map(edge=>({wireId:edge.wireId??null,edgeId:edge.edgeId??null,kind:edge.kind})),
       });
-      errors.push(classification&&!identityMatches
+      errors.push(classification&&!resultIdentityMatches
         ?`Ausgewählte Fläche ${candidate.faceId}: Degeneracy-Klassifikation gehört nicht zum Kandidaten ${candidate.triangleIndex}.`
-        :`Ausgewählte Fläche ${candidate.faceId}: XY-degenerierter Kandidat ${candidate.triangleIndex} ist ${classification?.classification??'UNRESOLVED'}: ${classification?.reason??'Keine Klassifikation geliefert.'}`);
+        :classification&&!proofIdentityMatches
+          ?`Ausgewählte Fläche ${candidate.faceId}: Degeneracy-Proof gehört nicht zur Klassifikation für Kandidat ${candidate.triangleIndex}.`
+          :`Ausgewählte Fläche ${candidate.faceId}: XY-degenerierter Kandidat ${candidate.triangleIndex} ist ${classification?.classification??'UNRESOLVED'}: ${classification?.reason??'Keine Klassifikation geliefert.'}`);
       continue;
     }
     const proven=brepOuterBoundaryGeometry
