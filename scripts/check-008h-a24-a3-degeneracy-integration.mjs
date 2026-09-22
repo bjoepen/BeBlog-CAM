@@ -24,7 +24,7 @@ need(target,'classification?.proof?.candidate.faceId===candidate.faceId','classi
 need(target,'classification?.proof?.candidate.triangleIndex===candidate.triangleIndex','classification proof must belong to the same display triangle');
 need(target,"classification&&identityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY')",'only identity-matched proven boundary or singularity may be excluded from heightfield triangles');
 need(target,"classification?.classification??'UNRESOLVED'",'missing classification must fail closed as unresolved');
-need(target,"classification.classification","unresolved/invalid candidates must fail closed');
+need(target,"classification.classification",'unresolved/invalid candidates must fail closed');
 need(target,'triangleIndex:Math.floor(i/3)','candidate identity must remain tied to display triangle index');
 need(target,'if(Math.abs(hit-z)>1e-4)return null','multi-Z runtime fail-closed must remain');
 need(classifier,"proofs.length!==1||!sameCandidate",'competing proofs must remain UNRESOLVED');
