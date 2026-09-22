@@ -5,7 +5,7 @@ export type ThreeDDegeneracyAcceptanceEntry={
   faceId:number;
   triangleIndex:number;
   classification:DegeneracyClassificationResult['classification'];
-  proofKind:DegeneracyClassificationResult['proof'] extends infer _T ? string|null : never;
+  proofKind:'boundary'|'surface-singularity'|'invalid-for-heightfield'|null;
   reason:string;
 };
 
