@@ -319,7 +319,7 @@ export function buildCurvedFaceTarget(
     const classification=degeneracyClassifications?.get(candidate.triangleIndex);
     if(degeneracyClassifications){
       const identityMatches=classification?.proof?.candidate.faceId===candidate.faceId
-        &&classification.proof.candidate.triangleIndex===candidate.triangleIndex;
+        &&classification?.proof?.candidate.triangleIndex===candidate.triangleIndex;
       if(classification&&identityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY'))continue;
       boundaryDiagnostics.push({
         faceId:candidate.faceId,
