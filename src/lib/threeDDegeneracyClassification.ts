@@ -10,7 +10,7 @@ export type DegeneracyCandidateIdentity={faceId:number;triangleIndex:number};
 
 export type DegeneracyProof=
   |{kind:'boundary';candidate:DegeneracyCandidateIdentity;candidatePoints:P3[];wireId:number;edgeId:number}
-  |{kind:'surface-singularity';candidate:DegeneracyCandidateIdentity;candidatePoints:P3[];edgeId:number;degeneratedPoint:P3}
+  |{kind:'surface-singularity';candidate:DegeneracyCandidateIdentity;candidatePoints:P3[];authority:'analytic-sphere-pole';singularityPoint:P3}
   |{kind:'invalid-for-heightfield';candidate:DegeneracyCandidateIdentity;candidatePoints:P3[];reason:string};
 
 export type DegeneracyClassificationResult={
