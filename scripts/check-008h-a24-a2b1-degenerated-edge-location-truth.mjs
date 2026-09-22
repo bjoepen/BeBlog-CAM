@@ -15,6 +15,7 @@ need(native,'\\\"degeneratedPoint\\\":','native bridge must export the collapsed
 need(native,'if(BRep_Tool::Degenerated(edge))return;BRepAdaptor_Curve c(edge);','display edge sampling must not reinterpret a degenerated edge as a regular 3D curve');
 need(features,'degeneratedPoint?:Point3Tuple','typed manufacturing edge must carry native degeneracy location');
 need(features,'native Lage der degenerierten Kante fehlt oder ist ungültig.','degenerated edge without native location must fail closed');
+need(features,'widerspricht der nativen Degenerated-Location.','compatibility start/end values must not contradict native degeneracy location');
 need(features,'nicht degenerierte Kante darf keine Degenerated-Location tragen.','location truth must not appear on regular edges');
 need(features,'degeneratedPoint:orientTuple3(edge.degeneratedPoint,orientation)','native degeneracy location must follow part orientation');
 
