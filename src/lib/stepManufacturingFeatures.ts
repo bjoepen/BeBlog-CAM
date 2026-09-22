@@ -9,8 +9,9 @@ export type Point3Tuple=[number,number,number];
 export interface StepManufacturingFaceBase{faceId:number;kind:StepManufacturingSurfaceKind;orientation:StepFaceOrientation;}
 export interface StepPlanarFaceSource extends StepManufacturingFaceBase{kind:'plane';origin:Point3Tuple;normal:Point3Tuple;}
 export interface StepCylindricalFaceSource extends StepManufacturingFaceBase{kind:'cylinder';axisOrigin:Point3Tuple;axisDirection:Point3Tuple;radiusMm:number;}
-export interface StepOtherFaceSource extends StepManufacturingFaceBase{kind:'cone'|'sphere'|'torus'|'other';}
-export type StepManufacturingFaceSource=StepPlanarFaceSource|StepCylindricalFaceSource|StepOtherFaceSource;
+export interface StepSphericalFaceSource extends StepManufacturingFaceBase{kind:'sphere';center:Point3Tuple;axisDirection:Point3Tuple;xDirection:Point3Tuple;yDirection:Point3Tuple;radiusMm:number;}
+export interface StepOtherFaceSource extends StepManufacturingFaceBase{kind:'cone'|'torus'|'other';}
+export type StepManufacturingFaceSource=StepPlanarFaceSource|StepCylindricalFaceSource|StepSphericalFaceSource|StepOtherFaceSource;
 
 export interface StepManufacturingEdgeSource{
   edgeId:number;
@@ -49,7 +50,8 @@ type BrepWithManufacturingTopology=NonNullable<ImportSummary['brep']>&{manufactu
 const finite3=(v:unknown):v is Point3Tuple=>Array.isArray(v)&&v.length===3&&v.every(x=>typeof x==='number'&&Number.isFinite(x));
 const finitePositive=(v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v)&&v>0;
 const unitish=(v:Point3Tuple)=>Math.abs(Math.hypot(v[0],v[1],v[2])-1)<=1e-6;
-function validateFace(face:StepManufacturingFaceSource,index:number):string[]{const p=`STEP BRep Face ${index}`,e:string[]=[];if(!Number.isInteger(face.faceId)||face.faceId<0)e.push(`${p}: ungültige faceId.`);if(face.kind==='plane'){if(!finite3(face.origin))e.push(`${p}: Ebenenursprung fehlt oder ist ungültig.`);if(!finite3(face.normal)||!unitish(face.normal))e.push(`${p}: Ebenennormale fehlt oder ist nicht normiert.`);}else if(face.kind==='cylinder'){if(!finite3(face.axisOrigin))e.push(`${p}: Zylinderachspunkt fehlt oder ist ungültig.`);if(!finite3(face.axisDirection)||!unitish(face.axisDirection))e.push(`${p}: Zylinderachse fehlt oder ist nicht normiert.`);if(!finitePositive(face.radiusMm))e.push(`${p}: Zylinderradius muss größer als 0 sein.`);}return e;}
+const orthogonalish=(a:Point3Tuple,b:Point3Tuple)=>Math.abs(a[0]*b[0]+a[1]*b[1]+a[2]*b[2])<=1e-6;
+function validateFace(face:StepManufacturingFaceSource,index:number):string[]{const p=`STEP BRep Face ${index}`,e:string[]=[];if(!Number.isInteger(face.faceId)||face.faceId<0)e.push(`${p}: ungültige faceId.`);if(face.kind==='plane'){if(!finite3(face.origin))e.push(`${p}: Ebenenursprung fehlt oder ist ungültig.`);if(!finite3(face.normal)||!unitish(face.normal))e.push(`${p}: Ebenennormale fehlt oder ist nicht normiert.`);}else if(face.kind==='cylinder'){if(!finite3(face.axisOrigin))e.push(`${p}: Zylinderachspunkt fehlt oder ist ungültig.`);if(!finite3(face.axisDirection)||!unitish(face.axisDirection))e.push(`${p}: Zylinderachse fehlt oder ist nicht normiert.`);if(!finitePositive(face.radiusMm))e.push(`${p}: Zylinderradius muss größer als 0 sein.`);}else if(face.kind==='sphere'){if(!finite3(face.center))e.push(`${p}: Kugelmittelpunkt fehlt oder ist ungültig.`);if(!finite3(face.axisDirection)||!unitish(face.axisDirection))e.push(`${p}: Kugelachse fehlt oder ist nicht normiert.`);if(!finite3(face.xDirection)||!unitish(face.xDirection))e.push(`${p}: Kugel-X-Achse fehlt oder ist nicht normiert.`);if(!finite3(face.yDirection)||!unitish(face.yDirection))e.push(`${p}: Kugel-Y-Achse fehlt oder ist nicht normiert.`);if(finite3(face.axisDirection)&&finite3(face.xDirection)&&!orthogonalish(face.axisDirection,face.xDirection))e.push(`${p}: Kugelachse und Kugel-X-Achse sind nicht orthogonal.`);if(finite3(face.axisDirection)&&finite3(face.yDirection)&&!orthogonalish(face.axisDirection,face.yDirection))e.push(`${p}: Kugelachse und Kugel-Y-Achse sind nicht orthogonal.`);if(finite3(face.xDirection)&&finite3(face.yDirection)&&!orthogonalish(face.xDirection,face.yDirection))e.push(`${p}: Kugel-X- und Kugel-Y-Achse sind nicht orthogonal.`);if(!finitePositive(face.radiusMm))e.push(`${p}: Kugelradius muss größer als 0 sein.`);}return e;}
 function validateEdge(edge:StepManufacturingEdgeSource,index:number):string[]{const p=`STEP BRep Edge ${index}`,e:string[]=[];if(!Number.isInteger(edge.edgeId)||edge.edgeId<0)e.push(`${p}: ungültige edgeId.`);if(!finite3(edge.start)||!finite3(edge.end))e.push(`${p}: Start-/Endpunkt fehlt oder ist ungültig.`);if(edge.kind==='circle'){if(!finite3(edge.center))e.push(`${p}: Kreismittelpunkt fehlt.`);if(!finite3(edge.axisDirection)||!unitish(edge.axisDirection))e.push(`${p}: Kreisachse fehlt oder ist nicht normiert.`);if(!finitePositive(edge.radiusMm))e.push(`${p}: Kreisradius muss größer als 0 sein.`);}return e;}
 
 /** 004B: exact BRep edge/wire topology. No contour/pocket/hole classification yet. */
@@ -95,6 +97,13 @@ export function orientStepManufacturingFeatureSource(
       ...face,
       axisOrigin:orientTuple3(face.axisOrigin,orientation),
       axisDirection:orientDirection3(face.axisDirection,orientation),
+    };
+    if(face.kind==='sphere')return{
+      ...face,
+      center:orientTuple3(face.center,orientation),
+      axisDirection:orientDirection3(face.axisDirection,orientation),
+      xDirection:orientDirection3(face.xDirection,orientation),
+      yDirection:orientDirection3(face.yDirection,orientation),
     };
     return{...face};
   });
