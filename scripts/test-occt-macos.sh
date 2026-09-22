@@ -16,4 +16,4 @@ export BEBLOG_OCCT_TEST_STEP="$FIXTURE"
 export DYLD_LIBRARY_PATH="$PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 
 cd "$ROOT"
-cargo test --manifest-path src-tauri/Cargo.toml --features occt-native occt::tests::loads_real_step_as_brep -- --exact
+cargo test --manifest-path src-tauri/Cargo.toml --features occt-native occt::tests::
