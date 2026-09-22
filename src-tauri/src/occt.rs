@@ -124,6 +124,8 @@ mod tests {
         assert!(summary.manufacturing_wires.iter().all(|wire| wire.face_id < summary.faces && !wire.edge_ids.is_empty() && wire.edge_ids.iter().all(|id| *id < summary.edges)));
         assert!(summary.manufacturing_faces.iter().filter(|f| f.kind == "plane").all(|f| f.origin.is_some() && f.normal.is_some()));
         assert!(summary.manufacturing_faces.iter().filter(|f| f.kind == "cylinder").all(|f| f.axis_origin.is_some() && f.axis_direction.is_some() && f.radius_mm.unwrap_or(0.0) > 0.0));
+        assert!(summary.manufacturing_faces.iter().filter(|f| f.kind == "sphere").all(|f| f.center.is_some() && f.axis_direction.is_some() && f.x_direction.is_some() && f.y_direction.is_some() && f.radius_mm.unwrap_or(0.0) > 0.0));
+        assert!(summary.manufacturing_edges.iter().filter(|e| e.degenerated).all(|e| e.degenerated_point.is_some()));
         assert!(summary.display_triangles > 0);
         assert_eq!(summary.display_vertices.len(), summary.display_triangles * 9);
         assert_eq!(summary.display_face_ids.len(), summary.display_triangles);
