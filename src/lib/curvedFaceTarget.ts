@@ -144,6 +144,10 @@ export function provenAnalyticBoundaryForCandidate(candidate:CurvedFaceDegenerac
   })??null;
 }
 
+function candidateOnAnalyticBoundary(candidate:VerticalBoundaryCandidate,boundaries:CurvedFaceBoundaryGeometry[]){
+  return provenAnalyticBoundaryForCandidate(candidate,boundaries)!==null;
+}
+
 function candidateOnProjectedBoundary(candidate:VerticalBoundaryCandidate,boundaryEdges:ProjectedBoundaryEdge[]){
   const tolerance=1e-6;
   const extent=projectedCandidateExtent(candidate,tolerance);
@@ -328,7 +332,7 @@ export function buildCurvedFaceTarget(
       continue;
     }
     const proven=brepOuterBoundaryGeometry
-      ?provenAnalyticBoundaryForCandidate(candidate,brepOuterBoundaryGeometry)!==null
+      ?candidateOnAnalyticBoundary(candidate,brepOuterBoundaryGeometry)
       :candidateOnProjectedBoundary(candidate,meshBoundaryEdges??[]);
     if(!proven){
       boundaryDiagnostics.push({
