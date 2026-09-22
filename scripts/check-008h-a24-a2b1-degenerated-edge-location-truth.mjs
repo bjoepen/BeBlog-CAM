@@ -8,7 +8,9 @@ const state=read('src/lib/threeDSurfaceTargetState.ts');
 const target=read('src/lib/curvedFaceTarget.ts');
 
 need(native,'const bool degenerated=BRep_Tool::Degenerated(edge)','native OCCT degeneracy remains authoritative');
-need(native,'BRep_Tool::Pnt(TopoDS::Vertex(vit.Current()))','degenerated-edge location must come from native BRep vertex truth');
+need(native,'TopExp::MapShapes(edge,TopAbs_VERTEX,vertex_map)','degenerated-edge topology must enumerate native BRep vertices');
+need(native,'vertex_map.Extent()!=1','ambiguous or missing collapsed vertex must not produce a location');
+need(native,'BRep_Tool::Pnt(TopoDS::Vertex(vertex_map(1)))','degenerated-edge location must come from the unique native BRep vertex truth');
 need(native,'\\\"degeneratedPoint\\\":','native bridge must export the collapsed topology location explicitly');
 need(native,'if(BRep_Tool::Degenerated(edge))return;BRepAdaptor_Curve c(edge);','display edge sampling must not reinterpret a degenerated edge as a regular 3D curve');
 need(features,'degeneratedPoint?:Point3Tuple','typed manufacturing edge must carry native degeneracy location');
