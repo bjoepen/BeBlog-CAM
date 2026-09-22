@@ -125,6 +125,8 @@ jobs:
         run: pnpm check:008h-a24-a1
       - name: 3D Surface Truth native degenerated-edge contract
         run: pnpm check:008h-a24-a2a
+      - name: 3D Surface Truth degenerated-edge location contract
+        run: pnpm check:008h-a24-a2b1
       - name: Frontend build
         run: pnpm build
       - name: Rust check

@@ -97,7 +97,8 @@
     "check:008h-a22": "node scripts/check-008h-a22-production-determinism.mjs",
     "check:008h-a23": "node scripts/check-008h-a23-brep-boundary-authority.mjs",
     "check:008h-a24-a1": "node scripts/check-008h-a24-a1-sphere-semantics.mjs",
-    "check:008h-a24-a2a": "node scripts/check-008h-a24-a2a-degenerated-edge-truth.mjs"
+    "check:008h-a24-a2a": "node scripts/check-008h-a24-a2a-degenerated-edge-truth.mjs",
+    "check:008h-a24-a2b1": "node scripts/check-008h-a24-a2b1-degenerated-edge-location-truth.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
