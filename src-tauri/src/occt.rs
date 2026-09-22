@@ -112,6 +112,31 @@ mod tests {
     use super::{BrepBackend, Occt8Backend};
     use std::{env, path::Path};
     #[test]
+    fn preserves_a24_native_contract_json_fields() {
+        let json = r#"{
+          "backend":"OCCT 8 / native C++ bridge","nativeBrep":true,
+          "faces":1,"edges":1,"vertices":1,"solids":0,
+          "surfaceTypes":[{"kind":"sphere","count":1}],"cylinderRadiiMm":[],
+          "manufacturingFaces":[{"faceId":0,"kind":"sphere","orientation":"forward","center":[1.0,2.0,3.0],"axisDirection":[0.0,0.0,1.0],"xDirection":[1.0,0.0,0.0],"yDirection":[0.0,1.0,0.0],"radiusMm":10.0}],
+          "manufacturingEdges":[{"edgeId":0,"kind":"other","orientation":"forward","start":[1.0,2.0,13.0],"end":[1.0,2.0,13.0],"closed":true,"degenerated":true,"degeneratedPoint":[1.0,2.0,13.0]}],
+          "manufacturingWires":[{"wireId":0,"faceId":0,"orientation":"forward","closed":true,"outer":true,"edgeIds":[0]}],
+          "displayTriangles":0,"displayVertices":[],"displayFaceIds":[],"displayEdges":[],
+          "note":"A24 transport fixture"
+        }"#;
+        let summary: super::BrepSummary = serde_json::from_str(json).expect("A24 native JSON must deserialize without losing manufacturing semantics");
+        let sphere=&summary.manufacturing_faces[0];
+        assert_eq!(sphere.center,Some([1.0,2.0,3.0]));
+        assert_eq!(sphere.axis_direction,Some([0.0,0.0,1.0]));
+        assert_eq!(sphere.x_direction,Some([1.0,0.0,0.0]));
+        assert_eq!(sphere.y_direction,Some([0.0,1.0,0.0]));
+        assert_eq!(sphere.radius_mm,Some(10.0));
+        let edge=&summary.manufacturing_edges[0];
+        assert!(edge.degenerated);
+        assert_eq!(edge.degenerated_point,Some([1.0,2.0,13.0]));
+        assert!(summary.manufacturing_wires[0].outer);
+    }
+
+    #[test]
     fn loads_real_step_as_brep() {
         let fixture = env::var("BEBLOG_OCCT_TEST_STEP").expect("BEBLOG_OCCT_TEST_STEP must point to a real STEP fixture");
         let summary = Occt8Backend.inspect_step(Path::new(&fixture)).expect("native OCCT STEP import must succeed");
