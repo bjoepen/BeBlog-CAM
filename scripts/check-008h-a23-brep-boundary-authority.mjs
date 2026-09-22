@@ -16,7 +16,7 @@ need(state,'if(needsBoundaryProof){','BRep authority must be required only when 
 need(state,'placedOuterBoundaryGeometry(summary,orientation,faceIds,part)','required boundary proof must use placed BRep manufacturing topology');
 need(state,'if(outerBoundary.ok)boundaryGeometry=outerBoundary.geometry','A24 may continue without boundary geometry only through explicit alternate classification');
 need(state,"kind:'boundary'",'BOUNDARY classification must still require explicit BRep boundary proof');
-need(state,'classifyProvenDegeneracy(proofs)','boundary and singularity evidence must be resolved by the shared fail-closed classifier');
+need(state,'classifyProvenDegeneracy(','boundary and singularity evidence must be resolved by the shared fail-closed classifier');
 need(state,'boundaryGeometry=outerBoundary.geometry','only proven BRep boundary geometry may contribute a BOUNDARY proof');
 need(state,'buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry,degeneracyClassifications)','shared target must receive both boundary geometry and explicit A24 classifications');
 need(state,'wire.outer===true','native outer-wire identity must remain authoritative');

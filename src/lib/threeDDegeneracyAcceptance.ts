@@ -1,4 +1,5 @@
 import type { CurvedFaceDegeneracyCandidate } from './curvedFaceTarget';
+import { degeneracyProofMatchesResult, degeneracyResultMatchesCandidate } from './threeDDegeneracyClassification';
 import type { DegeneracyClassificationResult } from './threeDDegeneracyClassification';
 
 export type ThreeDDegeneracyAcceptanceEntry={
@@ -29,11 +30,13 @@ export function buildThreeDDegeneracyAcceptanceSnapshot(
   };
   const entries=candidates.map(candidate=>{
     const classification=classifications.get(candidate.triangleIndex);
-    const identityMatches=classification?.proof?.candidate.faceId===candidate.faceId
-      &&classification?.proof?.candidate.triangleIndex===candidate.triangleIndex;
-    const resolved=classification&&identityMatches
+    const resultIdentityMatches=classification
+      ?degeneracyResultMatchesCandidate(classification,{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex})
+      :false;
+    const proofIdentityMatches=classification?degeneracyProofMatchesResult(classification):false;
+    const resolved=classification&&resultIdentityMatches&&proofIdentityMatches
       ?classification
-      :{classification:'UNRESOLVED' as const,proof:null,reason:classification?'Proof gehört nicht zum konkreten Display-Kandidaten.':'Keine Klassifikation geliefert.'};
+      :{candidate:{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex},classification:'UNRESOLVED' as const,proof:null,reason:classification&&!resultIdentityMatches?'Klassifikation gehört nicht zum konkreten Display-Kandidaten.':classification?'Proof gehört nicht zur Klassifikation des konkreten Display-Kandidaten.':'Keine Klassifikation geliefert.'};
     counts[resolved.classification]++;
     return{
       faceId:candidate.faceId,
