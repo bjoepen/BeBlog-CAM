@@ -102,7 +102,8 @@
     "check:008h-a24-a2b2": "node scripts/check-008h-a24-a2b2-exact-degeneracy-classification.mjs",
     "check:008h-a24-a3": "node scripts/check-008h-a24-a3-degeneracy-integration.mjs",
     "check:008h-a24-a4": "node scripts/check-008h-a24-a4-real-world-acceptance.mjs",
-    "check:008h-a24-a6": "node scripts/check-008h-a24-a6-unresolved-candidate-identity.mjs"
+    "check:008h-a24-a6": "node scripts/check-008h-a24-a6-unresolved-candidate-identity.mjs",
+    "check:008h-a24-a7": "node scripts/check-008h-a24-a7-analytic-surface-singularity.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

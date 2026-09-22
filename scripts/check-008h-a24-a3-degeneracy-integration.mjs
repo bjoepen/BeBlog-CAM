@@ -5,17 +5,16 @@ const forbid=(s,t,l)=>{if(s.includes(t))throw new Error(`008H-A24-A3 contract fa
 const state=read('src/lib/threeDSurfaceTargetState.ts');
 const target=read('src/lib/curvedFaceTarget.ts');
 const classifier=read('src/lib/threeDDegeneracyClassification.ts');
+const analytic=read('src/lib/threeDAnalyticSingularity.ts');
 
 need(state,'selectedCurvedFaceDegeneracyCandidates','shared target must expose concrete candidate identity');
 need(state,'placedSphereSingularityProofs','singularity proof must be isolated from classifier');
 need(state,"face.kind!=='sphere'","sphere semantics are necessary but not sufficient");
-need(state,'source.source.wiresByFace.get(candidate.faceId)','native edge must belong to the same selected face');
-need(state,'!edge?.degenerated||!edge.degeneratedPoint','native degenerated edge and A2b1 location are mandatory');
-need(state,'center.x+axis.x*face.radiusMm','positive analytic sphere pole must derive from exact A1 semantics');
-need(state,'center.x-axis.x*face.radiusMm','negative analytic sphere pole must derive from exact A1 semantics');
-need(state,'poles.some(pole=>distance3(point,pole)<=tolerance)','native degenerated location must match an analytic pole');
-need(state,'points.filter(vertex=>distance3(vertex,point)<=tolerance).length<2','concrete display candidate must contain the same collapsed location at least twice');
-need(state,"kind:'surface-singularity'","only the proof producer may emit a singularity proof");
+need(state,'proveAnalyticSpherePole(candidate,{','sphere singularity must be proven by the dedicated analytic surface authority');
+need(state,'center:place(face.center)','sphere center must derive from exact A1 semantics in placed coordinates');
+need(state,'axisDirection:{x:face.axisDirection[0],y:face.axisDirection[1],z:face.axisDirection[2]}','sphere axis must derive from exact A1 semantics');
+need(state,'radiusMm:face.radiusMm','sphere radius must derive from exact A1 semantics');
+need(analytic,"kind:'surface-singularity'","only the dedicated analytic proof producer may emit a singularity proof");
 need(state,'provenAnalyticBoundaryForCandidate(candidate,boundaryGeometry)','BOUNDARY must reuse A20/A23 analytic boundary proof');
 need(state,"kind:'boundary'","boundary proof must be explicit");
 need(state,'classifyProvenDegeneracy(','all candidate evidence must pass through the shared A2b2 classifier');

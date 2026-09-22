@@ -27,7 +27,7 @@ for(const bad of [
   "kind==='sphere'&&edge.degenerated",
   "face.kind==='sphere'&&edge.degenerated",
 ])forbid(features,bad,`A2b1 native source must not infer classification from exported truth: ${bad}`);
-need(state,'edge.degeneratedPoint','A3 may consume A2b1 location truth only explicitly');
-need(state,'distance3(point,pole)<=tolerance','later singularity integration must compare the native location to independent analytic surface truth');
+forbid(state,'edge.degeneratedPoint','A24-A7 analytic sphere singularity must not require A2b1 edge-location truth');
+forbid(state,'distance3(point,pole)<=tolerance','A24-A7 must not gate analytic sphere singularity on degenerated-edge location');
 
 console.log('008H-A24-A2b1 native degenerated-edge location truth contract PASS');

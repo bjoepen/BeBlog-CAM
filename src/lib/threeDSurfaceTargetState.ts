@@ -3,6 +3,7 @@ import { buildCurvedFaceTarget, provenAnalyticBoundaryForCandidate, selectedCurv
 import { orientPoint3 } from './partOrientation';
 import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
 import { classifyProvenDegeneracy } from './threeDDegeneracyClassification';
+import { proveAnalyticSpherePole } from './threeDAnalyticSingularity';
 import type { DegeneracyProof } from './threeDDegeneracyClassification';
 import { buildThreeDDegeneracyAcceptanceSnapshot, emitThreeDDegeneracyAcceptanceSnapshot } from './threeDDegeneracyAcceptance';
 import type { P3 } from './stepView';
@@ -36,8 +37,6 @@ function placementOffset(summary:ImportSummary,orientation:PartOrientation,part:
   return{x:placedBounds.minX-rawBounds.minX,y:placedBounds.minY-rawBounds.minY,z:placedBounds.minZ-rawBounds.minZ};
 }
 
-function distance3(a:P3,b:P3){return Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);}
-
 function placedSphereSingularityProofs(
   summary:ImportSummary,
   orientation:PartOrientation,
@@ -49,39 +48,19 @@ function placedSphereSingularityProofs(
   const offset=placementOffset(summary,orientation,part);
   if(!source.ok||!offset)return result;
   const place=(tuple:[number,number,number]):P3=>({x:tuple[0]+offset.x,y:tuple[1]+offset.y,z:tuple[2]+offset.z});
-  const tolerance=1e-6;
 
   for(const candidate of candidates){
     const face=source.source.faces.find(item=>item.faceId===candidate.faceId);
     if(!face||face.kind!=='sphere')continue;
-    const center=place(face.center);
-    const axis={x:face.axisDirection[0],y:face.axisDirection[1],z:face.axisDirection[2]};
-    const poles=[
-      {x:center.x+axis.x*face.radiusMm,y:center.y+axis.y*face.radiusMm,z:center.z+axis.z*face.radiusMm},
-      {x:center.x-axis.x*face.radiusMm,y:center.y-axis.y*face.radiusMm,z:center.z-axis.z*face.radiusMm},
-    ];
-    const faceWires=source.source.wiresByFace.get(candidate.faceId)??[];
-    const edgeIds=new Set(faceWires.flatMap(wire=>wire.edgeIds));
-    for(const edgeId of edgeIds){
-      const edge=source.source.edges[edgeId];
-      if(!edge?.degenerated||!edge.degeneratedPoint)continue;
-      const point=place(edge.degeneratedPoint);
-      if(!poles.some(pole=>distance3(point,pole)<=tolerance))continue;
-      const points=[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c];
-      if(points.filter(vertex=>distance3(vertex,point)<=tolerance).length<2)continue;
-      const proof:DegeneracyProof={
-        kind:'surface-singularity',
-        candidate:{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex},
-        candidatePoints:points.map(vertex=>({...vertex})),
-        edgeId,
-        degeneratedPoint:{...point},
-      };
-      result.set(candidate.triangleIndex,[...(result.get(candidate.triangleIndex)??[]),proof]);
-    }
+    const proof=proveAnalyticSpherePole(candidate,{
+      center:place(face.center),
+      axisDirection:{x:face.axisDirection[0],y:face.axisDirection[1],z:face.axisDirection[2]},
+      radiusMm:face.radiusMm,
+    });
+    if(proof)result.set(candidate.triangleIndex,[proof]);
   }
   return result;
 }
-
 
 type PlacedOuterBoundaryResult=
   |{ok:true;geometry:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]}
