@@ -172,10 +172,15 @@ export function buildThreeDSurfaceTargetState(args:{
       degeneracyClassifications.set(candidate.triangleIndex,classifyProvenDegeneracy(proofs));
     }
   }
-  emitThreeDDegeneracyAcceptanceSnapshot({operationLabel,snapshot:buildThreeDDegeneracyAcceptanceSnapshot(degeneracyCandidates,degeneracyClassifications)});
   const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry,degeneracyClassifications);
   warnings.push(...target.warnings);
   errors.push(...target.errors);
+  emitThreeDDegeneracyAcceptanceSnapshot({
+    operationLabel,
+    snapshot:buildThreeDDegeneracyAcceptanceSnapshot(degeneracyCandidates,degeneracyClassifications),
+    surfaceTargetValid:target.valid&&errors.length===0,
+    surfaceTargetErrors:[...new Set(errors)],
+  });
   return{
     ok:target.valid&&errors.length===0,
     target:target.valid&&errors.length===0?target:null,
