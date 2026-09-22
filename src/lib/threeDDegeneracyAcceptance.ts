@@ -56,7 +56,12 @@ export function buildThreeDDegeneracyAcceptanceSnapshot(
 export function emitThreeDDegeneracyAcceptanceSnapshot(input:{
   operationLabel:string;
   snapshot:ThreeDDegeneracyAcceptanceSnapshot;
+  surfaceTargetValid:boolean;
+  surfaceTargetErrors:string[];
 }){
   if(!input.snapshot.candidateCount)return;
-  console.info('[008H-A24-A4][3D-degeneracy-acceptance]',input);
+  console.info('[008H-A24-A4][3D-degeneracy-acceptance]',{
+    ...input,
+    surfaceTargetErrors:[...input.surfaceTargetErrors],
+  });
 }
