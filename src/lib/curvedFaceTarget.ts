@@ -313,14 +313,18 @@ export function buildCurvedFaceTarget(
   const meshBoundaryEdges=brepOuterBoundaryGeometry?null:classifyProjectedBoundary(triangles);
   for(const candidate of verticalBoundaryCandidates){
     const classification=degeneracyClassifications?.get(candidate.triangleIndex);
-    if(classification){
-      if(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY')continue;
+    if(degeneracyClassifications){
+      const identityMatches=classification?.proof?.candidate.faceId===candidate.faceId
+        &&classification.proof.candidate.triangleIndex===candidate.triangleIndex;
+      if(classification&&identityMatches&&(classification.classification==='BOUNDARY'||classification.classification==='SURFACE_SINGULARITY'))continue;
       boundaryDiagnostics.push({
         faceId:candidate.faceId,
         candidatePoints:[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c].map(point=>({...point})),
         outerBoundaryEdges:(brepOuterBoundaryGeometry??[]).map(edge=>({wireId:edge.wireId??null,edgeId:edge.edgeId??null,kind:edge.kind})),
       });
-      errors.push(`Ausgewählte Fläche ${candidate.faceId}: XY-degenerierter Kandidat ${candidate.triangleIndex} ist ${classification.classification}: ${classification.reason}`);
+      errors.push(classification&&!identityMatches
+        ?`Ausgewählte Fläche ${candidate.faceId}: Degeneracy-Klassifikation gehört nicht zum Kandidaten ${candidate.triangleIndex}.`
+        :`Ausgewählte Fläche ${candidate.faceId}: XY-degenerierter Kandidat ${candidate.triangleIndex} ist ${classification?.classification??'UNRESOLVED'}: ${classification?.reason??'Keine Klassifikation geliefert.'}`);
       continue;
     }
     const proven=brepOuterBoundaryGeometry
