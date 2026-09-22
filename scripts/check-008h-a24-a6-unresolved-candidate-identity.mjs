@@ -12,7 +12,7 @@ const candidate={faceId:0,triangleIndex:321};
 const other={faceId:0,triangleIndex:320};
 const points=[{x:0,y:0,z:10},{x:0,y:0,z:10},{x:1,y:0,z:9}];
 const boundary={kind:'boundary',candidate:{...candidate},candidatePoints:points,wireId:4,edgeId:7};
-const singularity={kind:'surface-singularity',candidate:{...candidate},candidatePoints:points,edgeId:8,degeneratedPoint:{x:0,y:0,z:10}};
+const singularity={kind:'surface-singularity',candidate:{...candidate},candidatePoints:points,authority:'analytic-sphere-pole',singularityPoint:{x:0,y:0,z:10}};
 
 const unresolved=classifyProvenDegeneracy(candidate,[]);
 assert(unresolved.classification==='UNRESOLVED','zero-proof candidate must remain UNRESOLVED');
