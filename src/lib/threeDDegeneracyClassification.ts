@@ -6,10 +6,12 @@ export type DegeneracyClassification=
   |'INVALID_FOR_HEIGHTFIELD'
   |'UNRESOLVED';
 
+export type DegeneracyCandidateIdentity={faceId:number;triangleIndex:number};
+
 export type DegeneracyProof=
-  |{kind:'boundary';faceId:number;candidatePoints:P3[];wireId:number;edgeId:number}
-  |{kind:'surface-singularity';faceId:number;candidatePoints:P3[];edgeId:number;degeneratedPoint:P3}
-  |{kind:'invalid-for-heightfield';faceId:number;candidatePoints:P3[];reason:string};
+  |{kind:'boundary';candidate:DegeneracyCandidateIdentity;candidatePoints:P3[];wireId:number;edgeId:number}
+  |{kind:'surface-singularity';candidate:DegeneracyCandidateIdentity;candidatePoints:P3[];edgeId:number;degeneratedPoint:P3}
+  |{kind:'invalid-for-heightfield';candidate:DegeneracyCandidateIdentity;candidatePoints:P3[];reason:string};
 
 export type DegeneracyClassificationResult={
   classification:DegeneracyClassification;
@@ -31,7 +33,11 @@ export type DegeneracyClassificationResult={
 export function classifyProvenDegeneracy(
   proofs:DegeneracyProof[],
 ):DegeneracyClassificationResult{
-  if(proofs.length!==1){
+  const sameCandidate=proofs.length>0&&proofs.every(proof=>
+    proof.candidate.faceId===proofs[0].candidate.faceId
+    &&proof.candidate.triangleIndex===proofs[0].candidate.triangleIndex
+  );
+  if(proofs.length!==1||!sameCandidate){
     return{
       classification:'UNRESOLVED',
       proof:null,
