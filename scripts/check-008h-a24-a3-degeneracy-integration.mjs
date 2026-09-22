@@ -14,7 +14,7 @@ need(state,'proveAnalyticSpherePole(candidate,{','sphere singularity must be pro
 need(state,'center:place(face.center)','sphere center must derive from exact A1 semantics in placed coordinates');
 need(state,'axisDirection:{x:face.axisDirection[0],y:face.axisDirection[1],z:face.axisDirection[2]}','sphere axis must derive from exact A1 semantics');
 need(state,'radiusMm:face.radiusMm','sphere radius must derive from exact A1 semantics');
-need(state,"kind:'surface-singularity'","only the proof producer may emit a singularity proof");
+need(analytic,"kind:'surface-singularity'","only the dedicated analytic proof producer may emit a singularity proof");
 need(state,'provenAnalyticBoundaryForCandidate(candidate,boundaryGeometry)','BOUNDARY must reuse A20/A23 analytic boundary proof');
 need(state,"kind:'boundary'","boundary proof must be explicit");
 need(state,'classifyProvenDegeneracy(','all candidate evidence must pass through the shared A2b2 classifier');
