@@ -21,6 +21,13 @@ need(features,'Kugelmittelpunkt fehlt oder ist ungültig.','sphere center valida
 need(features,'Kugelradius muss größer als 0 sein.','sphere radius validation missing');
 need(features,'center:orientTuple3(face.center,orientation)','sphere center must follow part orientation');
 need(features,'axisDirection:orientDirection3(face.axisDirection,orientation)','sphere axis must follow part orientation');
+need(features,'xDirection:orientDirection3(face.xDirection,orientation)','sphere X direction must follow part orientation');
+need(features,'yDirection:orientDirection3(face.yDirection,orientation)','sphere Y direction must follow part orientation');
+need(features,'const orthogonalish=','sphere frame orthogonality predicate missing');
+need(features,'orthogonalish(face.axisDirection,face.xDirection)','sphere axis/X orthogonality validation missing');
+need(features,'orthogonalish(face.axisDirection,face.yDirection)','sphere axis/Y orthogonality validation missing');
+need(features,'orthogonalish(face.xDirection,face.yDirection)','sphere X/Y orthogonality validation missing');
+
 
 for(const bad of [
   "face.kind==='sphere')return true",
