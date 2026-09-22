@@ -45,6 +45,9 @@ pub struct ManufacturingFaceSummary {
     #[serde(default)] pub axis_origin: Option<[f64; 3]>,
     #[serde(default)] pub axis_direction: Option<[f64; 3]>,
     #[serde(default)] pub radius_mm: Option<f64>,
+    #[serde(default)] pub center: Option<[f64; 3]>,
+    #[serde(default)] pub x_direction: Option<[f64; 3]>,
+    #[serde(default)] pub y_direction: Option<[f64; 3]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +62,8 @@ pub struct ManufacturingEdgeSummary {
     #[serde(default)] pub axis_direction: Option<[f64; 3]>,
     #[serde(default)] pub radius_mm: Option<f64>,
     pub closed: bool,
+    #[serde(default)] pub degenerated: bool,
+    #[serde(default)] pub degenerated_point: Option<[f64; 3]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +74,7 @@ pub struct ManufacturingWireSummary {
     pub orientation: String,
     pub closed: bool,
     pub edge_ids: Vec<usize>,
+    #[serde(default)] pub outer: bool,
 }
 
 pub trait BrepBackend { fn inspect_step(&self, path: &Path) -> Result<BrepSummary, String>; }
