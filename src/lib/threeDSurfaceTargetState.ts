@@ -4,6 +4,7 @@ import { orientPoint3 } from './partOrientation';
 import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
 import { classifyProvenDegeneracy } from './threeDDegeneracyClassification';
 import type { DegeneracyProof } from './threeDDegeneracyClassification';
+import { buildThreeDDegeneracyAcceptanceSnapshot, emitThreeDDegeneracyAcceptanceSnapshot } from './threeDDegeneracyAcceptance';
 import type { P3 } from './stepView';
 import type {
   ImportSummary,
@@ -148,8 +149,10 @@ export function buildThreeDSurfaceTargetState(args:{
   const needsBoundaryProof=selectedCurvedFaceTargetNeedsBoundaryProof(part,displayFaceIds,faceIds);
   let boundaryGeometry:import('./curvedFaceTarget').CurvedFaceBoundaryGeometry[]|undefined;
   const degeneracyClassifications=new Map<number,ReturnType<typeof classifyProvenDegeneracy>>();
+  let degeneracyCandidates:ReturnType<typeof selectedCurvedFaceDegeneracyCandidates>=[];
   if(needsBoundaryProof){
     const candidates=selectedCurvedFaceDegeneracyCandidates(part,displayFaceIds,faceIds);
+    degeneracyCandidates=candidates;
     const singularityProofs=placedSphereSingularityProofs(summary,orientation,part,candidates);
     const outerBoundary=placedOuterBoundaryGeometry(summary,orientation,faceIds,part);
     if(outerBoundary.ok)boundaryGeometry=outerBoundary.geometry;
@@ -172,6 +175,12 @@ export function buildThreeDSurfaceTargetState(args:{
   const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry,degeneracyClassifications);
   warnings.push(...target.warnings);
   errors.push(...target.errors);
+  emitThreeDDegeneracyAcceptanceSnapshot({
+    operationLabel,
+    snapshot:buildThreeDDegeneracyAcceptanceSnapshot(degeneracyCandidates,degeneracyClassifications),
+    surfaceTargetValid:target.valid&&errors.length===0,
+    surfaceTargetErrors:[...new Set(errors)],
+  });
   return{
     ok:target.valid&&errors.length===0,
     target:target.valid&&errors.length===0?target:null,

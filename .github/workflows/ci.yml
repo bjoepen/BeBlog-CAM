@@ -131,6 +131,8 @@ jobs:
         run: pnpm check:008h-a24-a2b2
       - name: 3D Surface Truth controlled degeneracy integration contract
         run: pnpm check:008h-a24-a3
+      - name: 3D Surface Truth real-world degeneracy acceptance contract
+        run: pnpm check:008h-a24-a4
       - name: Frontend build
         run: pnpm build
       - name: Rust check
