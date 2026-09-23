@@ -27,8 +27,6 @@ pub struct BrepSummary {
     pub display_face_ids: Vec<usize>,
     #[serde(default)]
     pub display_edges: Vec<Vec<f64>>,
-    #[serde(default)]
-    pub diagnostics: Option<serde_json::Value>,
     pub note: String,
 }
 
@@ -194,9 +192,5 @@ mod tests {
         assert_eq!(summary.display_vertices.len(), summary.display_triangles * 9);
         assert_eq!(summary.display_face_ids.len(), summary.display_triangles);
         assert!(!summary.display_edges.is_empty());
-        let candidate_diagnostic=&summary.diagnostics.as_ref().expect("native diagnostics must be transported")["candidate321"];
-        assert_eq!(candidate_diagnostic["occtVersion"], "8.0.1");
-        assert_eq!(candidate_diagnostic["meshingParameters"]["linearDeflectionMm"], 0.1);
-        assert_eq!(candidate_diagnostic["meshingParameters"]["angularDeflectionRad"], 0.5);
     }
 }
