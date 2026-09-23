@@ -27,6 +27,8 @@ pub struct BrepSummary {
     pub display_face_ids: Vec<usize>,
     #[serde(default)]
     pub display_edges: Vec<Vec<f64>>,
+    #[serde(default)]
+    pub diagnostics: Option<serde_json::Value>,
     pub note: String,
 }
 
@@ -63,7 +65,7 @@ pub struct ManufacturingEdgeSummary {
     #[serde(default)] pub radius_mm: Option<f64>,
     pub closed: bool,
     #[serde(default)] pub degenerated: bool,
-    #[serde(default)] pub degenerated_point: Option<[f64; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub degenerated_point: Option<[f64; 3]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,7 +111,7 @@ impl BrepBackend for Occt8Backend {
 
 #[cfg(all(test, feature = "occt-native"))]
 mod tests {
-    use super::{BrepBackend, Occt8Backend};
+    use super::{BrepBackend, ManufacturingEdgeSummary, Occt8Backend};
     use std::{env, path::Path};
     #[test]
     fn preserves_a24_native_contract_json_fields() {
@@ -137,6 +139,43 @@ mod tests {
     }
 
     #[test]
+    fn preserves_a24_a8_optional_degenerated_point_contract() {
+        let regular_without_point: ManufacturingEdgeSummary = serde_json::from_value(serde_json::json!({
+            "edgeId": 0, "kind": "line", "orientation": "forward",
+            "start": [0.0, 0.0, 0.0], "end": [1.0, 0.0, 0.0],
+            "closed": false, "degenerated": false
+        })).expect("missing degeneratedPoint must deserialize as None");
+        assert_eq!(regular_without_point.degenerated_point, None);
+        let regular_json=serde_json::to_value(&regular_without_point).expect("regular edge must serialize");
+        assert!(regular_json.get("degeneratedPoint").is_none(), "None must remain absent for the frontend");
+
+        let point=[1.0,2.0,3.0];
+        let degenerated_with_point: ManufacturingEdgeSummary = serde_json::from_value(serde_json::json!({
+            "edgeId": 1, "kind": "other", "orientation": "forward",
+            "start": point, "end": point, "closed": true,
+            "degenerated": true, "degeneratedPoint": point
+        })).expect("degenerated edge point must deserialize");
+        assert_eq!(degenerated_with_point.degenerated_point, Some(point));
+        let degenerated_json=serde_json::to_value(&degenerated_with_point).expect("degenerated edge must serialize");
+        assert_eq!(degenerated_json["degeneratedPoint"], serde_json::json!(point), "Some(point) must remain complete");
+
+        let degenerated_without_point: ManufacturingEdgeSummary = serde_json::from_value(serde_json::json!({
+            "edgeId": 2, "kind": "other", "orientation": "forward",
+            "start": point, "end": point, "closed": true, "degenerated": true
+        })).expect("missing point must remain representable for fail-closed frontend validation");
+        assert_eq!(degenerated_without_point.degenerated_point, None);
+        assert!(serde_json::to_value(&degenerated_without_point).unwrap().get("degeneratedPoint").is_none());
+
+        let regular_with_real_point: ManufacturingEdgeSummary = serde_json::from_value(serde_json::json!({
+            "edgeId": 3, "kind": "line", "orientation": "forward",
+            "start": [0.0, 0.0, 0.0], "end": [1.0, 0.0, 0.0],
+            "closed": false, "degenerated": false, "degeneratedPoint": point
+        })).expect("contradictory real point must survive transport for fail-closed validation");
+        assert_eq!(regular_with_real_point.degenerated_point, Some(point));
+        assert_eq!(serde_json::to_value(&regular_with_real_point).unwrap()["degeneratedPoint"], serde_json::json!(point));
+    }
+
+    #[test]
     fn loads_real_step_as_brep() {
         let fixture = env::var("BEBLOG_OCCT_TEST_STEP").expect("BEBLOG_OCCT_TEST_STEP must point to a real STEP fixture");
         let summary = Occt8Backend.inspect_step(Path::new(&fixture)).expect("native OCCT STEP import must succeed");
@@ -155,5 +194,9 @@ mod tests {
         assert_eq!(summary.display_vertices.len(), summary.display_triangles * 9);
         assert_eq!(summary.display_face_ids.len(), summary.display_triangles);
         assert!(!summary.display_edges.is_empty());
+        let candidate_diagnostic=&summary.diagnostics.as_ref().expect("native diagnostics must be transported")["candidate321"];
+        assert_eq!(candidate_diagnostic["occtVersion"], "8.0.1");
+        assert_eq!(candidate_diagnostic["meshingParameters"]["linearDeflectionMm"], 0.1);
+        assert_eq!(candidate_diagnostic["meshingParameters"]["angularDeflectionRad"], 0.5);
     }
 }

@@ -137,6 +137,8 @@ jobs:
         run: pnpm check:008h-a24-a6
       - name: 3D Surface Truth analytic surface singularity contract
         run: pnpm check:008h-a24-a7
+      - name: Optional native geometry nullability integrity contract
+        run: pnpm check:008h-a24-a8
       - name: Frontend build
         run: pnpm build
       - name: Rust check

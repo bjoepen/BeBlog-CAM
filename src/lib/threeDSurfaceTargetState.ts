@@ -4,6 +4,7 @@ import { orientPoint3 } from './partOrientation';
 import { buildOrientedStepManufacturingFeatureSource } from './stepManufacturingFeatures';
 import { classifyProvenDegeneracy } from './threeDDegeneracyClassification';
 import { proveAnalyticSpherePole } from './threeDAnalyticSingularity';
+import { emitCandidate321SingleRunDiagnostic } from './threeDDegeneracyDiagnostic';
 import type { DegeneracyProof } from './threeDDegeneracyClassification';
 import { buildThreeDDegeneracyAcceptanceSnapshot, emitThreeDDegeneracyAcceptanceSnapshot } from './threeDDegeneracyAcceptance';
 import type { P3 } from './stepView';
@@ -138,20 +139,26 @@ export function buildThreeDSurfaceTargetState(args:{
 
     for(const candidate of candidates){
       const proofs:DegeneracyProof[]=[...(singularityProofs.get(candidate.triangleIndex)??[])];
+      let boundaryProof:DegeneracyProof|null=null;
       if(boundaryGeometry){
         const boundary=provenAnalyticBoundaryForCandidate(candidate,boundaryGeometry);
-        if(boundary&&boundary.wireId!==undefined&&boundary.edgeId!==undefined)proofs.push({
-          kind:'boundary',
-          candidate:{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex},
-          candidatePoints:[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c].map(point=>({...point})),
-          wireId:boundary.wireId,
-          edgeId:boundary.edgeId,
-        });
+        if(boundary&&boundary.wireId!==undefined&&boundary.edgeId!==undefined){
+          boundaryProof={
+            kind:'boundary',
+            candidate:{faceId:candidate.faceId,triangleIndex:candidate.triangleIndex},
+            candidatePoints:[candidate.triangle.a,candidate.triangle.b,candidate.triangle.c].map(point=>({...point})),
+            wireId:boundary.wireId,
+            edgeId:boundary.edgeId,
+          };
+          proofs.push(boundaryProof);
+        }
       }
-      degeneracyClassifications.set(candidate.triangleIndex,classifyProvenDegeneracy(
+      const classification=classifyProvenDegeneracy(
         {faceId:candidate.faceId,triangleIndex:candidate.triangleIndex},
         proofs,
-      ));
+      );
+      degeneracyClassifications.set(candidate.triangleIndex,classification);
+      emitCandidate321SingleRunDiagnostic({summary,stock,placement,orientation,part,candidate,placementOffset:placementOffset(summary,orientation,part),boundaryGeometryAvailable:boundaryGeometry!==undefined,boundaryProof,finalProofs:proofs,classification});
     }
   }
   const target=buildCurvedFaceTarget(part,displayFaceIds,faceIds,undefined,boundaryGeometry,degeneracyClassifications);
