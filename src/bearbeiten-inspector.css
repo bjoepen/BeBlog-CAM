@@ -5,9 +5,8 @@
 .inspector input,.inspector select,.inspector button{max-width:100%}
 .placement-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 .placement-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
-.operation-add{grid-template-columns:repeat(2,minmax(0,1fr))}
-.operation-add>span{grid-column:1/-1}
-.operation-add button{min-width:0;white-space:normal;overflow-wrap:anywhere}
+.operation-add,.operation-add-group,.operation-add .placement-grid{min-width:0}
+.operation-add button{min-width:0}
 .operation-select{grid-template-columns:28px minmax(0,1fr)}
 .operation-select span:last-child,.operation-select strong,.operation-select small{min-width:0;overflow-wrap:anywhere}
 
