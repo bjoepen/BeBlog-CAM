@@ -1,6 +1,6 @@
 [package]
 name = "beblog-cam"
-version = "0.1.0-alpha.1"
+version = "0.2.0-beta.2"
 description = "Focused 3-axis CAM for makers"
 authors = ["BeBlog CAM"]
 edition = "2021"
