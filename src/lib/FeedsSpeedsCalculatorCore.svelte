@@ -13,7 +13,8 @@
     millingToolLabels,
     toolGeometrySummary,
     type MillingTool,
-    type MillingToolKind
+    type MillingToolKind,
+    isMillingTool
   } from './toolTypes';
 
   type ToolTab='data'|'calculator'|'library';
@@ -87,7 +88,7 @@
     if(tool.kind==='v-bit'&&field==='maxDiameterMm')patchTool({diameterMm:value} as Partial<MillingTool>);
   }
   function saveTool(){
-    if(!(tool.diameterMm>0&&tool.flutes>0&&tool.chipLoadMm>0))return;
+    if(!isMillingTool(tool))return;
     const id=selectedToolId??`tool-${Date.now()}`;
     const saved={...tool,id,name:tool.name.trim()||millingToolLabels[tool.kind]} as MillingTool;
     const exists=library.some(item=>item.id===id);

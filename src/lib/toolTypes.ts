@@ -101,7 +101,7 @@ export function isMillingTool(value: unknown): value is MillingTool {
   if (typeof tool.id !== 'string' || typeof tool.name !== 'string' || !millingToolKinds.includes(tool.kind as MillingToolKind)) return false;
   if (!positive(tool.diameterMm) || !positive(tool.flutes) || !positive(tool.chipLoadMm) || !positive(tool.stickoutMm) || !positive(tool.holderDiameterMm)) return false;
   if (tool.holderDiameterMm < tool.diameterMm) return false;
-  if (tool.kind === 'end-mill' || tool.kind === 'ball-nose' || tool.kind === 'fiber-cutter') return positive(tool.cuttingLengthMm) && positive(tool.shaftDiameterMm) && tool.stickoutMm >= tool.cuttingLengthMm && tool.shaftDiameterMm >= tool.diameterMm && tool.holderDiameterMm >= tool.shaftDiameterMm;
+  if (tool.kind === 'end-mill' || tool.kind === 'ball-nose' || tool.kind === 'fiber-cutter') return positive(tool.cuttingLengthMm) && positive(tool.shaftDiameterMm) && tool.stickoutMm >= tool.cuttingLengthMm && tool.holderDiameterMm >= tool.shaftDiameterMm;
   if (tool.kind === 'drill') return positive(tool.cuttingLengthMm) && positive(tool.shaftDiameterMm) && positive(tool.pointAngleDeg) && tool.pointAngleDeg < 180 && tool.stickoutMm >= tool.cuttingLengthMm && tool.shaftDiameterMm >= tool.diameterMm && tool.holderDiameterMm >= tool.shaftDiameterMm;
   if (tool.kind === 'face-mill') return positive(tool.maxDepthOfCutMm);
   return positive(tool.angleDeg) && positive(tool.tipDiameterMm) && positive(tool.maxDiameterMm) && tool.tipDiameterMm <= tool.maxDiameterMm;
