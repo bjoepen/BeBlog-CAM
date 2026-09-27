@@ -142,6 +142,7 @@
     <button class:active={activeTab==='library'} onclick={()=>activeTab='library'}>Werkzeugbibliothek <span class="count">{library.length}</span></button>
   </nav>
 
+  {#if targetOperationId&&operationChoices.length>0}
   <section class="operation-target">
     <div>
       <b>Schnittdaten für Bearbeitung</b>
@@ -153,6 +154,7 @@
       {#each operationChoices as choice}<option value={choice.id}>{choice.label} · {choice.name}</option>{/each}
     </select>
   </section>
+  {/if}
 
   {#if activeTab==='data'}
   <div class="content-grid">
@@ -236,7 +238,7 @@
     <aside class="side-column">
       <section class="results"><div class="result-head"><b>EMPFOHLENE EINSTELLUNGEN</b><span class:warning={!insideProfile}>{insideProfile?'✓ Im Maschinenprofil':'↘ Maschinenlimit aktiv'}</span></div><div class="result-values"><div><p>Drehzahl</p><strong>{n(recommendedRpm)} <small>1/min</small></strong></div><div><p>Vorschub</p><strong>{n(recommendedFeed)} <small>mm/min</small></strong></div></div></section>
       <section class="card"><h3>Aktives Werkzeug</h3><div class="kv"><span>Typ</span><b>{millingToolLabels[tool.kind]}</b></div><div class="kv"><span>Name</span><b>{tool.name}</b></div><div class="kv"><span>Rechen-Ø</span><b>{n(calculationDiameter,2)} mm</b></div><div class="kv"><span>Schneiden</span><b>{tool.flutes}</b></div><div class="kv"><span>fz Werkzeug</span><b>{n(tool.chipLoadMm,3)} mm</b></div><div class="kv"><span>fz wirksam</span><b>{n(effectiveChipLoad,3)} mm</b></div></section>
-      <section class="apply-card"><div><h3>{targetOperationChoice?`In ${targetOperationChoice.label} übernehmen`:'Bearbeitung wählen'}</h3><p>Ziel: <b>{targetOperationChoice?.name??activeOperationName}</b></p><p>Übernommen werden Werkzeugname, Fräsertyp, Rechen-Ø sowie die aus <b>{materialProfile.label}</b> berechnete Drehzahl und der Vorschub. Eintauchvorschub, Zustellung und weitere CAM-Parameter bleiben bewusst Eigentum der Bearbeitung.</p>{#if toolCompatibility}<p class="compatibility" class:compat-pass={toolCompatibility.level==='pass'} class:compat-warn={toolCompatibility.level==='warn'} class:compat-fail={toolCompatibility.level==='fail'}><strong>{toolCompatibility.level.toUpperCase()}:</strong> {toolCompatibility.detail}</p>{/if}</div><button class="primary-action apply-button" disabled={!onApplyToOperation||!targetOperationId||toolTransferBlocked||recommendedRpm==null||recommendedFeed==null} onclick={applyToOperation}>Werkzeug &amp; Schnittdaten übernehmen</button>{#if transferMessage}<p class="transfer-message">✓ {transferMessage}</p>{/if}</section>
+      {#if targetOperationId&&onApplyToOperation}<section class="apply-card"><div><h3>{targetOperationChoice?`In ${targetOperationChoice.label} übernehmen`:'Bearbeitung wählen'}</h3><p>Ziel: <b>{targetOperationChoice?.name??activeOperationName}</b></p><p>Übernommen werden Werkzeugname, Fräsertyp, Rechen-Ø sowie die aus <b>{materialProfile.label}</b> berechnete Drehzahl und der Vorschub. Eintauchvorschub, Zustellung und weitere CAM-Parameter bleiben bewusst Eigentum der Bearbeitung.</p>{#if toolCompatibility}<p class="compatibility" class:compat-pass={toolCompatibility.level==='pass'} class:compat-warn={toolCompatibility.level==='warn'} class:compat-fail={toolCompatibility.level==='fail'}><strong>{toolCompatibility.level.toUpperCase()}:</strong> {toolCompatibility.detail}</p>{/if}</div><button class="primary-action apply-button" disabled={toolTransferBlocked||recommendedRpm==null||recommendedFeed==null} onclick={applyToOperation}>Werkzeug &amp; Schnittdaten übernehmen</button>{#if transferMessage}<p class="transfer-message">✓ {transferMessage}</p>{/if}</section>{/if}
       <section class="card"><h3>Werkstoff des Rohlings</h3><div class="material-grid">{#each materialKinds as material}<button class:active={$stockMaterial===material} aria-pressed={$stockMaterial===material} onclick={()=>chooseMaterial(material)}>{materialProfiles[material].shortLabel}</button>{/each}</div><div class="material-summary"><b>{materialProfile.label}</b><span>vc {n(materialProfile.cuttingSpeedMMin)} m/min · fz-Faktor {n(materialProfile.chipLoadFactor,2)}</span></div></section>
     </aside>
   </div>
