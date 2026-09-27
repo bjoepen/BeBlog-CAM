@@ -107,7 +107,8 @@
     "check:008h-a24-a8": "node scripts/check-008h-a24-a8-optional-native-geometry-nullability.mjs",
     "check:009b": "node scripts/check-009b-tool-library-export.mjs",
     "check:009c": "node scripts/check-009c-tool-library-import.mjs",
-    "check:009d": "node scripts/check-009d-tool-type-expansion.mjs"
+    "check:009d": "node scripts/check-009d-tool-type-expansion.mjs",
+    "check:009e": "node scripts/check-009e-standalone-tool-library.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
