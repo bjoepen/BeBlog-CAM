@@ -6,7 +6,7 @@ export type ValidationLevel = 'pass' | 'warn' | 'fail';
 export type ValidationCategory = 'geometry' | 'tool' | 'strategy' | 'depth' | 'cut-data' | 'setup' | 'stock' | 'toolpath';
 export type ValidationCheck = { level: ValidationLevel; category: ValidationCategory; title: string; detail: string };
 
-const toolLabel = (kind: MillingToolKind | undefined) => kind === 'face-mill' ? 'Planfräser' : kind === 'end-mill' ? 'Schaftfräser' : kind === 'ball-nose' ? 'Vollradiusfräser' : kind === 'v-bit' ? 'V-Fräser' : 'nicht typisiertes Werkzeug';
+const toolLabel = (kind: MillingToolKind | undefined) => kind === 'face-mill' ? 'Planfräser' : kind === 'end-mill' ? 'Schaftfräser' : kind === 'ball-nose' ? 'Vollradiusfräser' : kind === 'v-bit' ? 'V-Fräser' : kind === 'drill' ? 'Bohrer' : kind === 'fiber-cutter' ? 'Faserfräser' : 'nicht typisiertes Werkzeug';
 
 export function validationLevel(checks: ValidationCheck[]): ValidationLevel {
   return checks.some(c => c.level === 'fail') ? 'fail' : checks.some(c => c.level === 'warn') ? 'warn' : 'pass';
@@ -96,12 +96,13 @@ export function validateToolCompatibility(operation: CamOperation): ValidationCh
   if (operation.kind === 'drill' && operation.method === 'helical-mill') {
     return kind === 'end-mill'
       ? { level: 'pass', category: 'tool', title: 'Werkzeug · Strategie', detail: 'Schaftfräser ist für Helixfräsen freigegeben.' }
-      : { level: 'fail', category: 'tool', title: 'Werkzeug · Strategie', detail: 'Helixfräsen benötigt einen Schaftfräser aus der Werkzeugbibliothek.' };
+      : { level: 'fail', category: 'tool', title: 'Werkzeug · Strategie', detail: `${label} ist für Helixfräsen nicht freigegeben; diese Strategie benötigt einen Schaftfräser.` };
   }
 
   if (operation.kind === 'drill') {
-    if (!kind) return { level: 'pass', category: 'tool', title: 'Werkzeug · Operation', detail: 'Nicht typisiertes Werkzeug wird für axiales Bohren als Bohrer behandelt.' };
-    if (kind === 'end-mill') return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'Schaftfräser kann axial eintauchen, sofern er dafür geeignet ist; die Werkzeugbibliothek kennt diese Eigenschaft noch nicht.' };
+    if (kind === 'drill') return { level: 'pass', category: 'tool', title: 'Werkzeug · Operation', detail: 'Bohrer ist für axiales Bohren freigegeben.' };
+    if (!kind) return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'Nicht typisiertes Werkzeug: Für axiales Bohren sollte ein Bohrer aus der Werkzeugbibliothek gewählt werden.' };
+    if (kind === 'end-mill') return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'Schaftfräser kann axial eintauchen, sofern er dafür geeignet ist; für reguläres Bohren ist ein Bohrer vorgesehen.' };
     return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: `${label} ist für axiales Bohren nicht freigegeben.` };
   }
 
@@ -120,6 +121,8 @@ export function validateToolCompatibility(operation: CamOperation): ValidationCh
     return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'Werkzeugtyp ist unbekannt; Radiuskorrektur wird nur über den Nenndurchmesser berechnet.' };
   }
 
+  if (kind === 'drill') return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: 'Bohrer ist für Carve nicht freigegeben.' };
+  if (kind === 'fiber-cutter') return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: 'Faserfräser ist für die aktuelle Carve-Bearbeitung noch nicht freigegeben.' };
   if (kind === 'face-mill') return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: 'Planfräser ist für Carve nicht freigegeben.' };
   if (kind === 'v-bit') return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'V-Fräser kann Centerlines gravieren; die aktuelle Carve-Berechnung modelliert jedoch noch keine V-Geometrie und keine variable Gravurbreite.' };
   if (kind === 'ball-nose') return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'Vollradiusfräser ist als Centerline-Werkzeug möglich; die resultierende Nutform wird noch nicht geometrisch bewertet.' };
