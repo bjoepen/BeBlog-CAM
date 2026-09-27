@@ -9,7 +9,7 @@ const required=[
   [types.includes("pointAngleDeg: number"),'drill point angle'],
   [types.includes("'drill': 'Bohrer'"),'drill label'],
   [types.includes("'fiber-cutter': 'Faserfräser'"),'fiber cutter label'],
-  [types.includes("kind==='drill'?{...geometry,kind,pointAngleDeg"),'drill migration'],
+  [types.includes("if(kind==='drill')return {...geometry,kind:'drill',pointAngleDeg"),'drill migration'],
   [grammar.includes("kind === 'drill') return { level: 'pass'"),'axial drill PASS'],
   [grammar.includes("kind === 'end-mill'")&&grammar.includes("Schaftfräser ist für Helixfräsen freigegeben."),'helical end mill PASS'],
   [grammar.includes("ist für Helixfräsen nicht freigegeben"),'helical non-end-mill FAIL'],
