@@ -121,6 +121,8 @@ export function validateToolCompatibility(operation: CamOperation): ValidationCh
     return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'Werkzeugtyp ist unbekannt; Radiuskorrektur wird nur über den Nenndurchmesser berechnet.' };
   }
 
+  if (kind === 'drill') return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: 'Bohrer ist für Carve nicht freigegeben.' };
+  if (kind === 'fiber-cutter') return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: 'Faserfräser ist für die aktuelle Carve-Bearbeitung noch nicht freigegeben.' };
   if (kind === 'face-mill') return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: 'Planfräser ist für Carve nicht freigegeben.' };
   if (kind === 'v-bit') return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'V-Fräser kann Centerlines gravieren; die aktuelle Carve-Berechnung modelliert jedoch noch keine V-Geometrie und keine variable Gravurbreite.' };
   if (kind === 'ball-nose') return { level: 'warn', category: 'tool', title: 'Werkzeug · Operation', detail: 'Vollradiusfräser ist als Centerline-Werkzeug möglich; die resultierende Nutform wird noch nicht geometrisch bewertet.' };
