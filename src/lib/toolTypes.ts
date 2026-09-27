@@ -116,10 +116,12 @@ export function migrateMillingTool(value: unknown): MillingTool | null {
   const kind=millingToolKinds.includes(old.kind as MillingToolKind)?old.kind as MillingToolKind:'end-mill';
   const base={id:old.id,name:old.name,diameterMm:old.diameterMm,flutes:old.flutes,chipLoadMm:old.chipLoadMm,stickoutMm:positive(old.stickoutMm)?old.stickoutMm:Math.max(old.diameterMm*4,20),holderDiameterMm:positive(old.holderDiameterMm)?old.holderDiameterMm:Math.max(old.diameterMm,20)};
   if(kind==='ball-nose'||kind==='end-mill'||kind==='fiber-cutter'||kind==='drill'){
-
     const cuttingLengthMm=positive(old.cuttingLengthMm)?old.cuttingLengthMm:Math.max(old.diameterMm*2,1),shaftDiameterMm=positive(old.shaftDiameterMm)?old.shaftDiameterMm:old.diameterMm;
-    const geometry={...base,kind,cuttingLengthMm,shaftDiameterMm,stickoutMm:Math.max(base.stickoutMm,cuttingLengthMm),holderDiameterMm:Math.max(base.holderDiameterMm,shaftDiameterMm)};
-    return kind==='drill'?{...geometry,kind,pointAngleDeg:positive(old.pointAngleDeg)&&old.pointAngleDeg<180?old.pointAngleDeg:118}:geometry;
+    const geometry={...base,cuttingLengthMm,shaftDiameterMm,stickoutMm:Math.max(base.stickoutMm,cuttingLengthMm),holderDiameterMm:Math.max(base.holderDiameterMm,shaftDiameterMm)};
+    if(kind==='drill')return {...geometry,kind:'drill',pointAngleDeg:positive(old.pointAngleDeg)&&old.pointAngleDeg<180?old.pointAngleDeg:118};
+    if(kind==='ball-nose')return {...geometry,kind:'ball-nose'};
+    if(kind==='fiber-cutter')return {...geometry,kind:'fiber-cutter'};
+    return {...geometry,kind:'end-mill'};
   }
   if(kind==='face-mill')return {...base,kind,maxDepthOfCutMm:positive(old.maxDepthOfCutMm)?old.maxDepthOfCutMm:1,holderDiameterMm:Math.max(base.holderDiameterMm,old.diameterMm)};
   return {...base,kind,angleDeg:positive(old.angleDeg)?old.angleDeg:60,tipDiameterMm:positive(old.tipDiameterMm)?old.tipDiameterMm:.2,maxDiameterMm:positive(old.maxDiameterMm)?old.maxDiameterMm:old.diameterMm};
