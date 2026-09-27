@@ -13,6 +13,8 @@ const required=[
   [grammar.includes("kind === 'drill') return { level: 'pass'"),'axial drill PASS'],
   [grammar.includes("kind === 'end-mill'")&&grammar.includes("Schaftfräser ist für Helixfräsen freigegeben."),'helical end mill PASS'],
   [grammar.includes("ist für Helixfräsen nicht freigegeben"),'helical non-end-mill FAIL'],
+  [grammar.includes("kind === 'drill') return { level: 'fail'")&&grammar.includes("Bohrer ist für Carve nicht freigegeben."),'drill carve FAIL'],
+  [grammar.includes("kind === 'fiber-cutter') return { level: 'fail'")&&grammar.includes("Faserfräser ist für die aktuelle Carve-Bearbeitung noch nicht freigegeben."),'fiber cutter carve FAIL'],
   [ui.includes("tool.kind==='fiber-cutter'||tool.kind==='drill'"),'shared cylindrical geometry UI'],
   [ui.includes('tool.pointAngleDeg'),'drill point angle UI']
 ];
