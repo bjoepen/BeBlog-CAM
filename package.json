@@ -116,7 +116,8 @@
     "check:010e1": "node scripts/check-010e1-circular-boundary.mjs",
     "check:010e2": "node scripts/check-010e2-guide-eligibility.mjs",
     "check:010e3": "node scripts/check-010e3-capsule-boundary.mjs",
-    "check:010e4": "node scripts/check-010e4-native-circle.mjs"
+    "check:010e4": "node scripts/check-010e4-native-circle.mjs",
+    "check:010e5a": "node scripts/check-010e5a-uncut-stock-witness.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
