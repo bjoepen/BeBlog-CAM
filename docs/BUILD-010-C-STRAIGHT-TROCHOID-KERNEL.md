@@ -1,0 +1,7 @@
+# Build 010-C — Straight-Line Trochoid Reference Kernel
+
+This isolated geometry function accepts exactly one nondegenerate straight guide, a positive loop radius, forward step, explicit free half-plane and arc winding. It emits two native semicircular LINE/ARC-compatible arcs per station, linked at the free-side apex. The station schedule is deterministic in guide arclength, includes both endpoints and shortens only the last interval. A step larger than the loop diameter and requests above 10,000 loops fail closed.
+
+Fixture: guide `(0,0) → (100,0)`, radius `4 mm`, forward step `2 mm` produces 51 loops, 102 arcs, 50 free-side links. For left free side, circle centers have `Y=4`, tangent touches `Y=0`, and links remain on `Y=8`. Winding and free side are explicit geometric inputs; climb/conventional mapping is not yet defined by this stage.
+
+**Not a manufacturing toolpath.** This loop-and-link reference does not establish initial material state, effective radial engagement or avoidance of full-slot cutting. A link at the free-side apex is not assumed to be cleared. There is no ramp, corner handling, cutter-envelope or stock-domain proof, and no operation/UI/preflight/preview/NC dispatch. Future stages must validate those properties or replace the candidate motion before enabling manufacturing release. In particular, `step <= 2 × radius` proves geometric loop overlap only, not safe cutter engagement.
