@@ -1,0 +1,7 @@
+# Build 010-E4 — Native DXF Circle Bridge
+
+A selected DXF `circle` now receives a semantic cutter-center guide made of two exact semicircular arcs. The original closed-contour ID ordering remains intact, including circles and closed polylines before assembled open chains. Inside and outside offsets use the transformed source radius plus the signed tool-radius allowance. Collapsed inside offsets and transforms that fail sampled circle-preservation checks are rejected. Reflections reverse the arc winding.
+
+`proveTrochoidalCircleGuideBoundary` verifies that the source and guide are concentric, aligned, closed pairs of semicircles with the claimed signed offset before invoking the exact radial boundary proof from 010-E1. The new acceptance composes actual contour selection, 010-E2 eligibility, 010-D candidate construction and this proof for both sides, rotated and reflected contours. Invalid radii, distortion, collapsed offsets, forged guide data and an interior-crossing link fail.
+
+The transformation parameter is a function, so finite samples cannot prove that an arbitrary nonlinear function preserves every point of a circle. Callers must supply a rigid or similarity transform. The bridge proves a cutter-center boundary for this selected circle, not stock removal, safe radial engagement, full-slot avoidance, ramp clearance, tool/holder collision, or NC readiness. No UI, preflight, persistence or NC dispatch is enabled.
