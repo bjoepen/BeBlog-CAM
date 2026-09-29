@@ -1,4 +1,5 @@
 import type { P2, SemanticSegment } from './contourMath';
+import type { TrochoidalContourGuide } from './trochoidalContourGuide';
 
 export type CircularGuideDomain = { center: P2; radiusMm: number; side: 'outside' | 'inside' };
 export type CircularBoundaryProof = {
@@ -78,4 +79,42 @@ export function proveCircularGuideBoundary(domain: CircularGuideDomain, path: Se
   if (distance(path[path.length - 1].end, path[0].start) > EPS)
     return fail('Geschlossene Kreisführung benötigt eine geschlossene Kandidatenbahn.', path.length - 1, min, max);
   return { ok: true, measuredMinRadiusMm: min, measuredMaxRadiusMm: max, failingSegmentIndex: null, errors: [] };
+}
+
+/** 010-E4: bind the circular proof to a native, concentric 010-B guide. */
+export function proveTrochoidalCircleGuideBoundary(guide: TrochoidalContourGuide, path: SemanticSegment[]): CircularBoundaryProof {
+  const fail = (): CircularBoundaryProof => ({ ok: false, measuredMinRadiusMm: NaN,
+    measuredMaxRadiusMm: NaN, failingSegmentIndex: null, errors: ['Keine gültige konzentrische Zweibogen-Kreisführung.'] });
+  if (!guide?.validation?.ok || !Array.isArray(guide.source) || !Array.isArray(guide.segments)
+    || guide.source.length !== 2 || guide.segments.length !== 2
+    || !Number.isInteger(guide.contourId) || guide.contourId < 0
+    || !Number.isFinite(guide.signedOffsetMm)
+    || !Number.isFinite(guide.validation.expectedMm)
+    || !Number.isFinite(guide.validation.measuredMinMm)
+    || !Number.isFinite(guide.validation.measuredMaxMm)
+    || guide.validation.segmentCount !== 2
+    || (guide.side === 'outside' ? guide.signedOffsetMm <= 0 : guide.side === 'inside' ? guide.signedOffsetMm >= 0 : true)) return fail();
+  const [a, b] = guide.segments, [s, t] = guide.source;
+  if ([a, b, s, t].some(segment => segment.kind !== 'arc')) return fail();
+  if (a.kind !== 'arc' || b.kind !== 'arc' || s.kind !== 'arc' || t.kind !== 'arc') return fail();
+  const circlePair = (first: typeof a, second: typeof b) =>
+    finite(first.center) && Number.isFinite(first.radius) && first.radius > EPS
+    && first.ccw === second.ccw && typeof first.ccw === 'boolean'
+    && distance(first.center, second.center) <= EPS && Math.abs(first.radius - second.radius) <= EPS
+    && distance(first.start, second.end) <= EPS && distance(first.end, second.start) <= EPS
+    && distance(first.start, first.end) >= first.radius * 2 - EPS
+    && Math.abs(distance(first.start, first.center) - first.radius) <= EPS
+    && Math.abs(distance(first.end, first.center) - first.radius) <= EPS
+    && Math.abs(distance(second.start, second.center) - second.radius) <= EPS
+    && Math.abs(distance(second.end, second.center) - second.radius) <= EPS;
+  if (!circlePair(a, b) || !circlePair(s, t) || a.ccw !== s.ccw
+    || distance(a.center, s.center) > EPS
+    || Math.abs(a.radius - s.radius - guide.signedOffsetMm) > EPS
+    || distance(a.start, { x: a.center.x + (s.start.x - s.center.x) * a.radius / s.radius,
+      y: a.center.y + (s.start.y - s.center.y) * a.radius / s.radius }) > EPS
+    || Math.abs(guide.validation.expectedMm - Math.abs(guide.signedOffsetMm)) > EPS
+    || Math.abs(guide.validation.measuredMinMm - Math.abs(guide.signedOffsetMm)) > EPS
+    || Math.abs(guide.validation.measuredMaxMm - Math.abs(guide.signedOffsetMm)) > EPS
+    || !guide.validation.sideOk) return fail();
+  return proveCircularGuideBoundary({ center: a.center, radiusMm: a.radius, side: guide.side }, path);
 }

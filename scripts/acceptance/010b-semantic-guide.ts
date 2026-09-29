@@ -46,6 +46,6 @@ const open: Curve2[] = [{ kind: 'line', start: { x: 0, y: 0 }, end: { x: 10, y: 
 expect(!buildTrochoidalContourGuide(open, operation).ok, 'open line must fail');
 expect(!buildTrochoidalContourGuide(rectangle, { ...operation, contourId: 1 }).ok, 'unknown contour must fail');
 expect(!buildTrochoidalContourGuide(rectangle, { ...operation, tool: { ...operation.tool, diameterMm: 60 }, side: 'inside' }).ok, 'collapsed inside offset must fail');
-expect(!buildTrochoidalContourGuide([{ kind: 'circle', center: { x: 0, y: 0 }, radius: 10 }], operation).ok, '010-B native circle remains unsupported');
+expect(buildTrochoidalContourGuide([{ kind: 'circle', center: { x: 0, y: 0 }, radius: 10 }], operation).ok, '010-E4 supports native circle');
 expect(!buildTrochoidalContourGuide(rectangle, { ...operation, entryMode: 'plunge' as 'ramp' }).ok, 'contract remains fail closed');
 console.log('010-B semantic guide: PASS');

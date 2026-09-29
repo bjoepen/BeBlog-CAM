@@ -7,3 +7,5 @@ The result fails closed for missing/open/unsupported or discontinuous geometry, 
 **Release boundary:** A valid guide is only a necessary input to later stages. Existing offset validation checks local distance and continuity, not full material-side clearance, self-intersection, collision, ramp clearance, corner feasibility, or effective engagement. No production operation, persistence, preview, preflight, NC output, or G-code dispatch is enabled by 010-B. Those proofs remain prerequisites before manufacturing release.
 
 Acceptance cases: outside and inside rectangle offsets, reversed winding, native LINE/ARC preservation, open/unknown/unsupported contours, collapsed inside offset and invalid entry contract.
+
+010-E4 extends this builder with native DXF circle selection and exact concentric two-arc offsets. Its acceptance and limitations are documented in `BUILD-010-E4-NATIVE-CIRCLE-BRIDGE.md`.
