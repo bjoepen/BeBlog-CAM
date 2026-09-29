@@ -114,7 +114,8 @@
     "check:010c": "node scripts/check-010c-straight-trochoid.mjs",
     "check:010d": "node scripts/check-010d-semantic-path-following.mjs",
     "check:010e1": "node scripts/check-010e1-circular-boundary.mjs",
-    "check:010e2": "node scripts/check-010e2-guide-eligibility.mjs"
+    "check:010e2": "node scripts/check-010e2-guide-eligibility.mjs",
+    "check:010e3": "node scripts/check-010e3-capsule-boundary.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
