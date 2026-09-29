@@ -16,7 +16,8 @@ const finite = (p: P2) => !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
 const distance = (a: P2, b: P2) => Math.hypot(a.x - b.x, a.y - b.y);
 const positive = (angle: number) => ((angle % TAU) + TAU) % TAU;
 
-function boundsForSegment(segment: SemanticSegment, origin: P2): { min: number; max: number } | null {
+/** Exact radial extrema for one native LINE/ARC primitive; null for invalid geometry. */
+export function radialBoundsForNativeSegment(segment: SemanticSegment, origin: P2): { min: number; max: number } | null {
   if (!segment || !finite(segment.start) || !finite(segment.end)) return null;
   const distances = [distance(segment.start, origin), distance(segment.end, origin)];
   if (segment.kind === 'line') {
@@ -36,7 +37,7 @@ function boundsForSegment(segment: SemanticSegment, origin: P2): { min: number; 
     const sweep = full ? TAU : segment.ccw ? positive(end - start) : positive(start - end);
     if (!full && sweep <= 1e-12) return null;
     const d = distance(segment.center, origin);
-    if (d <= EPS) distances.push(segment.radius);
+    if (d === 0) distances.push(segment.radius);
     else {
       const toward = Math.atan2(origin.y - segment.center.y, origin.x - segment.center.x);
       for (const angle of [toward, toward + Math.PI]) {
@@ -67,7 +68,7 @@ export function proveCircularGuideBoundary(domain: CircularGuideDomain, path: Se
   let min = Infinity, max = -Infinity;
   for (let i = 0; i < path.length; i++) {
     const segment = path[i];
-    const bounds = boundsForSegment(segment, domain.center);
+    const bounds = radialBoundsForNativeSegment(segment, domain.center);
     if (!bounds) return fail(`Segment ${i + 1} ist keine gültige native LINE/ARC-Bewegung.`, i, min, max);
     if (i > 0 && distance(path[i - 1].end, segment.start) > EPS)
       return fail(`Kandidatenbahn hat eine Lücke vor Segment ${i + 1}.`, i, min, max);

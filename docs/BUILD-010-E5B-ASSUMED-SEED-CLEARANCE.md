@@ -1,0 +1,7 @@
+# Build 010-E5B — Conditional Cleared Seed
+
+An explicitly assumed cylindrical region, described by center, radius and claimed-cleared depth **as input data**, can act as a geometric start corridor. `proveAssumedSeedClearance` checks an open or closed continuous native LINE/ARC path against that disk at a requested positive depth. It adds the cutter radius to the exact maximum distance attained on each primitive; even a bulging arc whose endpoints fit must fail if its interior cutter footprint leaves the disk. A small numerical margin is required. Missing, discontinuous, degenerate, too-deep or oversized inputs fail closed.
+
+This check is **conditional**: the caller's claim that material is already removed is not authenticated by the module. In particular, it must never manufacture a clearance assertion from a user-selected disk. E5A shows why the same reference motion through initially uncut stock does not inherit this result. A future stock-history authority must establish the disk's actual clearance at each depth, and separate proofs must establish ramp entry, protected-side safety and radial engagement after leaving the seed. No UI, preflight, persistence, canonical manufacturing motion or NC dispatch is enabled.
+
+Acceptance composes the first 010-C loop and link with both E5A's virgin-stock witness and E5B's conditional pre-cleared alternative; it tests disk size, depth, cutter radius, path continuity, malformed arcs and an arc interior maximum. The new acceptance is included in macOS CI.
