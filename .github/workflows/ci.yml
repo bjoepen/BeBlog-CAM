@@ -139,6 +139,17 @@ jobs:
         run: pnpm check:008h-a24-a7
       - name: Optional native geometry nullability integrity contract
         run: pnpm check:008h-a24-a8
+      - name: Trochoidal contour contract and geometry acceptance
+        run: |
+          pnpm check:010a
+          pnpm check:010b
+          pnpm check:010c
+          pnpm check:010d
+          pnpm check:010e1
+          pnpm check:010e2
+          pnpm check:010e3
+          pnpm check:010e4
+          pnpm check:010e5a
       - name: Frontend build
         run: pnpm build
       - name: Rust check

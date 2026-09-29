@@ -1,0 +1,7 @@
+# Build 010-E5A — Uncut-Stock Counterexample
+
+Under an explicit *initially uncut half-plane* on the loop's free side of a straight guide, the current 010-C two-arc reference starts with a cutter disk completely inside stock when its apex is at least one cutter radius beyond the stock boundary. The first apex-to-apex link also has an interior cutter-footprint point in virgin stock: the exact distance from that point to the already traversed full-circle centerline exceeds the cutter radius. Thus the earlier circular guide-side proofs cannot be interpreted as proof of cleared links or safe entry.
+
+`witnessFirstApexLinkUncutStock` validates the first two semicircular arcs, the forward parallel link, tool radius and stock-side orientation, then produces this counterexample with a positive separation margin. Unsupported or insufficient data returns `unproven`, **not** a safe result. The witness does not calculate effective radial engagement along the full candidate, and a stock half-plane is an explicit test model, not a claim about an actual workpiece or a pre-cleared entry pocket. No branch of this diagnostic authorizes machining.
+
+Acceptance covers both stock sides, arc windings, rotated geometry and malformed input. CI now runs all Build 010 acceptance scripts. Next work must specify the actual stock/entry state, construct a viable ramp and motion if necessary, and conservatively bound cutter engagement for every movement and depth before manufacturing release. No UI, preview, preflight, persistence or NC dispatch is enabled.
