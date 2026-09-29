@@ -111,7 +111,8 @@
     "check:009e": "node scripts/check-009e-standalone-tool-library.mjs",
     "check:010a": "node scripts/check-010a-trochoidal-contour-contract.mjs",
     "check:010b": "node scripts/check-010b-semantic-guide.mjs",
-    "check:010c": "node scripts/check-010c-straight-trochoid.mjs"
+    "check:010c": "node scripts/check-010c-straight-trochoid.mjs",
+    "check:010d": "node scripts/check-010d-semantic-path-following.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
