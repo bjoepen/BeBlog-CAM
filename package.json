@@ -127,7 +127,8 @@
     "check:010e6d": "node scripts/check-010e6d-capsule-sequential-material.mjs",
     "check:010e6e": "node scripts/check-010e6e-protected-envelope.mjs",
     "check:010f1": "node scripts/check-010f1-seed-ramp-entry.mjs",
-    "check:010f2": "node scripts/check-010f2-canonical-seed-ramp.mjs"
+    "check:010f2": "node scripts/check-010f2-canonical-seed-ramp.mjs",
+    "check:010f3": "node scripts/check-010f3-stock-entry-bootstrap.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

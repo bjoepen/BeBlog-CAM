@@ -160,6 +160,7 @@ jobs:
           pnpm check:010e6e
           pnpm check:010f1
           pnpm check:010f2
+          pnpm check:010f3
       - name: Frontend build
         run: pnpm build
       - name: Rust check
