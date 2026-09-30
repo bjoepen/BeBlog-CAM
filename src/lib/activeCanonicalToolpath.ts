@@ -11,6 +11,7 @@ import { buildSurfaceFinishingOperationState } from './surfaceFinishingOperation
 import { buildThreeDRoughingOperationState } from './threeDRoughingOperation';
 import { buildDxfMultiTargetContourState, buildDxfMultiTargetPocketState } from './dxfMultiTargetToolpath';
 import type { CamOperation, ImportSummary, PartOrientation, PartPlacement, StockDefinition, StockMode, WorkCoordinateSystem } from './types';
+import { buildTrochoidalContourOperationState } from './trochoidalOperationState';
 import { createZLevelPerformanceProfile, type ZLevelPerformanceProfile } from './zLevelPerformance';
 
 export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:CamOperation;previousToolpaths?:CanonicalToolpath[];zLevelPerformanceProfile?:ZLevelPerformanceProfile;}):CanonicalToolpath|null{
@@ -18,6 +19,10 @@ export function buildActiveCanonicalToolpath(args:{summary:ImportSummary;stock:S
   if(operation.kind==='facing'){
     if(stockMode==='none')return null;
     return buildFacingToolpath({stock,wcs,operation}).toolpath;
+  }
+  if(operation.kind==='trochoidal-contour-roughing'){
+    const state=buildTrochoidalContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
+    return state.ok?state.toolpath:null;
   }
   if(operation.kind==='contour'){
     if(summary.kind==='step'){
