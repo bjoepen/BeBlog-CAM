@@ -51,6 +51,20 @@ const loop={radiusMm:4,forwardStepMm:.5,loopDirection:'cw' as const};
 for(const bad of [{totalDepthMm:0},{stepDownMm:0},{safeZMm:0},{rapidFeedMmMin:0},{stepDownMm:1e-9},
   {allowedExposedAngleDeg:80}]) {
   const r=buildTrochoidMultiDepthStockEntryReference(guideBuilt.guide,loop,3,{...base,...bad});
-  expect(!r.ok && r.levels.length===0,'invalid or later unsafe level fails atomically');
+  expect(!r.ok && r.levels.length===0,'invalid or unsafe schedule fails atomically');
 }
+
+// Prove fail-closed behavior when validation reaches a later level: choose a
+// depth-dependent ramp budget boundary. Level 1 remains feasible while a
+// deeper absolute F3 ramp eventually exceeds its bounded leg budget.
+let laterFailure:null|ReturnType<typeof buildTrochoidMultiDepthStockEntryReference>=null;
+for(const angle of [0.02,0.01,0.005,0.002,0.001]) {
+  const first=buildTrochoidMultiDepthStockEntryReference(guideBuilt.guide,loop,3,
+    {...base,totalDepthMm:1,stepDownMm:1,maximumRampAngleDeg:angle});
+  const multi=buildTrochoidMultiDepthStockEntryReference(guideBuilt.guide,loop,3,
+    {...base,totalDepthMm:2.4,stepDownMm:1,maximumRampAngleDeg:angle});
+  if(first.ok && !multi.ok && /Tiefenebene [23]/.test(multi.errors[0]??'')) {laterFailure=multi;break;}
+}
+expect(laterFailure!==null && !laterFailure.ok && laterFailure.levels.length===0,
+  'failure first reached on a later depth still returns no partial levels');
 console.log('010-F4 multi-depth safe transitions: PASS');
