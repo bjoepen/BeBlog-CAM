@@ -1,0 +1,11 @@
+# Build 010-F2 — Canonical Source for the Protected Ramp Reference
+
+F2 composes E5D, E6E and F1. The caller supplies a previous canonical contour path and exact run index, never an arbitrary cleared disk. E5D derives the conditional seed from the previous tool diameter, negative cut depth and two exact native circular arcs, rejecting central holes, conflicting points or alternative motion authority.
+
+Explicit caller context requires equal nonempty frame identifiers, a nonnegative earlier operation index and a distinct target operation identity. Frame and order are caller assertions until real job/setup integration exists. The result carries the source operation, run, frame, order, derived disk and full source footprint radius. The helper rebuilds the seed on every call; no token or cached result attests machine execution.
+
+After constructing F1's protected ramp and material reference, F2 also protects the previous cut's actual full footprint disk. Its radius is calculated directly from the canonical circle radius plus previous cutter radius, rather than adding a guessed epsilon to the derived seed. This matters because seed construction removes a numerical reserve: the smaller disk can pass while the full previous sweep fails part protection. Failures return neither source trace nor ramp/material candidate.
+
+Acceptance covers circles/capsules, inside/outside and both prior/loop windings, translated fixtures, native continuity, radius/depth/source trace and immutable inputs. It rejects frame mismatch, missing/invalid order, self-reference, anonymous or missing runs, insufficient depth, a central-hole cutter, forged points, alternate machine motions, overlapping source footprints and ramp-budget failure. A reserve-edge fixture proves the derived seed can pass F1 while the full source footprint must fail F2. `check:010f2` runs in CI.
+
+Release boundary: prior planned canonical geometry only. The previous source's entry, approach, safety status and successful execution are not proven; caller order/frame assertions are not authenticated by job dispatch. Stock-cutting entry, seed excavation from uncut material, automatic source selection, safe-Z motion, multi-depth orchestration, UI, persistence, preflight and NC release remain closed. Fixture values are not cutting recommendations.
