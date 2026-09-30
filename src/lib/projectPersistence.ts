@@ -13,6 +13,7 @@ export type CamProjectV1={
   setup:{
     stock:StockDefinition;
     stockMode:StockMode;
+    spoilboardThicknessMm?:number;
     placement:PartPlacement;
     orientation:PartOrientation;
     wcs:WorkCoordinateSystem;
@@ -71,12 +72,12 @@ function validateOperationsProject(project:CamProjectV1):void{
   }
 }
 
-export function createCamProjectV1(args:{sourcePath:string;sourceFileName:string;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;fixtures:FixtureVolume[];machineEnvelopeEnabled:boolean;machineEnvelope:MachineEnvelope;machineWcsOrigin:MachineWcsOrigin;spindleHeadEnabled:boolean;spindleHead:SpindleHeadGeometry;operationsProject:OperationsProject}):CamProjectV1{
+export function createCamProjectV1(args:{sourcePath:string;sourceFileName:string;stock:StockDefinition;stockMode:StockMode;spoilboardThicknessMm?:number;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;fixtures:FixtureVolume[];machineEnvelopeEnabled:boolean;machineEnvelope:MachineEnvelope;machineWcsOrigin:MachineWcsOrigin;spindleHeadEnabled:boolean;spindleHead:SpindleHeadGeometry;operationsProject:OperationsProject}):CamProjectV1{
   return{
     format:CAM_PROJECT_FORMAT,
     version:CAM_PROJECT_VERSION,
     source:{path:args.sourcePath,fileName:args.sourceFileName},
-    setup:{stock:clone(args.stock),stockMode:args.stockMode,placement:clone(args.placement),orientation:clone(args.orientation),wcs:clone(args.wcs),fixtures:clone(args.fixtures),machineEnvelopeEnabled:args.machineEnvelopeEnabled,machineEnvelope:clone(args.machineEnvelope),machineWcsOrigin:clone(args.machineWcsOrigin),spindleHeadEnabled:args.spindleHeadEnabled,spindleHead:clone(args.spindleHead)},
+    setup:{stock:clone(args.stock),stockMode:args.stockMode,spoilboardThicknessMm:args.spoilboardThicknessMm??0,placement:clone(args.placement),orientation:clone(args.orientation),wcs:clone(args.wcs),fixtures:clone(args.fixtures),machineEnvelopeEnabled:args.machineEnvelopeEnabled,machineEnvelope:clone(args.machineEnvelope),machineWcsOrigin:clone(args.machineWcsOrigin),spindleHeadEnabled:args.spindleHeadEnabled,spindleHead:clone(args.spindleHead)},
     operationsProject:clone(args.operationsProject)
   };
 }
