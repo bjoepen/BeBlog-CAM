@@ -32,6 +32,10 @@ export interface TrochoidalContourContract {
   radialAllowanceMm: number;
   axialAllowanceMm: number;
 
+  /** Manual depth or stock-bottom through-cut semantics. */
+  depthMode?: 'manual' | 'stock-bottom';
+  /** Additional depth below stock bottom when depthMode is stock-bottom. */
+  overcutMm?: number;
   totalDepthMm: number;
   stepDownMm: number;
   feedMmMin: number;
@@ -70,6 +74,8 @@ export const defaultTrochoidalContourContract: TrochoidalContourContract = {
   rampAngleDeg: 3,
   radialAllowanceMm: 0.2,
   axialAllowanceMm: 0,
+  depthMode: 'manual',
+  overcutMm: 0,
   totalDepthMm: 3,
   stepDownMm: 1,
   feedMmMin: 600,
@@ -92,7 +98,8 @@ export function validateTrochoidalContourContract(operation: TrochoidalContourCo
   if (!(operation.forwardStepMm > 0)) errors.push('Trochoiden-Fortschritt muss größer als 0 sein.');
   if (operation.entryMode !== TROCHOIDAL_CONTOUR_ENTRY_MODE) errors.push('Wirbelfräsen Kontur v1 verwendet ausschließlich Rampeneinstieg.');
   if (!(operation.rampAngleDeg > 0 && operation.rampAngleDeg <= 15)) errors.push('Rampenwinkel muss größer als 0° und höchstens 15° sein.');
-  if (!(operation.totalDepthMm > 0)) errors.push('Gesamttiefe muss größer als 0 sein.');
+  if(operation.depthMode!=='stock-bottom'&&!(operation.totalDepthMm > 0)) errors.push('Gesamttiefe muss größer als 0 sein.');
+  if((operation.overcutMm??0)<0) errors.push('Überfräsen darf nicht negativ sein.');
   if (!(operation.stepDownMm > 0)) errors.push('Zustellung muss größer als 0 sein.');
   if (!(operation.feedMmMin > 0 && operation.plungeMmMin > 0 && operation.spindleRpm > 0)) errors.push('Vorschub, Rampenvorschub und Drehzahl müssen größer als 0 sein.');
   if (!(operation.safeZMm > 0)) errors.push('Sicherheits-Z muss größer als 0 sein.');
