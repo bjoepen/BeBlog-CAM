@@ -30,7 +30,7 @@ export type JobGcodeResult={ok:boolean;errors:string[];warnings:string[];code:st
 type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[];machineEnvelope?:MachineEnvelope|null;machineWcsOrigin?:MachineWcsOrigin|null;spindleHead?:SpindleHeadGeometry|null;preflight?:JobPreflightResult};
 type OperationCode={ok:boolean;errors:string[];warnings:string[];code:string};
 const f3=(n:number)=>Math.abs(n)<.0005?'0.000':n.toFixed(3);
-const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':op.kind==='drill'?'Bohren':op.kind==='3d-roughing'?'3D Schruppen':op.kind==='surface-finishing'?'3D Schlichten':'2D/2½D Schruppen';
+const label=(op:CamOperation)=>op.kind==='facing'?'Planen':op.kind==='trochoidal-contour-roughing'?'Wirbelfräsen Kontur':op.kind==='contour'?'Kontur':op.kind==='pocket'?'Tasche':op.kind==='carve'?'Carve':op.kind==='drill'?'Bohren':op.kind==='3d-roughing'?'3D Schruppen':op.kind==='surface-finishing'?'3D Schlichten':'2D/2½D Schruppen';
 const toolKey=(op:CamOperation)=>toolIdentityKey(op);
 const operationDisplayName=(op:CamOperation,index:number)=>{const expected=label(op),name=op.name.trim();return name.startsWith(expected)?name:`${expected} ${index+1}`;};
 
