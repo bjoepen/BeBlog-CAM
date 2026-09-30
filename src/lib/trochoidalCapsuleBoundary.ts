@@ -175,3 +175,18 @@ export function proveTrochoidalCapsuleGuideBoundary(
   }
   return proveCapsuleGuideBoundary(guide, path);
 }
+
+/** Conservative distance of a whole disk from the protected source side. */
+export function capsuleDiskPartClearanceMm(
+  guide: TrochoidalContourGuide, disk: { center: P2; radiusMm: number }
+): number | null {
+  if (!disk || !finite(disk.center) || !Number.isFinite(disk.radiusMm) || disk.radiusMm <= 0
+    || !proveTrochoidalCapsuleGuideBoundary(guide, guide?.segments ?? []).ok) return null;
+  const source = capsuleSpine({ ...guide, segments: guide.source });
+  if (!source) return null;
+  const d = distanceToSpine(disk.center, source);
+  // Distance to a segment is 1-Lipschitz. These disk bounds are sufficient
+  // on both sides, including across an endpoint's circular cap.
+  return guide.side === 'outside' ? d - disk.radiusMm - source.radius
+    : source.radius - d - disk.radiusMm;
+}
