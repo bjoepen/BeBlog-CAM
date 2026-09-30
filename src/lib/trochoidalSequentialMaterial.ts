@@ -2,14 +2,22 @@ import type { SemanticSegment } from './contourMath';
 import type { AssumedClearedDisk } from './trochoidalSeedClearance';
 import { buildStraightTrochoid, type StraightTrochoidOptions } from './trochoidalStraightMath';
 import { boundMaterialExposureOutsideSeed } from './trochoidalMaterialExposure';
+import type { TrochoidalContourGuide } from './trochoidalContourGuide';
+import { assessTrochoidalGuideEligibility } from './trochoidalGuideEligibility';
+import { buildSemanticTrochoid } from './trochoidalSemanticMath';
+import { proveTrochoidalCircleGuideBoundary, radialBoundsForNativeSegment } from './trochoidalCircularBoundary';
 
 export type SequentialMaterialResult =
   | { ok: true; segments: SemanticSegment[]; loopCount: number; cycleExposureBoundsDeg: number[];
-      finalAssumedDisk: AssumedClearedDisk; errors: [] }
+      finalAssumedDisk: AssumedClearedDisk; closingExposureBoundDeg: number | null; errors: [] }
   | { ok: false; segments: []; loopCount: 0; cycleExposureBoundsDeg: [];
-      finalAssumedDisk: null; failingCycleIndex: number | null; errors: string[] };
+      finalAssumedDisk: null; closingExposureBoundDeg: null; failingCycleIndex: number | null; errors: string[] };
 
 const MARGIN_MM = 1e-6;
+
+const fail = (message: string, failingCycleIndex: number | null = null): SequentialMaterialResult =>
+  ({ ok: false, segments: [], loopCount: 0, cycleExposureBoundsDeg: [], finalAssumedDisk: null,
+    closingExposureBoundDeg: null, failingCycleIndex, errors: [message] });
 
 /**
  * 010-E6B: conditional ordered assessment of the generated straight reference.
@@ -21,13 +29,43 @@ export function assessStraightTrochoidSequentialMaterial(
   initialDisk: AssumedClearedDisk, cutterRadiusMm: number, targetDepthMm: number,
   allowedExposedAngleDeg: number
 ): SequentialMaterialResult {
-  const fail = (message: string, failingCycleIndex: number | null = null): SequentialMaterialResult =>
-    ({ ok: false, segments: [], loopCount: 0, cycleExposureBoundsDeg: [], finalAssumedDisk: null,
-      failingCycleIndex, errors: [message] });
   if (!guide || guide.kind !== 'line' || !guide.start || !guide.end || !options)
     return fail('Gerade Referenzführung und Schleifenparameter fehlen.');
   const reference = buildStraightTrochoid(guide, options);
   if (!reference.ok) return fail(reference.errors.join(' '));
+  return assessGeneratedReference(reference, false, initialDisk, cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
+}
+
+/** 010-E6C: native circle only; no arbitrary candidate can claim a full sweep. */
+export function assessCircularTrochoidSequentialMaterial(
+  guide: TrochoidalContourGuide, options: Omit<StraightTrochoidOptions, 'freeSide'>,
+  initialDisk: AssumedClearedDisk, cutterRadiusMm: number, targetDepthMm: number,
+  allowedExposedAngleDeg: number
+): SequentialMaterialResult {
+  if (!options) return fail('Schleifenparameter fehlen.');
+  if (!Array.isArray(guide?.source) || !Array.isArray(guide?.segments)
+    || guide.source.length !== 2 || guide.segments.length !== 2
+    || [...guide.source, ...guide.segments].some(segment =>
+      !radialBoundsForNativeSegment(segment, { x: 0, y: 0 })))
+    return fail('Gültige native Zweibogen-Kreisführung fehlt.');
+  const binding = proveTrochoidalCircleGuideBoundary(guide, guide.segments);
+  if (!binding.ok) return fail(binding.errors.join(' '));
+  const eligible = assessTrochoidalGuideEligibility(guide, options.radiusMm, options.forwardStepMm);
+  if (!eligible.ok) return fail(eligible.errors.join(' '));
+  const reference = buildSemanticTrochoid(guide.segments, { ...options,
+    radiusMm: eligible.uniformRadiusMm, freeSide: eligible.freeSide });
+  if (!reference.ok) return fail(reference.errors.join(' '));
+  const boundary = proveTrochoidalCircleGuideBoundary(guide, reference.segments);
+  if (!boundary.ok) return fail(boundary.errors.join(' '));
+  return assessGeneratedReference(reference, true, initialDisk, cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
+}
+
+// Private: only the two internal generators above may supply complete loops.
+function assessGeneratedReference(
+  reference: { segments: SemanticSegment[]; loopCount: number }, closed: boolean,
+  initialDisk: AssumedClearedDisk, cutterRadiusMm: number, targetDepthMm: number,
+  allowedExposedAngleDeg: number
+): SequentialMaterialResult {
   let disk = initialDisk;
   const exposureBounds: number[] = [];
   for (let cycle = 0; cycle < reference.loopCount; cycle++) {
@@ -52,6 +90,15 @@ export function assessStraightTrochoidSequentialMaterial(
     // Only the target layer was cut: do not inherit the seed's deeper clearance.
     disk = { center: { ...arc.center }, radiusMm, clearedToDepthMm: targetDepthMm };
   }
+  let closingExposureBoundDeg: number | null = null;
+  if (closed) {
+    const closing = boundMaterialExposureOutsideSeed(disk, reference.segments.slice(-1),
+      cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
+    if (!closing.ok || closing.maxExposedAngleDeg === null)
+      return fail(`Schließfahrt: ${closing.errors.join(' ')}`, reference.loopCount);
+    closingExposureBoundDeg = closing.maxExposedAngleDeg;
+    // A closing link earns no additional disk and no new depth clearance.
+  }
   return { ok: true, segments: reference.segments, loopCount: reference.loopCount,
-    cycleExposureBoundsDeg: exposureBounds, finalAssumedDisk: disk, errors: [] };
+    cycleExposureBoundsDeg: exposureBounds, finalAssumedDisk: disk, closingExposureBoundDeg, errors: [] };
 }
