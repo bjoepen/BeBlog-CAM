@@ -75,6 +75,11 @@ export function validateToolCompatibility(operation: CamOperation): ValidationCh
     return { level: 'fail', category: 'tool', title: 'Werkzeug · Operation', detail: `${label} ist für Planen nicht freigegeben.` };
   }
 
+  if(operation.kind==='trochoidal-contour-roughing'){
+    if(kind==='end-mill')return{level:'pass',category:'tool',title:'Werkzeug · Operation',detail:'Schaftfräser ist für Wirbelfräsen Kontur freigegeben.'};
+    return{level:'fail',category:'tool',title:'Werkzeug · Operation',detail:`${label} ist für Wirbelfräsen Kontur F7 nicht freigegeben; die Strategie benötigt einen Schaftfräser.`};
+  }
+
   if(operation.kind==='3d-roughing'){
     if(kind==='end-mill')return{level:'pass',category:'tool',title:'Werkzeug · Operation',detail:'Schaftfräser ist für die erste 3D-Schruppstrategie vorgesehen.'};
     return{level:'fail',category:'tool',title:'Werkzeug · Operation',detail:`${label} ist für 3D-Schruppen v1 nicht freigegeben. Die erste Strategie ist für Schaftfräser definiert.`};
