@@ -129,7 +129,8 @@
     "check:010f1": "node scripts/check-010f1-seed-ramp-entry.mjs",
     "check:010f2": "node scripts/check-010f2-canonical-seed-ramp.mjs",
     "check:010f3": "node scripts/check-010f3-stock-entry-bootstrap.mjs",
-    "check:010f4": "node scripts/check-010f4-multidepth-safe-transitions.mjs"
+    "check:010f4": "node scripts/check-010f4-multidepth-safe-transitions.mjs",
+    "check:010f5": "node scripts/check-010f5-canonical-multidepth-chain.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
