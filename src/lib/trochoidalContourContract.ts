@@ -9,6 +9,7 @@ export type TrochoidalContourStrategy = typeof TROCHOIDAL_CONTOUR_STRATEGY;
 export type TrochoidalContourEntryMode = typeof TROCHOIDAL_CONTOUR_ENTRY_MODE;
 
 export interface TrochoidalContourContract {
+  id: string;
   kind: TrochoidalContourOperationKind;
   name: string;
   enabled: boolean;
@@ -46,6 +47,7 @@ export type TrochoidalContourContractValidation = {
 };
 
 export const defaultTrochoidalContourContract: TrochoidalContourContract = {
+  id: 'op-trochoidal-contour-1',
   kind: TROCHOIDAL_CONTOUR_OPERATION_KIND,
   name: 'Wirbelfräsen Kontur 1',
   enabled: true,
@@ -80,6 +82,7 @@ export function validateTrochoidalContourContract(operation: TrochoidalContourCo
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  if (!operation.id?.trim()) errors.push('Wirbelfräsen Kontur benötigt eine stabile Operations-ID.');
   if (operation.kind !== TROCHOIDAL_CONTOUR_OPERATION_KIND) errors.push('Ungültiger Operationstyp für Wirbelfräsen Kontur.');
   if (operation.contourId === null || !Number.isInteger(operation.contourId) || operation.contourId < 0) errors.push('Wirbelfräsen Kontur benötigt genau eine gültige Kontur.');
   if (operation.side !== 'outside' && operation.side !== 'inside') errors.push('Wirbelfräsen Kontur benötigt Innen- oder Außenseite; Auf-Linie ist nicht freigegeben.');
