@@ -22,6 +22,7 @@ expect(!rejectedShort.ok&&rejectedShort.toolpath===null&&rejectedShort.errors.so
 const noStock=resolveTrochoidalMachiningDepth({operation:op,stock,stockMode:'none',wcs});expect(!noStock.ok,'stock-bottom without stock fails closed');
 const manualOvercut={...op,depthMode:'manual' as const,totalDepthMm:3,overcutMm:.2};
 const rejectedManual=resolveTrochoidalMachiningDepth({operation:manualOvercut,stock,stockMode:'manual',wcs});expect(!rejectedManual.ok,'manual overcut fails closed');
+const manualTooDeep=resolveTrochoidalMachiningDepth({operation:{...op,depthMode:'manual',overcutMm:0,totalDepthMm:15.1,tool:{...op.tool,cuttingLengthMm:15}},stock,stockMode:'manual',wcs});expect(!manualTooDeep.ok&&manualTooDeep.errors.some(e=>e.includes('Schneidenlänge')),'manual depth beyond cutting length fails closed');
 const bottom=resolveTrochoidalMachiningDepth({operation:op,stock,stockMode:'manual',wcs:{...wcs,z:'bottom'}});expect(!bottom.ok,'bottom WCS fails closed');
 expect(JSON.stringify({summary,stock,placement,orientation,wcs,op})===before,'inputs immutable');
 console.log('010-F8 real machining limits: PASS');
