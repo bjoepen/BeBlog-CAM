@@ -133,7 +133,8 @@
     "check:010f5": "node scripts/check-010f5-canonical-multidepth-chain.mjs",
     "check:010f6": "node scripts/check-010f6-canonical-toolpath-package.mjs",
     "check:010f7": "node scripts/check-010f7-trochoid-operation-job.mjs",
-    "check:010f8": "node scripts/check-010f8-real-machining-limits.mjs"
+    "check:010f8": "node scripts/check-010f8-real-machining-limits.mjs",
+    "check:010f9": "node scripts/check-010f9-spoilboard-clearance.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
