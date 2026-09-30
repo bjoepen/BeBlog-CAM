@@ -4,6 +4,7 @@ import { validateTrochoidalContourContract } from './trochoidalContourContract';
 import { buildTrochoidalContourGuide } from './trochoidalContourGuide';
 import { buildTrochoidalCanonicalToolpath, type TrochoidalCanonicalToolpathResult } from './trochoidalCanonicalToolpath';
 import { sampleCurve, type P2 } from './contourMath';
+import { resolveTrochoidalMachiningDepth } from './trochoidalMachiningDepth';
 
 type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:TrochoidalContourContract};
 export type TrochoidalOperationState=TrochoidalCanonicalToolpathResult&{warnings:string[]};
@@ -34,15 +35,17 @@ export function buildTrochoidalContourOperationState(args:Args):TrochoidalOperat
   if(args.summary.kind!=='dxf')errors.push('Wirbelfräsen Kontur F7 ist zunächst ausschließlich für DXF freigegeben.');
   if(args.wcs.z!=='top')errors.push('Wirbelfräsen Kontur F7 benötigt Z-Null auf der Rohlingoberseite.');
   if(args.stockMode==='none')warnings.push('Kein Rohling definiert: Material- und Kollisionsgrenzen sind nicht vollständig prüfbar.');
+  const depth=resolveTrochoidalMachiningDepth({operation:args.operation,stock:args.stock,stockMode:args.stockMode,wcs:args.wcs});
+  if(!depth.ok)errors.push(...depth.errors);
   const transform=transformFor(args);
   if(!transform)errors.push('Bauteilgeometrie konnte für Wirbelfräsen nicht transformiert werden.');
-  if(errors.length||!transform)return{ok:false,toolpath:null,errors,warnings};
+  if(errors.length||!transform||!depth.ok)return{ok:false,toolpath:null,errors,warnings};
   const guide=buildTrochoidalContourGuide(args.summary.planarGeometry?.curves??[],args.operation,transform);
   if(!guide.ok)return{ok:false,toolpath:null,errors:guide.errors,warnings};
   const loop={radiusMm:args.operation.trochoidRadiusMm,forwardStepMm:args.operation.forwardStepMm,
     loopDirection:args.operation.direction==='climb'?'cw' as const:'ccw' as const};
   const result=buildTrochoidalCanonicalToolpath(guide.guide,loop,args.operation.tool.diameterMm/2,args.operation.id,{
-    allowFullWidthStartup:true,totalDepthMm:args.operation.totalDepthMm,stepDownMm:args.operation.stepDownMm,
+    allowFullWidthStartup:true,totalDepthMm:depth.targetDepthMm,stepDownMm:args.operation.stepDownMm,
     safeZMm:args.operation.safeZMm,rapidFeedMmMin:Math.max(args.operation.feedMmMin,args.operation.plungeMmMin),
     maximumRampAngleDeg:args.operation.rampAngleDeg,rampFeedMmMin:args.operation.plungeMmMin,
     startupFeedMmMin:args.operation.feedMmMin,seedExtraRadiusMm:.1,
