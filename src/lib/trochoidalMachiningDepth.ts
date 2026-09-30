@@ -11,6 +11,8 @@ export function resolveTrochoidalMachiningDepth(args:{operation:TrochoidalContou
   if(mode==='manual'){
     if(!(operation.totalDepthMm>0))errors.push('Manuelle Wirbelfräs-Tiefe muss größer als 0 sein.');
     if((operation.overcutMm??0)!==0)errors.push('Überfräsen ist nur im Modus Rohlingunterseite zulässig.');
+    if(operation.tool.cuttingLengthMm==null||!(operation.tool.cuttingLengthMm>0))errors.push('Wirbelfräsen benötigt eine definierte Schneidenlänge.');
+    else if(operation.tool.cuttingLengthMm+1e-9<operation.totalDepthMm)errors.push(`Schneidenlänge ${operation.tool.cuttingLengthMm.toFixed(3)} mm erreicht die reale Zieltiefe ${operation.totalDepthMm.toFixed(3)} mm nicht.`);
     return errors.length?{ok:false,errors}:{ok:true,mode,targetDepthMm:operation.totalDepthMm,workpieceBottomDepthMm:stockMode==='none'?null:stock.thickness,overcutMm:0};
   }
   if(stockMode==='none')errors.push('Durchfräsen bis Rohlingunterseite benötigt einen definierten Rohling.');
