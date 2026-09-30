@@ -136,3 +136,42 @@ export function proveCapsuleGuideBoundary(guide: TrochoidalContourGuide, path: S
     return fail('Geschlossene Kapsel benötigt eine geschlossene Kandidatenbahn.', path.length - 1, min, max);
   return { ok: true, measuredMinDistanceMm: min, measuredMaxDistanceMm: max, failingSegmentIndex: null, errors: [] };
 }
+
+/** 010-E6D: bind the capsule domain to its concentric native source offset. */
+export function proveTrochoidalCapsuleGuideBoundary(
+  guide: TrochoidalContourGuide, path: SemanticSegment[]
+): CapsuleBoundaryProof {
+  const fail = (): CapsuleBoundaryProof => ({ ok: false, measuredMinDistanceMm: NaN,
+    measuredMaxDistanceMm: NaN, failingSegmentIndex: null,
+    errors: ['Keine gültige native Kapsel-Führung mit gebundenem Sollkontur-Offset.'] });
+  if (!guide?.validation?.ok || !Array.isArray(guide.source) || !Array.isArray(guide.segments)
+    || guide.source.length !== 4 || guide.segments.length !== 4
+    || !Number.isInteger(guide.contourId) || guide.contourId < 0
+    || !Number.isFinite(guide.signedOffsetMm)
+    || (guide.side === 'outside' ? guide.signedOffsetMm <= 0 : guide.side === 'inside' ? guide.signedOffsetMm >= 0 : true)
+    || guide.validation.segmentCount !== 4 || !guide.validation.sideOk
+    || [guide.validation.expectedMm, guide.validation.measuredMinMm, guide.validation.measuredMaxMm]
+      .some(value => !Number.isFinite(value) || Math.abs(value - Math.abs(guide.signedOffsetMm)) > EPS))
+    return fail();
+  const source = capsuleSpine({ ...guide, segments: guide.source }), target = capsuleSpine(guide);
+  if (!source || !target || dist(source.start, target.start) > EPS || dist(source.end, target.end) > EPS
+    || Math.abs(target.radius - source.radius - guide.signedOffsetMm) > EPS) return fail();
+  // Same primitive order, direction and radial attachment: the offset may not
+  // silently relabel a different native contour or rotate/reverse its station.
+  for (let i = 0; i < 4; i++) {
+    const s = guide.source[i], t = guide.segments[i];
+    if (s.kind !== t.kind) return fail();
+    if (s.kind === 'arc' && t.kind === 'arc') {
+      if (s.ccw !== t.ccw || dist(s.center, t.center) > EPS) return fail();
+      for (const end of ['start', 'end'] as const) {
+        const expected = { x: s.center.x + (s[end].x - s.center.x) * t.radius / s.radius,
+          y: s.center.y + (s[end].y - s.center.y) * t.radius / s.radius };
+        if (dist(expected, t[end]) > EPS) return fail();
+      }
+    } else if (s.kind === 'line' && t.kind === 'line') {
+      const sv = sub(s.end, s.start), tv = sub(t.end, t.start);
+      if (dist(sv, tv) > EPS) return fail();
+    }
+  }
+  return proveCapsuleGuideBoundary(guide, path);
+}

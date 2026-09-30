@@ -6,6 +6,7 @@ import type { TrochoidalContourGuide } from './trochoidalContourGuide';
 import { assessTrochoidalGuideEligibility } from './trochoidalGuideEligibility';
 import { buildSemanticTrochoid } from './trochoidalSemanticMath';
 import { proveTrochoidalCircleGuideBoundary, radialBoundsForNativeSegment } from './trochoidalCircularBoundary';
+import { proveTrochoidalCapsuleGuideBoundary } from './trochoidalCapsuleBoundary';
 
 export type SequentialMaterialResult =
   | { ok: true; segments: SemanticSegment[]; loopCount: number; cycleExposureBoundsDeg: number[];
@@ -60,7 +61,26 @@ export function assessCircularTrochoidSequentialMaterial(
   return assessGeneratedReference(reference, true, initialDisk, cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
 }
 
-// Private: only the two internal generators above may supply complete loops.
+/** 010-E6D: native capsule only, including its LINE/ARC transitions and closure. */
+export function assessCapsuleTrochoidSequentialMaterial(
+  guide: TrochoidalContourGuide, options: Omit<StraightTrochoidOptions, 'freeSide'>,
+  initialDisk: AssumedClearedDisk, cutterRadiusMm: number, targetDepthMm: number,
+  allowedExposedAngleDeg: number
+): SequentialMaterialResult {
+  if (!options) return fail('Schleifenparameter fehlen.');
+  const binding = proveTrochoidalCapsuleGuideBoundary(guide, guide?.segments ?? []);
+  if (!binding.ok) return fail(binding.errors.join(' '));
+  const eligible = assessTrochoidalGuideEligibility(guide, options.radiusMm, options.forwardStepMm);
+  if (!eligible.ok) return fail(eligible.errors.join(' '));
+  const reference = buildSemanticTrochoid(guide.segments, { ...options,
+    radiusMm: eligible.uniformRadiusMm, freeSide: eligible.freeSide });
+  if (!reference.ok) return fail(reference.errors.join(' '));
+  const boundary = proveTrochoidalCapsuleGuideBoundary(guide, reference.segments);
+  if (!boundary.ok) return fail(boundary.errors.join(' '));
+  return assessGeneratedReference(reference, true, initialDisk, cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
+}
+
+// Private: only internal generators may supply complete loops.
 function assessGeneratedReference(
   reference: { segments: SemanticSegment[]; loopCount: number }, closed: boolean,
   initialDisk: AssumedClearedDisk, cutterRadiusMm: number, targetDepthMm: number,
