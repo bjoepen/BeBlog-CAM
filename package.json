@@ -121,7 +121,8 @@
     "check:010e5b": "node scripts/check-010e5b-seed-clearance.mjs",
     "check:010e5c": "node scripts/check-010e5c-constructive-seed.mjs",
     "check:010e5d": "node scripts/check-010e5d-canonical-seed.mjs",
-    "check:010e6a": "node scripts/check-010e6a-material-exposure.mjs"
+    "check:010e6a": "node scripts/check-010e6a-material-exposure.mjs",
+    "check:010e6b": "node scripts/check-010e6b-sequential-material.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
