@@ -30,8 +30,10 @@ export function buildTrochoidalCanonicalToolpath(
     const z=-level.depthMm;
     const cutSegments3=level.motions.filter((motion):motion is CanonicalSpatialSegment=>
       motion.kind!=='rapid3'&&planar(motion)&&motion.start.z===z);
-    const entrySegments=level.motions.filter((motion):motion is CanonicalSpatialSegment=>
-      motion.kind!=='rapid3'&&!planar(motion)&&motion.end.z<=0);
+    const firstCutIndex=level.motions.findIndex(motion=>
+      motion.kind!=='rapid3'&&motion.start.z===z&&motion.end.z===z);
+    const entrySegments=level.motions.slice(0,firstCutIndex).filter((motion):motion is CanonicalSpatialSegment=>
+      motion.kind!=='rapid3'&&motion.start.z<=0&&motion.end.z<=0);
     const points=cutSegments3.length
       ?[{x:cutSegments3[0].start.x,y:cutSegments3[0].start.y},...cutSegments3.map(s=>({x:s.end.x,y:s.end.y}))]
       :[];
