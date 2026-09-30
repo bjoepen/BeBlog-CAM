@@ -36,7 +36,7 @@ export function buildTrochoidalContourOperationState(args:Args):TrochoidalOperat
   if(args.wcs.z!=='top')errors.push('Wirbelfräsen Kontur F7 benötigt Z-Null auf der Rohlingoberseite.');
   if(args.stockMode==='none')warnings.push('Kein Rohling definiert: Material- und Kollisionsgrenzen sind nicht vollständig prüfbar.');
   const depth=resolveTrochoidalMachiningDepth({operation:args.operation,stock:args.stock,stockMode:args.stockMode,wcs:args.wcs});
-  if(!depth.ok)errors.push(...depth.errors);
+  if(depth.ok===false)errors.push(...depth.errors);
   const transform=transformFor(args);
   if(!transform)errors.push('Bauteilgeometrie konnte für Wirbelfräsen nicht transformiert werden.');
   if(errors.length||!transform||!depth.ok)return{ok:false,toolpath:null,errors,warnings};
