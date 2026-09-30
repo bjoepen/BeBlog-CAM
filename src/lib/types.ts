@@ -21,7 +21,7 @@ export type WcsY='front'|'center'|'back';
 export type WcsZ='top'|'bottom';
 export type WcsReference='stock'|'part';
 export interface WorkCoordinateSystem{x:WcsX;y:WcsY;z:WcsZ;}
-export interface SetupDefinition{id:string;name:string;stockMode:StockMode;orientation:PartOrientation;placement:PartPlacement;wcsReference:WcsReference;wcs:WorkCoordinateSystem;}
+export interface SetupDefinition{id:string;name:string;stockMode:StockMode;orientation:PartOrientation;placement:PartPlacement;wcsReference:WcsReference;wcs:WorkCoordinateSystem;spoilboardThicknessMm?:number;}
 
 export type OperationKind='facing'|'contour'|'trochoidal-contour-roughing'|'pocket'|'carve'|'drill'|'z-level-roughing'|'3d-roughing'|'surface-finishing';
 export type ToolpathSide='outside'|'inside'|'on-line';
@@ -90,7 +90,7 @@ export const defaultStock:StockDefinition={width:200,height:80,thickness:22,offs
 export const defaultPartPlacement:PartPlacement={horizontal:'center',vertical:'center',offsetX:0,offsetY:0,offsetZ:0};
 export const defaultPartOrientation:PartOrientation={rotationXDeg:0,rotationYDeg:0,rotationZDeg:0};
 export const defaultWcs:WorkCoordinateSystem={x:'left',y:'front',z:'top'};
-export const defaultSetup:SetupDefinition={id:'setup-1',name:'Aufspannung 1',stockMode:'manual',orientation:{...defaultPartOrientation},placement:{...defaultPartPlacement},wcsReference:'stock',wcs:{...defaultWcs}};
+export const defaultSetup:SetupDefinition={id:'setup-1',name:'Aufspannung 1',stockMode:'manual',orientation:{...defaultPartOrientation},placement:{...defaultPartPlacement},wcsReference:'stock',wcs:{...defaultWcs},spoilboardThicknessMm:0};
 export const defaultFacingOperation:FacingOperation={id:'op-facing-1',kind:'facing',name:'Planen 1',enabled:true,tool:{id:'tool-face-1',name:'Planfräser 20 mm',diameterMm:20,kind:'face-mill',cuttingLengthMm:5,stickoutMm:20,shaftDiameterMm:20,holderDiameterMm:25},direction:'x',stepoverPercent:60,stockAllowanceMm:0,finishPassCount:1,totalDepthMm:.5,stepDownMm:.5,feedMmMin:800,plungeMmMin:200,spindleRpm:12000,safeZMm:5};
 export const defaultContourOperation:ContourOperation={id:'op-contour-1',kind:'contour',name:'Kontur 1',enabled:true,tool:{id:'tool-1',name:'Schaftfräser 3 mm',diameterMm:3,kind:'end-mill',cuttingLengthMm:12,stickoutMm:20,shaftDiameterMm:3,holderDiameterMm:20},contourId:null,contourIds:[],stepWireId:null,stepContourFaceIds:[],depthMode:'manual',overcutMm:0,tabsEnabled:false,tabCount:4,tabWidthMm:6,tabHeightMm:1.5,leadMode:'none',leadInLengthMm:3,leadOutLengthMm:3,startMode:'auto',startFraction:0,entryMode:'plunge',rampAngleDeg:3,radialAllowanceMm:0,axialAllowanceMm:0,finishPassEnabled:false,finishPassCount:1,topology:'closed',side:'outside',openSide:'left',excludedSegmentIds:[],direction:'climb',totalDepthMm:3,stepDownMm:1,feedMmMin:600,plungeMmMin:200,spindleRpm:12000,safeZMm:5};
 export const defaultPocketOperation:PocketOperation={id:'op-pocket-1',kind:'pocket',name:'Tasche 1',enabled:true,contourId:null,contourIds:[],stepFaceId:null,restMachiningEnabled:false,restFromOperationId:null,stockAwareRoughingEnabled:false,maxRadialEngagementPercent:35,radialAllowanceMm:0,axialAllowanceMm:0,finishPassEnabled:false,finishPassCount:1,tool:{id:'tool-1',name:'Schaftfräser 3 mm',diameterMm:3,kind:'end-mill',cuttingLengthMm:12,stickoutMm:20,shaftDiameterMm:3,holderDiameterMm:20},direction:'climb',stepoverPercent:40,entry:'plunge',rampAngleDeg:3,strategy:'auto',throughCutAllowanceMm:0,totalDepthMm:3,stepDownMm:1,feedMmMin:600,plungeMmMin:200,spindleRpm:12000,safeZMm:5};
