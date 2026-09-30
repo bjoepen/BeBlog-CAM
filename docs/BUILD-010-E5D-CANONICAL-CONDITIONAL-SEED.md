@@ -1,0 +1,5 @@
+# Build 010-E5D — Conditional Seed from a Canonical Plan
+
+E5D binds E5C's circular-sweep construction to the *planned* native geometry of one previous canonical contour run. Its tool diameter supplies the previous cutter radius; the negative run Z supplies the claimed cleared depth. It requires a source operation ID, exactly two native arcs and consistent points, and rejects conflicting spatial cut or machine motions. E5C then checks the circle and derives the conditional disk, which E5B can use to check a later cutter's geometric start corridor.
+
+The existing stock heightfield is a cell-center approximation and cannot certify an entire continuous cutter footprint. E5D does not use it as a clearance authority. A canonical plan also does **not** attest that a machine executed the earlier operation, reached its depth, or safely entered the material. The source ID is trace metadata, not an execution certificate. Therefore the resulting disk remains conditional and cannot be used for trochoidal manufacturing release. Actual material history, ramp safety, protected-side and engagement bounds remain outstanding. No production/UI/preflight/NC path is enabled.
