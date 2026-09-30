@@ -124,7 +124,8 @@
     "check:010e6a": "node scripts/check-010e6a-material-exposure.mjs",
     "check:010e6b": "node scripts/check-010e6b-sequential-material.mjs",
     "check:010e6c": "node scripts/check-010e6c-circular-sequential-material.mjs",
-    "check:010e6d": "node scripts/check-010e6d-capsule-sequential-material.mjs"
+    "check:010e6d": "node scripts/check-010e6d-capsule-sequential-material.mjs",
+    "check:010e6e": "node scripts/check-010e6e-protected-envelope.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
