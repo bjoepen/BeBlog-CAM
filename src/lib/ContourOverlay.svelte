@@ -178,6 +178,8 @@
       return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map),selected:selectedIds.has(c.id)})),selected:selected?selected.points.map(map):null,toolRuns,entryRuns,spatialEntry:entryRuns.length>0,entryKind:operation.entry};
     }
 
+    if(operation.kind!=='contour')return null;
+
     const selectedClosed=operation.topology==='closed'&&operation.contourId!=null?cs.find(c=>c.id===operation.contourId)??null:null;
     const selectedSemantic=operation.topology==='closed'&&operation.contourId!=null?semanticCs.find(c=>c.id===operation.contourId&&c.supported)??null:null;
     const selectedOpen=operation.topology==='open'&&operation.contourId!=null?os.find(c=>c.id===operation.contourId)??null:null;
