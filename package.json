@@ -120,7 +120,8 @@
     "check:010e5a": "node scripts/check-010e5a-uncut-stock-witness.mjs",
     "check:010e5b": "node scripts/check-010e5b-seed-clearance.mjs",
     "check:010e5c": "node scripts/check-010e5c-constructive-seed.mjs",
-    "check:010e5d": "node scripts/check-010e5d-canonical-seed.mjs"
+    "check:010e5d": "node scripts/check-010e5d-canonical-seed.mjs",
+    "check:010e6a": "node scripts/check-010e6a-material-exposure.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
