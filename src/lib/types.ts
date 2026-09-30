@@ -1,3 +1,4 @@
+import type { TrochoidalContourContract } from './trochoidalContourContract';
 import type { MillingToolKind } from './toolTypes';
 
 export type ImportKind = 'step' | 'dxf';
@@ -22,7 +23,7 @@ export type WcsReference='stock'|'part';
 export interface WorkCoordinateSystem{x:WcsX;y:WcsY;z:WcsZ;}
 export interface SetupDefinition{id:string;name:string;stockMode:StockMode;orientation:PartOrientation;placement:PartPlacement;wcsReference:WcsReference;wcs:WorkCoordinateSystem;}
 
-export type OperationKind='facing'|'contour'|'pocket'|'carve'|'drill'|'z-level-roughing'|'3d-roughing'|'surface-finishing';
+export type OperationKind='facing'|'contour'|'trochoidal-contour-roughing'|'pocket'|'carve'|'drill'|'z-level-roughing'|'3d-roughing'|'surface-finishing';
 export type ToolpathSide='outside'|'inside'|'on-line';
 export type OpenContourSide='left'|'right'|'on-line';
 export type ContourTopology='closed'|'open';
@@ -82,7 +83,7 @@ export interface DrillOperation extends BaseOperation{kind:'drill';curveIds:numb
 export interface ThreeDRoughingOperation extends BaseOperation{kind:'3d-roughing';faceIds:number[];stepoverPercent:number;finishAllowanceMm:number;direction?:'x'|'y';}
 export interface SurfaceFinishingOperation extends BaseOperation{kind:'surface-finishing';faceIds:number[];stepoverPercent:number;direction:'x'|'y';}
 export interface ZLevelRoughingOperation extends BaseOperation{kind:'z-level-roughing';faceIds:number[];roughingMode?:ZLevelRoughingMode;islandMode?:ZLevelIslandMode;stepoverPercent:number;finishAllowanceMm:number;}
-export type CamOperation=FacingOperation|ContourOperation|PocketOperation|CarveOperation|DrillOperation|ZLevelRoughingOperation|ThreeDRoughingOperation|SurfaceFinishingOperation;
+export type CamOperation=FacingOperation|ContourOperation|TrochoidalContourContract|PocketOperation|CarveOperation|DrillOperation|ZLevelRoughingOperation|ThreeDRoughingOperation|SurfaceFinishingOperation;
 export interface OperationsProject { operations:CamOperation[];activeOperationId:string|null; }
 
 export const defaultStock:StockDefinition={width:200,height:80,thickness:22,offsetX:10,offsetY:10,offsetZ:0};

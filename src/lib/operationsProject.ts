@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import type { CamOperation, ContourOperation, OperationKind, OperationsProject, PocketOperation } from './types';
 import { normalizeDxfTargetIds } from './dxfMultiTargetSelection';
+import { defaultTrochoidalContourContract } from './trochoidalContourContract';
 import { defaultFacingOperation, defaultCarveOperation, defaultContourOperation, defaultPocketOperation, defaultDrillOperation, defaultZLevelRoughingOperation, defaultThreeDRoughingOperation, defaultSurfaceFinishingOperation, defaultOperationsProject } from './types';
 
 export const operationsProjectStore=writable<OperationsProject>({
@@ -17,6 +18,7 @@ export function cloneOperation<T extends CamOperation>(operation:T):T {
 function operationName(kind:OperationKind,serial:number){
   if(kind==='facing')return`Planen ${serial}`;
   if(kind==='contour')return`Kontur ${serial}`;
+  if(kind==='trochoidal-contour-roughing')return`Wirbelfräsen Kontur ${serial}`;
   if(kind==='pocket')return`Tasche ${serial}`;
   if(kind==='drill')return`Bohren ${serial}`;
   if(kind==='z-level-roughing')return`2D/2½D Schruppen ${serial}`;
@@ -28,6 +30,7 @@ function operationName(kind:OperationKind,serial:number){
 export function createOperation(kind:OperationKind,index:number):CamOperation {
   const serial=Math.max(1,index);
   if(kind==='facing') return {...defaultFacingOperation,id:`op-facing-${serial}`,name:operationName(kind,serial),tool:{...defaultFacingOperation.tool}};
+  if(kind==='trochoidal-contour-roughing') return {...defaultTrochoidalContourContract,id:`op-trochoidal-contour-${serial}`,name:operationName(kind,serial),tool:{...defaultTrochoidalContourContract.tool}};
   if(kind==='contour') return {...defaultContourOperation,id:`op-contour-${serial}`,name:operationName(kind,serial),contourIds:[],excludedSegmentIds:[],tool:{...defaultContourOperation.tool}};
   if(kind==='pocket') return {...defaultPocketOperation,id:`op-pocket-${serial}`,name:operationName(kind,serial),contourIds:[],tool:{...defaultPocketOperation.tool}};
   if(kind==='drill') return {...defaultDrillOperation,id:`op-drill-${serial}`,name:operationName(kind,serial),curveIds:[],stepHoleFeatureIds:[],tool:{...defaultDrillOperation.tool}};
@@ -100,6 +103,7 @@ export function operationSummary(operation:CamOperation):string {
     const islands=(operation.islandMode??'preserve')==='clear'?'Inseln mit schruppen':'Inseln stehen lassen';
     return `${source} · ${islands} · ${operation.stepDownMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Zustellung · ${operation.stepoverPercent}% Stepover · ${operation.finishAllowanceMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm Aufmaß · ${tool}`;
   }
+  if(operation.kind==='trochoidal-contour-roughing')return `Wirbelfräsen · ${operation.side==='outside'?'Außen':'Innen'} · R ${operation.trochoidRadiusMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm · Schritt ${operation.forwardStepMm.toLocaleString('de-DE',{maximumFractionDigits:3})} mm · ${tool}`;
   if(operation.kind==='contour'){
     const side=operation.topology==='open'?(operation.openSide==='left'?'Links':operation.openSide==='right'?'Rechts':'Auf Linie'):(operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie');
     const excluded=operation.excludedSegmentIds??[];
