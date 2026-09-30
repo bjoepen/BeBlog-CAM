@@ -1,6 +1,7 @@
 import { validateJob } from '../../src/lib/jobPreflight';
 import { validateTrochoidalSpoilboardClearance } from '../../src/lib/trochoidalSpoilboardClearance';
 import { createOperation } from '../../src/lib/operationsProject';
+import { createCamProjectV1, parseCamProject, serializeCamProject } from '../../src/lib/projectPersistence';
 import type { ImportSummary,StockDefinition,PartPlacement,PartOrientation,WorkCoordinateSystem } from '../../src/lib/types';
 const expect=(ok:boolean,msg:string)=>{if(!ok)throw new Error(msg)};
 const summary:ImportSummary={kind:'dxf',fileName:'f9.dxf',backend:'acceptance',status:'ready',entities:{circle:1},planarGeometry:{curves:[{kind:'circle',center:{x:10,y:10},radius:20}]}};
@@ -16,8 +17,11 @@ const noBoard=validateJob({summary,stock,stockMode:'manual',placement,orientatio
 expect(noBoard.level==='fail'&&noBoard.operations[0].toolpath===null&&noBoard.operations[0].errors.some(e=>e.includes('Opferplatte')),'overcut without spoilboard fails closed in job preflight');
 const tooThin=validateJob({summary,stock,stockMode:'manual',placement,orientation,wcs,operations:[op],spoilboardThicknessMm:.2});
 expect(tooThin.level==='fail'&&tooThin.operations[0].toolpath===null,'overcut beyond spoilboard fails closed');
-const accepted=validateJob({summary,stock,stockMode:'manual',placement,orientation,wcs,operations:[op],spoilboardThicknessMm:.5});
-expect(accepted.level!=='fail'&&accepted.operations[0].toolpath!==null,'sufficient spoilboard releases canonical job path');
+const project=createCamProjectV1({sourcePath:'/tmp/f9.dxf',sourceFileName:'f9.dxf',stock,stockMode:'manual',spoilboardThicknessMm:.5,placement,orientation,wcs,fixtures:[],machineEnvelopeEnabled:false,machineEnvelope:{minX:0,maxX:500,minY:0,maxY:500,minZ:-100,maxZ:0,warningMarginMm:5},machineWcsOrigin:{x:0,y:0,z:0},spindleHeadEnabled:false,spindleHead:{spindleNoseDiameterMm:80,spindleNoseBottomOffsetMm:60,spindleNoseLengthMm:80,carriageEnabled:false,carriageWidthMm:120,carriageDepthMm:120,carriageBottomOffsetMm:140,carriageHeightMm:120},operationsProject:{operations:[op],activeOperationId:op.id}});
+const restored=parseCamProject(serializeCamProject(project));
+expect(restored.setup.spoilboardThicknessMm===.5&&restored.operationsProject.operations[0].kind==='trochoidal-contour-roughing','spoilboard and trochoid survive project roundtrip');
+const accepted=validateJob({summary,stock:restored.setup.stock,stockMode:restored.setup.stockMode,placement:restored.setup.placement,orientation:restored.setup.orientation,wcs:restored.setup.wcs,operations:restored.operationsProject.operations,spoilboardThicknessMm:restored.setup.spoilboardThicknessMm});
+expect(accepted.level!=='fail'&&accepted.operations[0].toolpath!==null,'persisted setup spoilboard releases canonical job path');
 const manual={...op,depthMode:'manual' as const,overcutMm:0,totalDepthMm:3};
 const manualJob=validateJob({summary,stock,stockMode:'manual',placement,orientation,wcs,operations:[manual]});
 expect(manualJob.level!=='fail','manual cut without overcut does not require spoilboard');
