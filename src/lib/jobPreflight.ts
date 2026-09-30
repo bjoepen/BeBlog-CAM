@@ -25,6 +25,7 @@ import { materializeSafeMotionChain, buildJobSafeTransitions } from './safeMotio
 import { validateSpindleHeadAgainstFixtures, type SpindleHeadGeometry, type SpindleHeadCollisionKind } from './spindleHeadCollision';
 import type { CanonicalToolpath } from './canonicalToolpath';
 import { buildTrochoidalContourOperationState } from './trochoidalOperationState';
+import { validateTrochoidalSpoilboardClearance } from './trochoidalSpoilboardClearance';
 
 export type JobPreflightLevel='pass'|'warn'|'fail';
 export type JobPreflightToolAssembly={level:JobPreflightLevel;cuttingLengthMm:number;stickoutMm:number;shaftDiameterMm:number;holderDiameterMm:number;errors:string[];warnings:string[]}|null;
@@ -37,7 +38,7 @@ export type JobPreflightResult={level:JobPreflightLevel;operations:JobPreflightO
 const kindLabel=(kind:CamOperation['kind'])=>kind==='facing'?'Planen':kind==='trochoidal-contour-roughing'?'Wirbelfräsen Kontur':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':kind==='3d-roughing'?'3D Schruppen':kind==='surface-finishing'?'3D Schlichten':'2D/2½D Schruppen';
 const toolKey=(op:CamOperation)=>toolIdentityKey(op);const unique=(items:string[])=>[...new Set(items)];
 
-export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[];machineEnvelope?:MachineEnvelope|null;machineWcsOrigin?:MachineWcsOrigin|null;spindleHead?:SpindleHeadGeometry|null}):JobPreflightResult{
+export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operations:CamOperation[];fixtures?:FixtureVolume[];machineEnvelope?:MachineEnvelope|null;machineWcsOrigin?:MachineWcsOrigin|null;spindleHead?:SpindleHeadGeometry|null;spoilboardThicknessMm?:number}):JobPreflightResult{
   const {summary,stock,stockMode,placement,orientation,wcs}=args,fixtures=args.fixtures??[],machineEnvelopeConfig=args.machineEnvelope??null,machineWcsOrigin=args.machineWcsOrigin??null,spindleHeadConfig=args.spindleHead??null,enabled=args.operations.filter(op=>op.enabled!==false),operations:JobPreflightOperation[]=[],errors:string[]=[],warnings:string[]=[],stockSimulationOperations:StockSimulationOperation[]=[];
   enabled.forEach((operation,index)=>{
     let opErrors:string[]=[],opWarnings:string[]=[],detail='',canonicalToolpath=null,toolAssembly:JobPreflightToolAssembly=null,fixtureCollision:JobPreflightFixtureCollision=null,machineEnvelope:JobPreflightMachineEnvelope=null,spindleHead:JobPreflightSpindleHead=null;
@@ -69,6 +70,7 @@ export function validateJob(args:{summary:ImportSummary;stock:StockDefinition;st
     else if(operation.kind==='trochoidal-contour-roughing'){
       const state=buildTrochoidalContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation});
       opErrors=[...state.errors];opWarnings=[...state.warnings];canonicalToolpath=state.toolpath;
+      const spoilboard=validateTrochoidalSpoilboardClearance(operation,args.spoilboardThicknessMm);if(spoilboard.ok===false){opErrors.push(...spoilboard.errors);canonicalToolpath=null;}
       detail=`Wirbelfräsen Kontur · ${operation.side==='outside'?'Außen':'Innen'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · R${operation.trochoidRadiusMm.toFixed(3)} · Schritt ${operation.forwardStepMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;
     }
     else if(summary.kind==='step'){const state=buildStepContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation,previousToolpaths:stockSimulationOperations.map(entry=>entry.toolpath)});opErrors=[...state.errors];opWarnings=[...state.warnings];canonicalToolpath=state.toolpath;const selected=state.selected;detail=`STEP BRep · geschlossene Wire${selected?` ${selected.wireId}`:''} · ${operation.side==='outside'?'Außen':operation.side==='inside'?'Innen':'Auf Linie'} · Ø ${operation.tool.diameterMm.toFixed(3)} mm · ${operation.totalDepthMm.toFixed(3)} mm tief`;}
