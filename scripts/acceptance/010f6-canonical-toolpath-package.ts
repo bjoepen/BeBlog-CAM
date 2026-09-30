@@ -32,8 +32,11 @@ for(const curves of shapes)for(const side of ['outside','inside'] as const)for(c
     expect(run.kind==='cut'&&run.retractAfter===true,'run contract');
     expect(!!run.cutSegments3?.length&&run.points.length===run.cutSegments3!.length+1,'run points derive from cuts');
     expect(run.cutSegments3!.every(s=>s.start.z===run.z&&s.end.z===run.z),'run cuts remain planar at run depth');
-    expect(run.entrySegments?.length===1,'one stock-cutting ramp entry per level');
-    expect(run.entrySegments![0].start.z===0&&run.entrySegments![0].end.z===run.z,'entry is the F3 ramp');
+    expect(!!run.entrySegments?.length,'stock-cutting ramp entry exists per level');
+    expect(run.entrySegments![0].start.z===0&&run.entrySegments!.at(-1)!.end.z===run.z,'entry spans the complete F3 ramp');
+    for(let i=1;i<run.entrySegments!.length;i++)
+      expect(JSON.stringify(run.entrySegments![i-1].end)===JSON.stringify(run.entrySegments![i].start),'entry ramp is XYZ-continuous');
+    expect(run.entrySegments!.every(s=>s.start.z<=0&&s.end.z<=0),'safe approach/retract excluded from entry');
     const points=[{x:run.cutSegments3![0].start.x,y:run.cutSegments3![0].start.y},
       ...run.cutSegments3!.map(s=>({x:s.end.x,y:s.end.y}))];
     expect(JSON.stringify(points)===JSON.stringify(run.points),'run points are exact derived projection');
