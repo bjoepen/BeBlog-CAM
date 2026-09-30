@@ -41,7 +41,7 @@ export function buildTrochoidalContourOperationState(args:Args):TrochoidalOperat
   if(!guide.ok)return{ok:false,toolpath:null,errors:guide.errors,warnings};
   const loop={radiusMm:args.operation.trochoidRadiusMm,forwardStepMm:args.operation.forwardStepMm,
     loopDirection:args.operation.direction==='climb'?'cw' as const:'ccw' as const};
-  const result=buildTrochoidalCanonicalToolpath(guide.guide,loop,args.operation.tool.diameterMm/2,args.operation.id??args.operation.name,{
+  const result=buildTrochoidalCanonicalToolpath(guide.guide,loop,args.operation.tool.diameterMm/2,args.operation.id,{
     allowFullWidthStartup:true,totalDepthMm:args.operation.totalDepthMm,stepDownMm:args.operation.stepDownMm,
     safeZMm:args.operation.safeZMm,rapidFeedMmMin:Math.max(args.operation.feedMmMin,args.operation.plungeMmMin),
     maximumRampAngleDeg:args.operation.rampAngleDeg,rampFeedMmMin:args.operation.plungeMmMin,
