@@ -112,7 +112,7 @@ function assessGeneratedReference(
     const exposure = boundMaterialExposureOutsideSeed(disk, motions, cutterRadiusMm,
       targetDepthMm, allowedExposedAngleDeg);
     if (!exposure.ok || exposure.maxExposedAngleDeg === null)
-      return fail(exposure.errors.join(' '), cycle);
+      return fail(`${exposure.errors.join(' ')} Zyklus ${cycle + 1}, Segment ${(exposure.firstLimitExceededSegmentIndex ?? exposure.limitingSegmentIndex ?? 0) + 1}, Maximum ${exposure.maxExposedAngleDeg === null ? 'unbekannt' : exposure.maxExposedAngleDeg.toFixed(6) + '°'}.`, cycle);
     const arc = motions[motions.length - 1];
     if (arc.kind !== 'arc') return fail('Vollständige Referenzschleife fehlt.', cycle);
     // A full circular sweep covers radii [max(0,r-R), r+R]. The previous
@@ -133,7 +133,7 @@ function assessGeneratedReference(
     const closing = boundMaterialExposureOutsideSeed(disk, reference.segments.slice(-1),
       cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
     if (!closing.ok || closing.maxExposedAngleDeg === null)
-      return fail(`Schließfahrt: ${closing.errors.join(' ')}`, reference.loopCount);
+      return fail(`Schließfahrt: ${closing.errors.join(' ')} Segment ${(closing.firstLimitExceededSegmentIndex ?? closing.limitingSegmentIndex ?? 0) + 1}, Maximum ${closing.maxExposedAngleDeg === null ? 'unbekannt' : closing.maxExposedAngleDeg.toFixed(6) + '°'}.`, reference.loopCount);
     closingExposureBoundDeg = closing.maxExposedAngleDeg;
     // A closing link earns no additional disk and no new depth clearance.
   }
