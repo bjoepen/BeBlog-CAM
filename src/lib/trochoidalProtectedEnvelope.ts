@@ -54,7 +54,7 @@ export function proveTrochoidalProtectedEnvelope(
     if(!proof.ok) return fail(proof.errors.join(' '));
     seedClearance=capsuleDiskPartClearanceMm(guide,initialDisk);
   } else if (guide.source.length === 4 && guide.segments.length === 8 && guide.side==='outside') {
-    const proof=proveTrochoidalRectangleGuideBoundary(guide,path);
+    const proof=proveTrochoidalRectangleGuideBoundary(guide,path,false);
     if(!proof.ok) return fail(proof.errors.join(' '));
     const pointClearance=rectanglePointClearanceMm(guide,initialDisk.center);
     seedClearance=pointClearance===null?null:pointClearance-initialDisk.radiusMm;
