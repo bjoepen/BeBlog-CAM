@@ -12,9 +12,9 @@ const options={startDepthMm:0,targetDepthMm:1,maximumAngleDeg:3,feedMmMin:180};
 const ramp=buildAssumedSeedRamp(disk,endpoint,3,options);
 expect(ramp.ok,'reference ramp passes');
 if(ramp.ok) {
-  expect(ramp.legCount>=1 && ramp.xyLengthMm>=1/Math.tan(3*Math.PI/180),'1mm at max 3deg has sufficient circular XY length');
+  expect(ramp.turnCount>=1 && ramp.xyLengthMm>=1/Math.tan(3*Math.PI/180),'1mm at max 3deg has sufficient circular XY length');
   expect(ramp.actualAngleDeg<=3 && ramp.actualAngleDeg>0,'actual slope within caller maximum');
-  expect(ramp.segments.length===ramp.legCount*2 && ramp.segments.every(s=>s.kind==='arc3' && s.feedMmMin===180),'two canonical half arcs per helical turn');
+  expect(ramp.segments.length===ramp.turnCount*2 && ramp.segments.every(s=>s.kind==='arc3' && s.feedMmMin===180),'two canonical half arcs per helical turn');
   expect(ramp.segments[0].start.z===0,'starts at surface');
   const last=ramp.segments[ramp.segments.length-1];
   expect(Math.abs(last.end.x-endpoint.x)<1e-9 && Math.abs(last.end.y-endpoint.y)<1e-9 && last.end.z===-1,'exact depth and XY endpoint');
