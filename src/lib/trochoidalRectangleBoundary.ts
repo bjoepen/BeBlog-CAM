@@ -72,7 +72,7 @@ export function rectanglePointClearanceMm(guide:TrochoidalContourGuide,p:P2):num
 }
 
 /** E7B exact native LINE/ARC clearance against a bound rounded rectangle outside offset. */
-export function proveTrochoidalRectangleGuideBoundary(guide:TrochoidalContourGuide,path:SemanticSegment[]){
+export function proveTrochoidalRectangleGuideBoundary(guide:TrochoidalContourGuide,path:SemanticSegment[],requireClosed=true){
   const fail=(error:string)=>({ok:false as const,minimumCenterClearanceMm:null,errors:[error]});
   if(guide?.side!=='outside'||!Number.isFinite(guide.signedOffsetMm)||guide.signedOffsetMm<=EPS
     ||guide.source.length!==4||guide.source.some(s=>s.kind!=='line'))return fail('Keine gültige native Rechteck-Außenführung.');
@@ -89,6 +89,6 @@ export function proveTrochoidalRectangleGuideBoundary(guide:TrochoidalContourGui
     minimum=Math.min(minimum,d);
     if(d<guide.signedOffsetMm-EPS)return fail(`Kandidatensegment ${i+1} unterschreitet den geschützten Rechteckabstand.`);
   }
-  if(dist(path[path.length-1].end,path[0].start)>EPS)return fail('Geschlossene Rechteckführung benötigt eine geschlossene Kandidatenbahn.');
+  if(requireClosed&&dist(path[path.length-1].end,path[0].start)>EPS)return fail('Geschlossene Rechteckführung benötigt eine geschlossene Kandidatenbahn.');
   return{ok:true as const,minimumCenterClearanceMm:minimum,errors:[]};
 }
