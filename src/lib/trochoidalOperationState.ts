@@ -5,6 +5,7 @@ import { buildTrochoidalContourGuide } from './trochoidalContourGuide';
 import { buildTrochoidalCanonicalToolpath, type TrochoidalCanonicalToolpathResult } from './trochoidalCanonicalToolpath';
 import { sampleCurve, type P2 } from './contourMath';
 import { resolveTrochoidalMachiningDepth } from './trochoidalMachiningDepth';
+import { resolveTrochoidalPhysicalDirection } from './trochoidalPhysicalDirection';
 
 type Args={summary:ImportSummary;stock:StockDefinition;stockMode:StockMode;placement:PartPlacement;orientation:PartOrientation;wcs:WorkCoordinateSystem;operation:TrochoidalContourContract};
 export type TrochoidalOperationState=TrochoidalCanonicalToolpathResult&{warnings:string[]};
@@ -42,9 +43,10 @@ export function buildTrochoidalContourOperationState(args:Args):TrochoidalOperat
   if(errors.length||!transform||!depth.ok)return{ok:false,toolpath:null,errors,warnings};
   const guide=buildTrochoidalContourGuide(args.summary.planarGeometry?.curves??[],args.operation,transform);
   if(!guide.ok)return{ok:false,toolpath:null,errors:guide.errors,warnings};
-  const loop={radiusMm:args.operation.trochoidRadiusMm,forwardStepMm:args.operation.forwardStepMm,
-    loopDirection:args.operation.direction==='climb'?'cw' as const:'ccw' as const};
-  const result=buildTrochoidalCanonicalToolpath(guide.guide,loop,args.operation.tool.diameterMm/2,args.operation.id,{
+  const physical=resolveTrochoidalPhysicalDirection(guide.guide,args.operation.direction);
+  if(!physical)return{ok:false,toolpath:null,errors:['Physikalische Wirbelfräsrichtung konnte nicht eindeutig aufgelöst werden.'],warnings};
+  const loop={radiusMm:args.operation.trochoidRadiusMm,forwardStepMm:args.operation.forwardStepMm,loopDirection:physical.loopDirection};
+  const result=buildTrochoidalCanonicalToolpath(physical.guide,loop,args.operation.tool.diameterMm/2,args.operation.id,{
     allowFullWidthStartup:true,totalDepthMm:depth.targetDepthMm,stepDownMm:args.operation.stepDownMm,
     safeZMm:args.operation.safeZMm,rapidFeedMmMin:Math.max(args.operation.feedMmMin,args.operation.plungeMmMin),
     maximumRampAngleDeg:args.operation.rampAngleDeg,rampFeedMmMin:args.operation.plungeMmMin,
