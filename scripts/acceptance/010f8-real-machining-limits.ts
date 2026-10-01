@@ -1,6 +1,8 @@
 import { buildTrochoidalContourOperationState } from '../../src/lib/trochoidalOperationState';
 import { resolveTrochoidalMachiningDepth } from '../../src/lib/trochoidalMachiningDepth';
 import { createOperation } from '../../src/lib/operationsProject';
+import { buildTrochoidalContourGuide } from '../../src/lib/trochoidalContourGuide';
+import { proveTrochoidalRectangleGuideBoundary } from '../../src/lib/trochoidalRectangleBoundary';
 import type { ImportSummary,StockDefinition,PartPlacement,PartOrientation,WorkCoordinateSystem } from '../../src/lib/types';
 const expect=(ok:boolean,msg:string)=>{if(!ok)throw new Error(msg)};
 const summary:ImportSummary={kind:'dxf',fileName:'f8.dxf',backend:'acceptance',status:'ready',entities:{circle:1},planarGeometry:{curves:[{kind:'circle',center:{x:10,y:10},radius:20}]}};
@@ -26,6 +28,14 @@ const rectangleSummary:ImportSummary={kind:'dxf',fileName:'e7-rectangle.dxf',bac
 const rectangleOp={...smallTool,id:'e7-rectangle',side:'outside' as const};
 const rectangleState=buildTrochoidalContourOperationState({summary:rectangleSummary,stock,stockMode:'manual',placement,orientation,wcs,operation:rectangleOp});
 expect(rectangleState.ok,'E7 outside rectangle must pass the protected production path: '+rectangleState.errors.join(' '));
+const rectangleGuide=buildTrochoidalContourGuide(rectangleSummary.planarGeometry!.curves,rectangleOp);
+expect(rectangleGuide.ok,'E7 rectangle guide must be constructible');
+if(rectangleGuide.ok){
+  const invaded=[...rectangleGuide.guide.segments];
+  invaded[0]={kind:'line',start:{x:20,y:16},end:{x:40,y:16}};
+  const rejectedBoundary=proveTrochoidalRectangleGuideBoundary(rectangleGuide.guide,invaded);
+  expect(!rejectedBoundary.ok,'rectangle boundary proof must reject a path invading the protected part');
+}
 const rectangleInside=buildTrochoidalContourOperationState({summary:rectangleSummary,stock,stockMode:'manual',placement,orientation,wcs,
   operation:{...rectangleOp,side:'inside'}});
 expect(!rectangleInside.ok&&rectangleInside.toolpath===null,'E7 inside sharp-corner rectangle remains fail closed');
