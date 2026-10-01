@@ -7,6 +7,8 @@ import { assessTrochoidalGuideEligibility } from './trochoidalGuideEligibility';
 import { buildSemanticTrochoid } from './trochoidalSemanticMath';
 import { proveTrochoidalCircleGuideBoundary, radialBoundsForNativeSegment } from './trochoidalCircularBoundary';
 import { proveTrochoidalCapsuleGuideBoundary } from './trochoidalCapsuleBoundary';
+import { proveTrochoidalRectangleGuideBoundary } from './trochoidalRectangleBoundary';
+import { buildLocalRadiusTrochoid } from './trochoidalLocalRadius';
 
 export type SequentialMaterialResult =
   | { ok: true; segments: SemanticSegment[]; loopCount: number; cycleExposureBoundsDeg: number[];
@@ -80,6 +82,23 @@ export function assessCapsuleTrochoidSequentialMaterial(
   return assessGeneratedReference(reference, true, initialDisk, cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
 }
 
+/** E7B: exact rounded-rectangle outside guide with the same ordered material proof. */
+export function assessRectangleTrochoidSequentialMaterial(
+  guide: TrochoidalContourGuide, options: Omit<StraightTrochoidOptions,'freeSide'>,
+  initialDisk: AssumedClearedDisk, cutterRadiusMm:number,targetDepthMm:number,allowedExposedAngleDeg:number
+):SequentialMaterialResult{
+  if(!options)return fail('Schleifenparameter fehlen.');
+  const binding=proveTrochoidalRectangleGuideBoundary(guide,guide?.segments??[]);
+  if(!binding.ok)return fail(binding.errors.join(' '));
+  const eligible=assessTrochoidalGuideEligibility(guide,options.radiusMm,options.forwardStepMm);
+  if(!eligible.ok)return fail(eligible.errors.join(' '));
+  const reference=buildLocalRadiusTrochoid(guide,{...options,radiusMm:options.radiusMm,freeSide:eligible.freeSide});
+  if(!reference.ok)return fail(reference.errors.join(' '));
+  const boundary=proveTrochoidalRectangleGuideBoundary(guide,reference.segments);
+  if(!boundary.ok)return fail(boundary.errors.join(' '));
+  return assessGeneratedReference(reference,true,initialDisk,cutterRadiusMm,targetDepthMm,allowedExposedAngleDeg);
+}
+
 // Private: only internal generators may supply complete loops.
 function assessGeneratedReference(
   reference: { segments: SemanticSegment[]; loopCount: number }, closed: boolean,
@@ -93,8 +112,12 @@ function assessGeneratedReference(
     const motions = reference.segments.slice(offset, offset + (cycle === 0 ? 2 : 3));
     const exposure = boundMaterialExposureOutsideSeed(disk, motions, cutterRadiusMm,
       targetDepthMm, allowedExposedAngleDeg);
-    if (!exposure.ok || exposure.maxExposedAngleDeg === null)
-      return fail(exposure.errors.join(' '), cycle);
+    if (!exposure.ok || exposure.maxExposedAngleDeg === null) {
+      let loopArc: SemanticSegment | undefined;
+      for(let i=motions.length-1;i>=0;i--) if(motions[i].kind==='arc'){ loopArc=motions[i]; break; }
+      const separation=loopArc?.kind==='arc'?Math.hypot(loopArc.center.x-disk.center.x,loopArc.center.y-disk.center.y):NaN;
+      return fail(`${exposure.errors.join(' ')} Zyklus ${cycle + 1}, Segment ${(exposure.firstLimitExceededSegmentIndex ?? exposure.limitingSegmentIndex ?? 0) + 1}, Maximum ${exposure.maxExposedAngleDeg === null ? 'unbekannt' : exposure.maxExposedAngleDeg.toFixed(6) + '°'}; alte Scheibe R=${disk.radiusMm.toFixed(6)}, Schleife R=${loopArc?.kind==='arc'?loopArc.radius.toFixed(6):'?'}, Mittelpunktabstand=${Number.isFinite(separation)?separation.toFixed(6):'?'}.`, cycle);
+    }
     const arc = motions[motions.length - 1];
     if (arc.kind !== 'arc') return fail('Vollständige Referenzschleife fehlt.', cycle);
     // A full circular sweep covers radii [max(0,r-R), r+R]. The previous
@@ -115,7 +138,7 @@ function assessGeneratedReference(
     const closing = boundMaterialExposureOutsideSeed(disk, reference.segments.slice(-1),
       cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
     if (!closing.ok || closing.maxExposedAngleDeg === null)
-      return fail(`Schließfahrt: ${closing.errors.join(' ')}`, reference.loopCount);
+      return fail(`Schließfahrt: ${closing.errors.join(' ')} Segment ${(closing.firstLimitExceededSegmentIndex ?? closing.limitingSegmentIndex ?? 0) + 1}, Maximum ${closing.maxExposedAngleDeg === null ? 'unbekannt' : closing.maxExposedAngleDeg.toFixed(6) + '°'}.`, reference.loopCount);
     closingExposureBoundDeg = closing.maxExposedAngleDeg;
     // A closing link earns no additional disk and no new depth clearance.
   }

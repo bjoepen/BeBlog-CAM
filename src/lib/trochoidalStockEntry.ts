@@ -5,7 +5,7 @@ import type { StraightTrochoidOptions } from './trochoidalStraightMath';
 import type { AssumedClearedDisk } from './trochoidalSeedClearance';
 import { buildAssumedSeedRamp } from './trochoidalRampEntry';
 import { assessTrochoidalGuideEligibility } from './trochoidalGuideEligibility';
-import { buildSemanticTrochoid } from './trochoidalSemanticMath';
+import { buildProtectedTrochoidReference } from './trochoidalLocalRadius';
 import { boundMaterialExposureOutsideSeed } from './trochoidalMaterialExposure';
 import { constructAssumedDiskFromCircularSweep } from './trochoidalConstructiveSeed';
 import { assessProtectedTrochoidSequentialMaterial, proveTrochoidalProtectedEnvelope,
@@ -44,7 +44,7 @@ export function buildTrochoidStockEntryReference(
     return fail('Startnut- und Bootstrap-Parameter sind ungültig.');
   const eligible=assessTrochoidalGuideEligibility(guide,loop.radiusMm,loop.forwardStepMm);
   if(!eligible.ok)return fail(eligible.errors.join(' '));
-  const target=buildSemanticTrochoid(guide.segments,{...loop,radiusMm:eligible.uniformRadiusMm,freeSide:eligible.freeSide});
+  const target=buildProtectedTrochoidReference(guide,loop,eligible.freeSide,eligible.uniformRadiusMm);
   if(!target.ok || target.segments[0]?.kind!=='arc')return fail('Native Konturreferenz fehlt.');
   const first=target.segments[0],center={...first.center};
   const unit={x:(first.start.x-center.x)/first.radius,y:(first.start.y-center.y)/first.radius};

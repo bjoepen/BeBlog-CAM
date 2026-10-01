@@ -1,6 +1,7 @@
 import type { Curve2 } from './types';
 import { buildSemanticContours, offsetSemanticContour, type P2, type SemanticContour, type SemanticSegment, type OffsetValidation } from './contourMath';
 import { validateTrochoidalContourContract, type TrochoidalContourContract } from './trochoidalContourContract';
+import { buildRoundedRectangleOutsideOffset } from './trochoidalRoundedRectangle';
 
 /** 010-B only: semantic cutter-center guide. This is not a machining clearance proof. */
 export type TrochoidalContourGuide = {
@@ -118,7 +119,9 @@ export function buildTrochoidalContourGuide(
   if (!Number.isFinite(sourceArea) || Math.abs(sourceArea) <= 1e-9)
     return { ok: false, guide: null, errors: ['Sollkontur hat keine gültige eingeschlossene Fläche.'] };
 
-  const result = offsetSemanticContour(contour, offset, .002);
+  const roundedRectangle=operation.side==='outside'
+    ?buildRoundedRectangleOutsideOffset(contour.segments,Math.abs(offset)):null;
+  const result = roundedRectangle??offsetSemanticContour(contour, offset, .002);
   if (!result || !result.validation.ok || !validClosedSemantic({ ...contour, segments: result.segments }))
     return { ok: false, guide: null, errors: ['Analytische Werkzeugmittelpunkt-Führung ist nicht geschlossen oder hat die Offset-Prüfung nicht bestanden.'] };
   const guideArea = signedArea(result.segments);
