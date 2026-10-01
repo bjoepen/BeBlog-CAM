@@ -51,7 +51,7 @@ export function buildTrochoidalContourOperationState(args:Args):TrochoidalOperat
     safeZMm:args.operation.safeZMm,rapidFeedMmMin:Math.max(args.operation.feedMmMin,args.operation.plungeMmMin),
     maximumRampAngleDeg:args.operation.rampAngleDeg,rampFeedMmMin:args.operation.plungeMmMin,
     startupFeedMmMin:args.operation.feedMmMin,seedExtraRadiusMm:.1,
-    bootstrapStepMm:Math.min(args.operation.forwardStepMm,args.operation.tool.diameterMm/2),
+    bootstrapStepMm:Math.min(args.operation.forwardStepMm,args.operation.tool.diameterMm/8),
     allowedExposedAngleDeg:140
   });
   return result.ok?{...result,warnings}:{...result,warnings};
