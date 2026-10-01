@@ -106,16 +106,37 @@ export function buildSemanticTrochoid(guide: SemanticSegment[], options: Straigh
   if (step > 2 * radius) return fail('Fortschritt überschreitet den Schleifendurchmesser.');
   if (freeSide !== 'left' && freeSide !== 'right') return fail('Ungültige Freiseite.');
   if (loopDirection !== 'cw' && loopDirection !== 'ccw') return fail('Ungültige Schleifenrichtung.');
-  const metric = measured.metric, intervals = Math.ceil(metric.totalLengthMm / step);
-  const loopCount = metric.closed ? intervals : intervals + 1;
-  if (metric.closed && loopCount < 2) return fail('Geschlossene Führung benötigt mindestens zwei getrennte Schleifenstationen.');
+  const sign = freeSide === 'left' ? 1 : -1;
+  // The apex runs at twice the loop radius from the guide. On a curved guide
+  // its arclength can therefore advance faster than the guide itself. Build
+  // stations per native segment and cap the apex advance by forwardStepMm.
+  const stationDistances:number[]=[0];
+  let traversed=0;
+  for(let i=0;i<metric.segments.length;i++){
+    const segment=metric.segments[i],length=metric.lengthsMm[i];
+    let localStep=step;
+    if(segment.kind==='arc'){
+      const bendsTowardFreeSide=segment.ccw?freeSide==='left':freeSide==='right';
+      const apexRadius=bendsTowardFreeSide?segment.radius-2*radius:segment.radius+2*radius;
+      if(apexRadius<=EPS)return fail(`Trochoiden-Apex kollabiert am Führungsbogen ${i+1}.`);
+      localStep=Math.min(step,step*segment.radius/apexRadius);
+    }
+    const intervals=Math.max(1,Math.ceil(length/localStep));
+    for(let j=1;j<=intervals;j++){
+      const d=traversed+length*j/intervals;
+      if(!metric.closed||d<metric.totalLengthMm-EPS)stationDistances.push(d);
+    }
+    traversed+=length;
+  }
+  if(metric.closed&&stationDistances.length<2)return fail('Geschlossene Führung benötigt mindestens zwei getrennte Schleifenstationen.');
+  if(!metric.closed&&stationDistances[stationDistances.length-1]<metric.totalLengthMm-EPS)stationDistances.push(metric.totalLengthMm);
+  const loopCount=stationDistances.length;
   if (loopCount > MAX_LOOPS) return fail('Zu viele Trochoidenschleifen.');
   const segments: SemanticSegment[] = [];
   let firstApex: P2 | null = null, previousApex: P2 | null = null;
   for (let i = 0; i < loopCount; i++) {
-    const station = stationAtLength(metric, metric.closed ? i * step : i === intervals ? metric.totalLengthMm : i * step);
+    const station = stationAtLength(metric, stationDistances[i]);
     if (!station) return fail('Bogenlängen-Station konnte nicht bestimmt werden.');
-    const sign = freeSide === 'left' ? 1 : -1;
     const normal = { x: -station.tangent.y * sign, y: station.tangent.x * sign };
     const shifted = (amount: number): P2 => ({ x: station.point.x + normal.x * amount, y: station.point.y + normal.y * amount });
     const touch = station.point, center = shifted(radius), apex = shifted(2 * radius);
