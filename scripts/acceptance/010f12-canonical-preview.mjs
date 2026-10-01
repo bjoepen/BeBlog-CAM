@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+const view=fs.readFileSync('src/lib/GeometryView.svelte','utf8');
+const app=fs.readFileSync('src/App.svelte','utf8');
+const expect=(ok,message)=>{if(!ok)throw new Error(message)};
+expect(app.includes("canonicalToolpath={activeStep==='Bearbeiten'?activeCanonicalToolpath:null}"),'Bearbeiten must pass active canonical toolpath to GeometryView');
+expect(app.includes("if(operation.kind==='trochoidal-contour-roughing'){")&&app.includes("buildTrochoidalContourOperationState"),'active canonical builder must use trochoidal production state');
+expect(view.includes("const motionAuthoritative=renderToolpaths.some(toolpath=>(toolpath.motions?.length??0)>0);"),'preview must detect authoritative machine motions');
+expect(view.includes("const canonicalRuns=motionAuthoritative?[]:"),'run geometry must not duplicate authoritative motions');
+expect(view.includes("const canonicalEntries=motionAuthoritative||previewMode==='job-top'?[]:"),'entry geometry must not duplicate authoritative motions');
+expect(view.includes("(toolpath.motions??[]).map((motion,motionIndex)=>"),'preview must render canonical machine motions');
+expect(view.includes("sampleMachineMotion(motion)"),'canonical arcs and lines must be sampled from machine motions');
+expect(view.includes("rapid:motion.kind==='rapid3'"),'rapid classification must come from canonical motion kind');
+console.log('010-F12 canonical preview authority: PASS');
