@@ -92,7 +92,7 @@
   $: contourDepthState=operation.kind==='contour'?resolveContourDepth({operation,stock,stockMode,wcs}):null;
   $: jobPreflight=(activeStep==='Prüfen'||activeStep==='Fräsen')&&importSummary?validateJob({summary:importSummary,stock,stockMode,placement,orientation,wcs,operations:operationsProject.operations,fixtures,spoilboardThicknessMm,machineEnvelope:machineEnvelopeEnabled?machineEnvelope:null,machineWcsOrigin:machineEnvelopeEnabled?machineWcsOrigin:null,spindleHead:spindleHeadEnabled?spindleHead:null}):null;
 
-  const operationLabel=(kind:OperationKind)=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':kind==='3d-roughing'?'3D Schruppen':kind==='surface-finishing'?'3D Schlichten':'2D/2½D Schruppen';
+  const operationLabel=(kind:OperationKind)=>kind==='facing'?'Planen':kind==='contour'?'Kontur':kind==='trochoidal-contour-roughing'?'Wirbelfräsen Kontur':kind==='pocket'?'Tasche':kind==='carve'?'Carve':kind==='drill'?'Bohren':kind==='3d-roughing'?'3D Schruppen':kind==='surface-finishing'?'3D Schlichten':'2D/2½D Schruppen';
   function setOperation(next:CamOperation){operationsProject=replaceOperation(operationsProject,next);const synced=operationsProject.operations.find(op=>op.id===next.id);operation=cloneOperation(synced??next);}
   function updateFacing(patch:Partial<FacingOperation>){if(operation.kind!=='facing')return;setOperation({...operation,...patch});}
   function updateContour(patch:Partial<ContourOperation>){if(operation.kind!=='contour')return;setOperation({...operation,...patch});}
