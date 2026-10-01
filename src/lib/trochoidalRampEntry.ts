@@ -57,9 +57,11 @@ export function buildAssumedSeedRamp(
     const x=p.x-disk.center.x,y=p.y-disk.center.y,ca=Math.cos(baseAngle),sa=Math.sin(baseAngle);
     return{x:disk.center.x+x*ca-y*sa,y:disk.center.y+x*sa+y*ca};
   };
-  const rotated:CanonicalSpatialSegment[]=segments.map(segment=>{
+  const rotated:CanonicalSpatialSegment[]=segments.map((segment,index)=>{
     if(segment.kind!=='arc3')throw new Error('Helixprimitive enthält unerwartetes Segment.');
-    return{...segment,start:{...rotate(segment.start),z:segment.start.z},end:{...rotate(segment.end),z:segment.end.z},center:{...disk.center}};
+    const start=index===0?{...endpoint}:{...rotate(segment.start)};
+    const end=index===segments.length-1?{...endpoint}:{...rotate(segment.end)};
+    return{...segment,start:{...start,z:segment.start.z},end:{...end,z:segment.end.z},center:{...disk.center}};
   });
   const planar:SemanticSegment[]=rotated.map(segment=>{
     if(segment.kind!=='arc3')throw new Error('Helixprimitive enthält unerwartetes Segment.');
