@@ -44,3 +44,42 @@ export function buildLocalRadiusTrochoid(
  if(firstApex&&previousApex)segments.push({kind:'line',start:previousApex,end:firstApex});
  return{ok:true,segments,loopCount,errors:[]};
 }
+
+export function buildProtectedTrochoidReference(
+ guide:TrochoidalContourGuide,
+ options:Omit<StraightTrochoidOptions,'freeSide'>,
+ freeSide:'left'|'right',
+ uniformRadiusMm:number
+):LocalRadiusTrochoidResult{
+ const rectangle=guide.source.length===4&&guide.segments.length===8&&guide.side==='outside';
+ return rectangle
+   ? buildLocalRadiusTrochoid(guide,{...options,freeSide})
+   : buildUniformReference(guide,options,freeSide,uniformRadiusMm);
+}
+
+function buildUniformReference(
+ guide:TrochoidalContourGuide,
+ options:Omit<StraightTrochoidOptions,'freeSide'>,
+ freeSide:'left'|'right',
+ radiusMm:number
+):LocalRadiusTrochoidResult{
+ const measured=measureSemanticGuide(guide.segments);
+ if(!measured.ok)return fail(measured.errors[0]);
+ const metric=measured.metric,intervals=Math.ceil(metric.totalLengthMm/options.forwardStepMm);
+ const loopCount=metric.closed?intervals:intervals+1;
+ if(metric.closed&&loopCount<2)return fail('Geschlossene Führung benötigt mindestens zwei getrennte Schleifenstationen.');
+ if(loopCount>MAX_LOOPS)return fail('Zu viele Trochoidenschleifen.');
+ const segments:SemanticSegment[]=[];let firstApex:P2|null=null,previousApex:P2|null=null;
+ for(let i=0;i<loopCount;i++){
+  const station=stationAtLength(metric,metric.closed?i*options.forwardStepMm:i===intervals?metric.totalLengthMm:i*options.forwardStepMm);
+  if(!station)return fail('Bogenlängen-Station konnte nicht bestimmt werden.');
+  const sign=freeSide==='left'?1:-1,normal={x:-station.tangent.y*sign,y:station.tangent.x*sign};
+  const shifted=(amount:number):P2=>({x:station.point.x+normal.x*amount,y:station.point.y+normal.y*amount});
+  const touch=station.point,center=shifted(radiusMm),apex=shifted(2*radiusMm),ccw=options.loopDirection==='ccw';
+  if(previousApex)segments.push({kind:'line',start:previousApex,end:apex});
+  segments.push({kind:'arc',start:apex,end:touch,center,radius:radiusMm,ccw},{kind:'arc',start:touch,end:apex,center,radius:radiusMm,ccw});
+  firstApex??=apex;previousApex=apex;
+ }
+ if(metric.closed&&firstApex&&previousApex)segments.push({kind:'line',start:previousApex,end:firstApex});
+ return{ok:true,segments,loopCount,errors:[]};
+}
