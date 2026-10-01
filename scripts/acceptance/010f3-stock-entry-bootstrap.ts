@@ -72,11 +72,18 @@ for(const curves of shapes)for(const side of ['outside','inside'] as const)for(c
     }
     previousDiskRadius=last.radius+3-1e-6;
   }
-  for(const bad of [{allowFullWidthStartup:false},{allowedExposedAngleDeg:80},{bootstrapStepMm:10},
-    {seedExtraRadiusMm:300},{maximumRampAngleDeg:1e-9},{bootstrapStepMm:1e-9},{targetDepthMm:0}]) {
+  for(const [name,bad] of [
+    ['full-width disabled',{allowFullWidthStartup:false}],
+    ['80deg exposure',{allowedExposedAngleDeg:80}],
+    ['10mm bootstrap step',{bootstrapStepMm:10}],
+    ['300mm seed extra',{seedExtraRadiusMm:300}],
+    ['near-zero ramp angle',{maximumRampAngleDeg:1e-9}],
+    ['near-zero bootstrap step',{bootstrapStepMm:1e-9}],
+    ['zero target depth',{targetDepthMm:0}]
+  ] as const) {
     const rejected=buildTrochoidStockEntryReference(guide,loop,3,{...options,...bad});
     expect(!rejected.ok && rejected.startup===null && rejected.bootstrap.length===0
-      && rejected.seed===null && rejected.contour===null,'unsafe startup returns no partial candidate');
+      && rejected.seed===null && rejected.contour===null,`unsafe startup returns no partial candidate: ${name}; ok=${rejected.ok}; errors=${rejected.errors.join(' | ')}`);
   }
 }
 console.log('010-F3 stock entry and bounded bootstrap: PASS');
