@@ -112,8 +112,11 @@ function assessGeneratedReference(
     const motions = reference.segments.slice(offset, offset + (cycle === 0 ? 2 : 3));
     const exposure = boundMaterialExposureOutsideSeed(disk, motions, cutterRadiusMm,
       targetDepthMm, allowedExposedAngleDeg);
-    if (!exposure.ok || exposure.maxExposedAngleDeg === null)
-      return fail(`${exposure.errors.join(' ')} Zyklus ${cycle + 1}, Segment ${(exposure.firstLimitExceededSegmentIndex ?? exposure.limitingSegmentIndex ?? 0) + 1}, Maximum ${exposure.maxExposedAngleDeg === null ? 'unbekannt' : exposure.maxExposedAngleDeg.toFixed(6) + '°'}.`, cycle);
+    if (!exposure.ok || exposure.maxExposedAngleDeg === null) {
+      const loopArc=motions.findLast(m=>m.kind==='arc');
+      const separation=loopArc?.kind==='arc'?Math.hypot(loopArc.center.x-disk.center.x,loopArc.center.y-disk.center.y):NaN;
+      return fail(`${exposure.errors.join(' ')} Zyklus ${cycle + 1}, Segment ${(exposure.firstLimitExceededSegmentIndex ?? exposure.limitingSegmentIndex ?? 0) + 1}, Maximum ${exposure.maxExposedAngleDeg === null ? 'unbekannt' : exposure.maxExposedAngleDeg.toFixed(6) + '°'}; alte Scheibe R=${disk.radiusMm.toFixed(6)}, Schleife R=${loopArc?.kind==='arc'?loopArc.radius.toFixed(6):'?'}, Mittelpunktabstand=${Number.isFinite(separation)?separation.toFixed(6):'?'}.`, cycle);
+    }
     const arc = motions[motions.length - 1];
     if (arc.kind !== 'arc') return fail('Vollständige Referenzschleife fehlt.', cycle);
     // A full circular sweep covers radii [max(0,r-R), r+R]. The previous
