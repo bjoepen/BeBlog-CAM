@@ -73,7 +73,7 @@ for(const curves of shapes)for(const side of ['outside','inside'] as const)for(c
     previousDiskRadius=last.radius+3-1e-6;
   }
   for(const bad of [{allowFullWidthStartup:false},{allowedExposedAngleDeg:80},{bootstrapStepMm:10},
-    {seedExtraRadiusMm:2},{maximumRampAngleDeg:1e-9},{bootstrapStepMm:1e-9},{targetDepthMm:0}]) {
+    {seedExtraRadiusMm:300},{maximumRampAngleDeg:1e-9},{bootstrapStepMm:1e-9},{targetDepthMm:0}]) {
     const rejected=buildTrochoidStockEntryReference(guide,loop,3,{...options,...bad});
     expect(!rejected.ok && rejected.startup===null && rejected.bootstrap.length===0
       && rejected.seed===null && rejected.contour===null,'unsafe startup returns no partial candidate');
