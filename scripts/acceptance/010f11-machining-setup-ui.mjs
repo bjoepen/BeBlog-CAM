@@ -4,6 +4,8 @@ const expect=(ok,message)=>{if(!ok)throw new Error(message)};
 for(const token of [
   'updateSpoilboardThickness','value={spoilboardThicknessMm}','spoilboardThicknessMm=value',
   "operation.kind==='trochoidal-contour-roughing'","updateTrochoidal({contourId:id})",
+  "appendOperation('trochoidal-contour-roughing')","setOperationKind('trochoidal-contour-roughing')",
+  "kind==='trochoidal-contour-roughing')setOperation({...defaultTrochoidalContourContract",
   "updateTrochoidal({side:'outside'})","updateTrochoidal({side:'inside'})",
   "updateTrochoidal({direction:'climb'})","updateTrochoidal({direction:'conventional'})",
   "updateTrochoidalNumber('trochoidRadiusMm'","updateTrochoidalNumber('forwardStepMm'",
