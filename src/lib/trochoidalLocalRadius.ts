@@ -1,6 +1,7 @@
 import type { P2, SemanticSegment } from './contourMath';
 import type { TrochoidalContourGuide } from './trochoidalContourGuide';
 import { measureSemanticGuide, stationAtLength } from './trochoidalSemanticMath';
+import { buildSemanticTrochoid } from './trochoidalSemanticMath';
 import type { StraightTrochoidOptions } from './trochoidalStraightMath';
 
 export type LocalRadiusTrochoidResult =
@@ -15,8 +16,9 @@ const localRadius=(segment:SemanticSegment,requested:number,freeSide:'left'|'rig
  return bendsTowardFreeSide?Math.min(requested,segment.radius):requested;
 };
 
-/** E7 rectangle production geometry: requested radius on straights, reduced only
- * at stations whose native guide arc bends toward the free side. */
+/** E7 rectangle production geometry. forwardStepMm bounds the actual advance
+ * of consecutive loop centres. Curved guide segments are subdivided so their
+ * offset centre locus cannot advance farther than the requested step. */
 export function buildLocalRadiusTrochoid(
  guide:TrochoidalContourGuide,
  options:Omit<StraightTrochoidOptions,'freeSide'> & {freeSide:'left'|'right'},
@@ -26,23 +28,46 @@ export function buildLocalRadiusTrochoid(
  if(!measured.ok||!measured.metric.closed)return fail(measured.ok?'Lokale Trochoide benötigt eine geschlossene Führung.':measured.errors[0]);
  if(!Number.isFinite(options.radiusMm)||options.radiusMm<=0||!Number.isFinite(options.forwardStepMm)||options.forwardStepMm<=0)
    return fail('Radius und Fortschritt müssen endlich und positiv sein.');
- const metric=measured.metric,intervals=Math.ceil(metric.totalLengthMm/options.forwardStepMm),loopCount=intervals;
- if(loopCount<2||loopCount>MAX_LOOPS)return fail('Ungültige Anzahl lokaler Trochoidenschleifen.');
- const segments:SemanticSegment[]=[];let firstApex:P2|null=null,previousApex:P2|null=null;
- for(let i=0;i<loopCount;i++){
-   const station=stationAtLength(metric,i*options.forwardStepMm);if(!station)return fail('Lokale Führungsstation fehlt.');
-   const radius=localRadius(metric.segments[station.segmentIndex],options.radiusMm,options.freeSide);
+ const metric=measured.metric;
+ const distances:number[]=[0]; let traversed=0;
+ for(let i=0;i<metric.segments.length;i++){
+   const segment=metric.segments[i],length=metric.lengthsMm[i];
+   const radius=localRadius(segment,options.radiusMm,options.freeSide);
    if(radius<minimumRadiusMm)return fail('Lokaler Trochoidenradius unterschreitet den Mindestradius.');
+   let intervals:number;
+   if(segment.kind==='line') intervals=Math.max(1,Math.ceil(length/options.forwardStepMm));
+   else {
+     const bendsTowardFreeSide=segment.ccw?options.freeSide==='left':options.freeSide==='right';
+     const locusRadius=bendsTowardFreeSide?Math.abs(segment.radius-radius):segment.radius+radius;
+     if(locusRadius<=EPS) return fail('Schleifenmittelpunkt kollabiert auf dem Führungsbogen.');
+     const maxAngle=2*Math.asin(Math.min(1,options.forwardStepMm/(2*locusRadius)));
+     if(!Number.isFinite(maxAngle)||maxAngle<=0)return fail('Lokale Bogenunterteilung ist nicht bestimmbar.');
+     const sweep=length/segment.radius;
+     intervals=Math.max(1,Math.ceil(sweep/maxAngle));
+   }
+   for(let j=1;j<=intervals;j++){
+     const d=traversed+length*j/intervals;
+     if(d<metric.totalLengthMm-EPS)distances.push(d);
+   }
+   traversed+=length;
+ }
+ if(distances.length<2||distances.length>MAX_LOOPS)return fail('Ungültige Anzahl lokaler Trochoidenschleifen.');
+ const segments:SemanticSegment[]=[];let firstApex:P2|null=null,previousApex:P2|null=null,previousCenter:P2|null=null;
+ for(const d of distances){
+   const station=stationAtLength(metric,d);if(!station)return fail('Lokale Führungsstation fehlt.');
+   const radius=localRadius(metric.segments[station.segmentIndex],options.radiusMm,options.freeSide);
    if(options.forwardStepMm>2*radius)return fail('Fortschritt überschreitet den lokalen Schleifendurchmesser.');
    const sign=options.freeSide==='left'?1:-1,normal={x:-station.tangent.y*sign,y:station.tangent.x*sign};
    const shifted=(amount:number):P2=>({x:station.point.x+normal.x*amount,y:station.point.y+normal.y*amount});
    const touch=station.point,center=shifted(radius),apex=shifted(2*radius),ccw=options.loopDirection==='ccw';
+   if(previousCenter&&Math.hypot(center.x-previousCenter.x,center.y-previousCenter.y)>options.forwardStepMm+EPS)
+     return fail('Lokale Stationsfolge überschreitet den realen Schleifenmittelpunkt-Fortschritt.');
    if(previousApex)segments.push({kind:'line',start:previousApex,end:apex});
    segments.push({kind:'arc',start:apex,end:touch,center,radius,ccw},{kind:'arc',start:touch,end:apex,center,radius,ccw});
-   firstApex??=apex;previousApex=apex;
+   firstApex??=apex;previousApex=apex;previousCenter=center;
  }
  if(firstApex&&previousApex)segments.push({kind:'line',start:previousApex,end:firstApex});
- return{ok:true,segments,loopCount,errors:[]};
+ return{ok:true,segments,loopCount:distances.length,errors:[]};
 }
 
 export function buildProtectedTrochoidReference(
@@ -52,34 +77,7 @@ export function buildProtectedTrochoidReference(
  uniformRadiusMm:number
 ):LocalRadiusTrochoidResult{
  const rectangle=guide.source.length===4&&guide.segments.length===8&&guide.side==='outside';
- return rectangle
-   ? buildLocalRadiusTrochoid(guide,{...options,freeSide})
-   : buildUniformReference(guide,options,freeSide,uniformRadiusMm);
-}
-
-function buildUniformReference(
- guide:TrochoidalContourGuide,
- options:Omit<StraightTrochoidOptions,'freeSide'>,
- freeSide:'left'|'right',
- radiusMm:number
-):LocalRadiusTrochoidResult{
- const measured=measureSemanticGuide(guide.segments);
- if(!measured.ok)return fail(measured.errors[0]);
- const metric=measured.metric,intervals=Math.ceil(metric.totalLengthMm/options.forwardStepMm);
- const loopCount=metric.closed?intervals:intervals+1;
- if(metric.closed&&loopCount<2)return fail('Geschlossene Führung benötigt mindestens zwei getrennte Schleifenstationen.');
- if(loopCount>MAX_LOOPS)return fail('Zu viele Trochoidenschleifen.');
- const segments:SemanticSegment[]=[];let firstApex:P2|null=null,previousApex:P2|null=null;
- for(let i=0;i<loopCount;i++){
-  const station=stationAtLength(metric,metric.closed?i*options.forwardStepMm:i===intervals?metric.totalLengthMm:i*options.forwardStepMm);
-  if(!station)return fail('Bogenlängen-Station konnte nicht bestimmt werden.');
-  const sign=freeSide==='left'?1:-1,normal={x:-station.tangent.y*sign,y:station.tangent.x*sign};
-  const shifted=(amount:number):P2=>({x:station.point.x+normal.x*amount,y:station.point.y+normal.y*amount});
-  const touch=station.point,center=shifted(radiusMm),apex=shifted(2*radiusMm),ccw=options.loopDirection==='ccw';
-  if(previousApex)segments.push({kind:'line',start:previousApex,end:apex});
-  segments.push({kind:'arc',start:apex,end:touch,center,radius:radiusMm,ccw},{kind:'arc',start:touch,end:apex,center,radius:radiusMm,ccw});
-  firstApex??=apex;previousApex=apex;
- }
- if(metric.closed&&firstApex&&previousApex)segments.push({kind:'line',start:previousApex,end:firstApex});
- return{ok:true,segments,loopCount,errors:[]};
+ if(rectangle)return buildLocalRadiusTrochoid(guide,{...options,freeSide});
+ const reference=buildSemanticTrochoid(guide.segments,{...options,radiusMm:uniformRadiusMm,freeSide});
+ return reference.ok?{ok:true,segments:reference.segments,loopCount:reference.loopCount,errors:[]}:fail(reference.errors.join(' '));
 }
