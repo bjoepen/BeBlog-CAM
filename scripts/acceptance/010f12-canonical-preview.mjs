@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 const view=fs.readFileSync('src/lib/GeometryView.svelte','utf8');
 const app=fs.readFileSync('src/App.svelte','utf8');
+const active=fs.readFileSync('src/lib/activeCanonicalToolpath.ts','utf8');
 const expect=(ok,message)=>{if(!ok)throw new Error(message)};
 expect(app.includes("canonicalToolpath={activeStep==='Bearbeiten'?activeCanonicalToolpath:null}"),'Bearbeiten must pass active canonical toolpath to GeometryView');
-expect(app.includes("if(operation.kind==='trochoidal-contour-roughing'){")&&app.includes("buildTrochoidalContourOperationState"),'active canonical builder must use trochoidal production state');
+expect(active.includes("if(operation.kind==='trochoidal-contour-roughing'){")&&active.includes("buildTrochoidalContourOperationState({summary,stock,stockMode,placement,orientation,wcs,operation})"),'active canonical builder must use trochoidal production state');
 expect(view.includes("const motionAuthoritative=previewMode!=='job-top'&&renderToolpaths.some(toolpath=>(toolpath.motions?.length??0)>0);"),'edit preview must detect authoritative machine motions without suppressing total-job runs');
 expect(view.includes("const previewMode:DxfPreviewMode=jobToolpaths.length?'job-top'"),'total-job preview must retain its dedicated mode');
 expect(view.includes("const canonicalRuns=motionAuthoritative?[]:"),'run geometry must not duplicate authoritative motions');
