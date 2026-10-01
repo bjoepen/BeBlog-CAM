@@ -7,6 +7,7 @@ import { assessTrochoidalGuideEligibility } from './trochoidalGuideEligibility';
 import { buildSemanticTrochoid } from './trochoidalSemanticMath';
 import { proveTrochoidalCircleGuideBoundary, radialBoundsForNativeSegment } from './trochoidalCircularBoundary';
 import { proveTrochoidalCapsuleGuideBoundary } from './trochoidalCapsuleBoundary';
+import { proveTrochoidalRectangleGuideBoundary } from './trochoidalRectangleBoundary';
 
 export type SequentialMaterialResult =
   | { ok: true; segments: SemanticSegment[]; loopCount: number; cycleExposureBoundsDeg: number[];
@@ -78,6 +79,23 @@ export function assessCapsuleTrochoidSequentialMaterial(
   const boundary = proveTrochoidalCapsuleGuideBoundary(guide, reference.segments);
   if (!boundary.ok) return fail(boundary.errors.join(' '));
   return assessGeneratedReference(reference, true, initialDisk, cutterRadiusMm, targetDepthMm, allowedExposedAngleDeg);
+}
+
+/** E7B: exact rounded-rectangle outside guide with the same ordered material proof. */
+export function assessRectangleTrochoidSequentialMaterial(
+  guide: TrochoidalContourGuide, options: Omit<StraightTrochoidOptions,'freeSide'>,
+  initialDisk: AssumedClearedDisk, cutterRadiusMm:number,targetDepthMm:number,allowedExposedAngleDeg:number
+):SequentialMaterialResult{
+  if(!options)return fail('Schleifenparameter fehlen.');
+  const binding=proveTrochoidalRectangleGuideBoundary(guide,guide?.segments??[]);
+  if(!binding.ok)return fail(binding.errors.join(' '));
+  const eligible=assessTrochoidalGuideEligibility(guide,options.radiusMm,options.forwardStepMm);
+  if(!eligible.ok)return fail(eligible.errors.join(' '));
+  const reference=buildSemanticTrochoid(guide.segments,{...options,radiusMm:eligible.uniformRadiusMm,freeSide:eligible.freeSide});
+  if(!reference.ok)return fail(reference.errors.join(' '));
+  const boundary=proveTrochoidalRectangleGuideBoundary(guide,reference.segments);
+  if(!boundary.ok)return fail(boundary.errors.join(' '));
+  return assessGeneratedReference(reference,true,initialDisk,cutterRadiusMm,targetDepthMm,allowedExposedAngleDeg);
 }
 
 // Private: only internal generators may supply complete loops.
