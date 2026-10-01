@@ -137,7 +137,8 @@
     "check:010f9": "node scripts/check-010f9-spoilboard-clearance.mjs",
     "check:010f10": "node scripts/check-010f10-physical-cut-direction.mjs",
     "check:010f11": "node scripts/acceptance/010f11-machining-setup-ui.mjs",
-    "check:010f12": "node scripts/acceptance/010f12-canonical-preview.mjs",\n    "check:010f13": "node scripts/check-010f13-trochoidal-nc-release.mjs"
+    "check:010f12": "node scripts/acceptance/010f12-canonical-preview.mjs",
+    "check:010f13": "node scripts/check-010f13-trochoidal-nc-release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
