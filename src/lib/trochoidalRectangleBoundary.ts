@@ -59,9 +59,23 @@ function segmentDistanceToRectangle(s:SemanticSegment,lines:Extract<SemanticSegm
   if(pointInsideRectangle(s.start,lines)||pointInsideRectangle(s.end,lines))return 0;
   return Math.min(...lines.map(edge=>s.kind==='line'?segmentSegment(s.start,s.end,edge.start,edge.end):arcSegment(s,edge.start,edge.end)));
 }
-function sameSegment(a:SemanticSegment,b:SemanticSegment){
+function sameDirectedSegment(a:SemanticSegment,b:SemanticSegment){
   if(a.kind!==b.kind||dist(a.start,b.start)>EPS||dist(a.end,b.end)>EPS)return false;
   return a.kind==='line'||(b.kind==='arc'&&dist(a.center,b.center)<=EPS&&Math.abs(a.radius-b.radius)<=EPS&&a.ccw===b.ccw);
+}
+function reverseSegment(s:SemanticSegment):SemanticSegment{
+  return s.kind==='line'?{kind:'line',start:s.end,end:s.start}
+    :{kind:'arc',start:s.end,end:s.start,center:s.center,radius:s.radius,ccw:!s.ccw};
+}
+function sameClosedGuide(expected:SemanticSegment[],actual:SemanticSegment[]){
+  if(expected.length!==actual.length)return false;
+  const n=expected.length;
+  for(let shift=0;shift<n;shift++)
+    if(expected.every((s,i)=>sameDirectedSegment(s,actual[(i+shift)%n])))return true;
+  const reversed=[...expected].reverse().map(reverseSegment);
+  for(let shift=0;shift<n;shift++)
+    if(reversed.every((s,i)=>sameDirectedSegment(s,actual[(i+shift)%n])))return true;
+  return false;
 }
 
 export function rectanglePointClearanceMm(guide:TrochoidalContourGuide,p:P2):number|null{
@@ -77,8 +91,7 @@ export function proveTrochoidalRectangleGuideBoundary(guide:TrochoidalContourGui
   if(guide?.side!=='outside'||!Number.isFinite(guide.signedOffsetMm)||guide.signedOffsetMm<=EPS
     ||guide.source.length!==4||guide.source.some(s=>s.kind!=='line'))return fail('Keine gültige native Rechteck-Außenführung.');
   const expected=buildRoundedRectangleOutsideOffset(guide.source,guide.signedOffsetMm);
-  if(!expected||expected.segments.length!==guide.segments.length
-    ||expected.segments.some((s,i)=>!sameSegment(s,guide.segments[i])))
+  if(!expected||!sameClosedGuide(expected.segments,guide.segments))
     return fail('Rechteckführung ist nicht an den exakten tangentialen Außenoffset gebunden.');
   if(!Array.isArray(path)||!path.length)return fail('Kandidatenbahn fehlt.');
   const lines=guide.source as Extract<SemanticSegment,{kind:'line'}>[];
