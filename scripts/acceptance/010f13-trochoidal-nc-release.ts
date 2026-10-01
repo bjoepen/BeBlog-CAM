@@ -24,6 +24,10 @@ expect(motions[0].kind==='rapid3'&&Math.abs(motions[0].start.z-operation.safeZMm
 expect(motions.some(m=>m.kind==='rapid3'),'canonical chain contains rapid safety moves');
 expect(motions.some(m=>m.kind==='line3'&&Math.abs(m.start.z-m.end.z)>1e-9),'canonical chain contains spatial pendulum ramp moves');
 expect(motions.some(m=>m.kind==='arc3'),'canonical chain contains trochoidal arcs');
+const rampMotions=motions.filter(m=>m.kind!=='rapid3'&&Math.abs(m.start.z-m.end.z)>1e-9);
+const planarCutMotions=motions.filter(m=>m.kind!=='rapid3'&&Math.abs(m.start.z-m.end.z)<=1e-9);
+expect(rampMotions.length>0&&rampMotions.every(m=>(m.feedMmMin??operation.plungeMmMin)===operation.plungeMmMin),'all spatial ramp motions retain plunge/ramp feed');
+expect(planarCutMotions.length>0&&planarCutMotions.every(m=>(m.feedMmMin??operation.feedMmMin)===operation.feedMmMin),'all planar cutting motions retain cutting feed');
 const minZ=Math.min(...motions.flatMap(m=>[m.start.z,m.end.z]));
 expect(Math.abs(minZ+6.3)<1e-9,'stock-bottom plus overcut reaches exactly Z-6.300');
 const result=generateJobGcode({...args,preflight});
@@ -33,6 +37,8 @@ expect(result.code.includes('( BeBlog CAM 004T )'),'NC declares canonical 004T a
 expect(result.code.includes('M3 S9000'),'spindle command retained');
 expect(result.code.includes('G0 '),'NC contains rapid safety moves');
 expect(result.code.includes('G1 '),'NC contains linear feed/ramp moves');
+expect(result.code.includes('F180.000'),'NC retains ramp/plunge feed');
+expect(result.code.includes('F500.000'),'NC retains planar cutting feed');
 expect(result.code.includes('G2 ')||result.code.includes('G3 '),'NC contains canonical arcs');
 expect(result.code.includes('Z-6.300'),'NC contains exact overcut depth');
 expect(result.code.trimEnd().endsWith('M30'),'NC terminates with M30');
