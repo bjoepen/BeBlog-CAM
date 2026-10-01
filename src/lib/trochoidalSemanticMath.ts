@@ -106,6 +106,7 @@ export function buildSemanticTrochoid(guide: SemanticSegment[], options: Straigh
   if (step > 2 * radius) return fail('Fortschritt überschreitet den Schleifendurchmesser.');
   if (freeSide !== 'left' && freeSide !== 'right') return fail('Ungültige Freiseite.');
   if (loopDirection !== 'cw' && loopDirection !== 'ccw') return fail('Ungültige Schleifenrichtung.');
+  const metric = measured.metric;
   const sign = freeSide === 'left' ? 1 : -1;
   // The apex runs at twice the loop radius from the guide. On a curved guide
   // its arclength can therefore advance faster than the guide itself. Build
