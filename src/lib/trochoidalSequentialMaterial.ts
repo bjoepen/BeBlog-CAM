@@ -113,7 +113,8 @@ function assessGeneratedReference(
     const exposure = boundMaterialExposureOutsideSeed(disk, motions, cutterRadiusMm,
       targetDepthMm, allowedExposedAngleDeg);
     if (!exposure.ok || exposure.maxExposedAngleDeg === null) {
-      const loopArc=motions.findLast(m=>m.kind==='arc');
+      let loopArc: SemanticSegment | undefined;
+      for(let i=motions.length-1;i>=0;i--) if(motions[i].kind==='arc'){ loopArc=motions[i]; break; }
       const separation=loopArc?.kind==='arc'?Math.hypot(loopArc.center.x-disk.center.x,loopArc.center.y-disk.center.y):NaN;
       return fail(`${exposure.errors.join(' ')} Zyklus ${cycle + 1}, Segment ${(exposure.firstLimitExceededSegmentIndex ?? exposure.limitingSegmentIndex ?? 0) + 1}, Maximum ${exposure.maxExposedAngleDeg === null ? 'unbekannt' : exposure.maxExposedAngleDeg.toFixed(6) + '°'}; alte Scheibe R=${disk.radiusMm.toFixed(6)}, Schleife R=${loopArc?.kind==='arc'?loopArc.radius.toFixed(6):'?'}, Mittelpunktabstand=${Number.isFinite(separation)?separation.toFixed(6):'?'}.`, cycle);
     }
