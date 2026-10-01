@@ -178,6 +178,11 @@
       return{kind:'pocket' as const,chains:cs.map(c=>({...c,screen:c.points.map(map),selected:selectedIds.has(c.id)})),selected:selected?selected.points.map(map):null,toolRuns,entryRuns,spatialEntry:entryRuns.length>0,entryKind:operation.entry};
     }
 
+    if(operation.kind==='trochoidal-contour-roughing'){
+      const selectedId=operation.contourId;
+      return{kind:'trochoid' as const,closed:cs.map(c=>({...c,screen:c.points.map(map),selected:c.id===selectedId}))};
+    }
+
     if(operation.kind!=='contour')return null;
 
     const selectedClosed=operation.topology==='closed'&&operation.contourId!=null?cs.find(c=>c.id===operation.contourId)??null:null;
