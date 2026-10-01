@@ -32,7 +32,16 @@ for(const curves of shapes)for(const side of ['outside','inside'] as const)for(c
     const z=-level.depthMm;
     const arcs=level.motions.filter(m=>m.kind==='arc3');
     expect(arcs.length>0,'native canonical arcs exist');
-    expect(arcs.every(a=>a.start.z===z&&a.end.z===z),'all canonical arcs stay at level depth');
+    const helicalArcs=arcs.filter(a=>a.start.z!==a.end.z);
+    const planarArcs=arcs.filter(a=>a.start.z===a.end.z);
+    expect(helicalArcs.length>=2,'canonical helical entry arcs exist');
+    expect(helicalArcs[0].start.z===0&&helicalArcs.at(-1)!.end.z===z,'helical entry spans surface to exact level depth');
+    expect(helicalArcs.every(a=>a.start.z> a.end.z&&a.start.z<=0&&a.end.z>=z),'helical entry descends monotonically within level bounds');
+    for(let i=1;i<helicalArcs.length;i++)expect(same(helicalArcs[i-1].end,helicalArcs[i].start),'helical arc chain is XYZ-continuous');
+    expect(planarArcs.length>0&&planarArcs.every(a=>a.start.z===z&&a.end.z===z),'planar canonical arcs stay at level depth');
+    const firstPlanarArc=level.motions.findIndex(m=>m.kind==='arc3'&&m.start.z===z&&m.end.z===z);
+    const lastHelicalArc=level.motions.reduce((last,m,index)=>m.kind==='arc3'&&m.start.z!==m.end.z?index:last,-1);
+    expect(lastHelicalArc>=0&&firstPlanarArc===lastHelicalArc+1,'completed target-depth seed circle immediately follows helix');
     const rapids=level.motions.filter(m=>m.kind==='rapid3');
     expect(rapids.every(m=>m.start.z===base.safeZMm&&m.end.z===base.safeZMm),'rapid3 only at safe Z');
     expect(level.motions.at(-1)?.end.z===base.safeZMm,'each level ends retracted');
