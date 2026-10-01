@@ -80,10 +80,12 @@ export function buildProtectedTrochoidReference(
  guide:TrochoidalContourGuide,
  options:Omit<StraightTrochoidOptions,'freeSide'>,
  freeSide:'left'|'right',
- uniformRadiusMm:number
+ uniformRadiusMm:number,
+ cutterRadiusMm?:number,
+ allowedExposedAngleDeg?:number
 ):LocalRadiusTrochoidResult{
  const rectangle=guide.source.length===4&&guide.segments.length===8&&guide.side==='outside';
- if(rectangle)return buildLocalRadiusTrochoid(guide,{...options,freeSide});
+ if(rectangle)return buildLocalRadiusTrochoid(guide,{...options,freeSide},.25,cutterRadiusMm,allowedExposedAngleDeg);
  const reference=buildSemanticTrochoid(guide.segments,{...options,radiusMm:uniformRadiusMm,freeSide});
  return reference.ok?{ok:true,segments:reference.segments,loopCount:reference.loopCount,errors:[]}:fail(reference.errors.join(' '));
 }
