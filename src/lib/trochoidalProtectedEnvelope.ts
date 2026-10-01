@@ -4,8 +4,9 @@ import type { AssumedClearedDisk } from './trochoidalSeedClearance';
 import type { StraightTrochoidOptions } from './trochoidalStraightMath';
 import { proveTrochoidalCircleGuideBoundary, radialBoundsForNativeSegment } from './trochoidalCircularBoundary';
 import { proveTrochoidalCapsuleGuideBoundary, capsuleDiskPartClearanceMm } from './trochoidalCapsuleBoundary';
+import { proveTrochoidalRectangleGuideBoundary, rectanglePointClearanceMm } from './trochoidalRectangleBoundary';
 import { assessCircularTrochoidSequentialMaterial, assessCapsuleTrochoidSequentialMaterial,
-  type SequentialMaterialResult } from './trochoidalSequentialMaterial';
+  assessRectangleTrochoidSequentialMaterial, type SequentialMaterialResult } from './trochoidalSequentialMaterial';
 
 export type ProtectedEnvelopeProof = {
   ok: boolean; minimumPartClearanceMm: number | null; errors: string[];
@@ -48,11 +49,16 @@ export function proveTrochoidalProtectedEnvelope(
     const d=Math.hypot(initialDisk.center.x-source.center.x,initialDisk.center.y-source.center.y);
     seedClearance=guide.side==='outside'?d-initialDisk.radiusMm-source.radius
       :source.radius-d-initialDisk.radiusMm;
-  } else if (guide.source.length === 4) {
+  } else if (guide.source.length === 4 && guide.segments.length === 4) {
     const proof=proveTrochoidalCapsuleGuideBoundary(guide,path);
     if(!proof.ok) return fail(proof.errors.join(' '));
     seedClearance=capsuleDiskPartClearanceMm(guide,initialDisk);
-  } else return fail('Werkzeughüllenschutz unterstützt nur native Kreis- und Kapselquellen.');
+  } else if (guide.source.length === 4 && guide.segments.length === 8 && guide.side==='outside') {
+    const proof=proveTrochoidalRectangleGuideBoundary(guide,path);
+    if(!proof.ok) return fail(proof.errors.join(' '));
+    const pointClearance=rectanglePointClearanceMm(guide,initialDisk.center);
+    seedClearance=pointClearance===null?null:pointClearance-initialDisk.radiusMm;
+  } else return fail('Werkzeughüllenschutz unterstützt nur native Kreis-, Kapsel- und Rechteck-Außenquellen.');
   // For these convex parallel offsets, every centre on the allowed guide
   // side has source clearance >= |offset|. Subtract the cutter radius.
   const cutterClearance=Math.abs(guide.signedOffsetMm)-cutterRadiusMm;
@@ -74,8 +80,9 @@ export function assessProtectedTrochoidSequentialMaterial(
 ):ProtectedSequentialResult {
   const fail=(errors:string[]):ProtectedSequentialResult=>({ok:false,material:null,minimumPartClearanceMm:null,errors});
   const assessor=guide?.source?.length===2?assessCircularTrochoidSequentialMaterial
-    :guide?.source?.length===4?assessCapsuleTrochoidSequentialMaterial:null;
-  if(!assessor) return fail(['Native Kreis- oder Kapselführung fehlt.']);
+    :guide?.source?.length===4&&guide?.segments?.length===4?assessCapsuleTrochoidSequentialMaterial
+    :guide?.source?.length===4&&guide?.segments?.length===8&&guide.side==='outside'?assessRectangleTrochoidSequentialMaterial:null;
+  if(!assessor) return fail(['Native Kreis-, Kapsel- oder Rechteck-Außenführung fehlt.']);
   const material=assessor(guide,options,initialDisk,cutterRadiusMm,targetDepthMm,allowedExposedAngleDeg);
   if(!material.ok) return fail(material.errors);
   const protection=proveTrochoidalProtectedEnvelope(guide,material.segments,cutterRadiusMm,initialDisk);
