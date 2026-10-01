@@ -15,7 +15,8 @@ export type SeedRampResult =
 const RESERVE_MM=1e-5;
 const MAX_LEGS=2048;
 
-/** Linear pendulum ramp inside an assumed already-cleared cylinder. No stock removal credit. */
+/** Circular ramp inside an assumed protected cylinder. No stock-removal credit.
+ * The endpoint defines the ramp radius and the ramp ends exactly at endpoint. */
 export function buildAssumedSeedRamp(
   disk:AssumedClearedDisk, endpoint:P2, cutterRadiusMm:number, options:SeedRampOptions
 ):SeedRampResult {
@@ -29,38 +30,38 @@ export function buildAssumedSeedRamp(
     || options.maximumAngleDeg>15 || options.feedMmMin<=0)
     return fail('Rampendaten oder angenommene Tiefenfreigabe sind ungültig.');
   const dx=endpoint.x-disk.center.x,dy=endpoint.y-disk.center.y;
-  const radial=Math.hypot(dx,dy),legLength=2*radial;
-  if(!Number.isFinite(legLength) || legLength<=RESERVE_MM
-    || disk.radiusMm-radial-cutterRadiusMm<RESERVE_MM)
-    return fail('Rampenendpunkt bietet keine belastbare Pendelstrecke innerhalb der Startzone.');
-  const opposite={x:disk.center.x-dx,y:disk.center.y-dy};
+  const radius=Math.hypot(dx,dy);
+  if(!Number.isFinite(radius)||radius<=RESERVE_MM||disk.radiusMm-radius-cutterRadiusMm<RESERVE_MM)
+    return fail('Rampenendpunkt bietet keinen belastbaren Kreis innerhalb der Startzone.');
   const drop=options.targetDepthMm-options.startDepthMm;
   const requiredLength=drop/Math.tan(options.maximumAngleDeg*Math.PI/180);
-  const legCount=2*Math.ceil(requiredLength/(2*legLength)*(1+64*Number.EPSILON));
-  const xyLengthMm=legCount*legLength;
+  const circumference=2*Math.PI*radius;
+  const turns=Math.max(1,Math.ceil(requiredLength/circumference*(1+64*Number.EPSILON)));
+  const xyLengthMm=turns*circumference;
   const actualAngleDeg=Math.atan2(drop,xyLengthMm)*180/Math.PI;
-  const scale=Math.max(disk.radiusMm,cutterRadiusMm,options.targetDepthMm,
-    Math.abs(disk.center.x),Math.abs(disk.center.y),Math.abs(endpoint.x),Math.abs(endpoint.y),
-    Math.abs(opposite.x),Math.abs(opposite.y));
-  if(!Number.isFinite(requiredLength) || !Number.isFinite(xyLengthMm) || !Number.isInteger(legCount)
-    || legCount<2 || legCount>MAX_LEGS || actualAngleDeg>options.maximumAngleDeg
-    || 64*Number.EPSILON*scale>1e-7)
-    return fail('Rampe überschreitet Winkel-, Segment- oder numerisches Reservebudget.');
-  const planar:SemanticSegment[]=[],segments:CanonicalSpatialSegment[]=[];
-  for(let i=0;i<legCount;i++) {
-    const start=i%2===0?endpoint:opposite,end=i%2===0?opposite:endpoint;
-    const z0=-(options.startDepthMm+drop*i/legCount);
-    const z1=i===legCount-1?-options.targetDepthMm:-(options.startDepthMm+drop*(i+1)/legCount);
-    // Check emitted moves too: depth subtraction must not erase a tiny drop.
-    const angle=Math.atan2(z0-z1,Math.hypot(end.x-start.x,end.y-start.y))*180/Math.PI;
-    if(!(z1<z0) || angle>options.maximumAngleDeg)
-      return fail('Eine Rampenbewegung ist numerisch nicht strikt abwärts oder zu steil.');
-    planar.push({kind:'line',start:{...start},end:{...end}});
-    segments.push({kind:'line3',start:{...start,z:z0},end:{...end,z:z1},feedMmMin:options.feedMmMin});
+  if(!Number.isFinite(requiredLength)||!Number.isFinite(xyLengthMm)||!Number.isInteger(turns)
+    ||turns>MAX_LEGS||actualAngleDeg>options.maximumAngleDeg)
+    return fail('Kreisrampe überschreitet Winkel-, Umlauf- oder numerisches Reservebudget.');
+  const segments:CanonicalSpatialSegment[]=[];
+  const planar:SemanticSegment[]=[];
+  const ccw=true;
+  for(let turn=0;turn<turns;turn++){
+    const z0=-(options.startDepthMm+drop*turn/turns);
+    const zm=-(options.startDepthMm+drop*(turn+.5)/turns);
+    const z1=turn===turns-1?-options.targetDepthMm:-(options.startDepthMm+drop*(turn+1)/turns);
+    const opposite={x:disk.center.x-dx,y:disk.center.y-dy};
+    segments.push(
+      {kind:'arc3',start:{...endpoint,z:z0},end:{...opposite,z:zm},center:{...disk.center},radius,ccw,feedMmMin:options.feedMmMin},
+      {kind:'arc3',start:{...opposite,z:zm},end:{...endpoint,z:z1},center:{...disk.center},radius,ccw,feedMmMin:options.feedMmMin}
+    );
+    planar.push(
+      {kind:'arc',start:{...endpoint},end:{...opposite},center:{...disk.center},radius,ccw},
+      {kind:'arc',start:{...opposite},end:{...endpoint},center:{...disk.center},radius,ccw}
+    );
   }
   const clearance=proveAssumedSeedClearance(disk,planar,cutterRadiusMm,options.targetDepthMm);
   if(!clearance.ok)return fail(clearance.errors.join(' '));
-  return{ok:true,segments,legCount,xyLengthMm,actualAngleDeg,errors:[]};
+  return{ok:true,segments,legCount:turns,xyLengthMm,actualAngleDeg,errors:[]};
 }
 
 export type ProtectedRampReferenceResult=
