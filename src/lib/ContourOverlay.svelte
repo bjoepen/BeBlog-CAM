@@ -262,6 +262,11 @@
         <line x1={hole.center.x} y1={hole.center.y-7} x2={hole.center.x} y2={hole.center.y+7} class:selected-drill={hole.selected} class="drill-center" />
         <circle cx={hole.center.x} cy={hole.center.y} r={Math.max(12,hole.r)} class="drill-pick" onclick={()=>onSelectDrillCurve(hole.id)}><title>{hole.selected?'Bohrung aus Auswahl entfernen':`Bohrung Ø ${hole.diameter.toFixed(3)} mm auswählen`}</title></circle>
       {/each}
+    {:else if scene.kind==='trochoid'}
+      {#each scene.closed as chain}
+        <path d={path(chain.screen,true)} class="candidate" class:selected={chain.selected} />
+        <path d={path(chain.screen,true)} class="pick" onclick={()=>chooseClosed(chain.id)}><title>{chain.selected?`Wirbelfräs-Kontur ${chain.id+1} gewählt`:`Geschlossene Kontur ${chain.id+1} für Wirbelfräsen wählen`}</title></path>
+      {/each}
     {:else if scene.kind==='pocket'}
       {#each scene.chains as chain}
         <path d={path(chain.screen,true)} class="candidate" class:selected={chain.selected} />
