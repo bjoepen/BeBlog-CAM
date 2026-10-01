@@ -28,6 +28,11 @@ const rectangleSummary:ImportSummary={kind:'dxf',fileName:'e7-rectangle.dxf',bac
 const rectangleOp={...smallTool,id:'e7-rectangle',side:'outside' as const};
 const rectangleState=buildTrochoidalContourOperationState({summary:rectangleSummary,stock,stockMode:'manual',placement,orientation,wcs,operation:rectangleOp});
 expect(rectangleState.ok,'E7 outside rectangle must pass the protected production path: '+rectangleState.errors.join(' '));
+const defaultSixMmRectangle={...rectangleOp,id:'e8a-rectangle-default',trochoidRadiusMm:4,forwardStepMm:2,
+  tool:{...rectangleOp.tool,diameterMm:6,shaftDiameterMm:6,cuttingLengthMm:15}};
+const defaultSixMmState=buildTrochoidalContourOperationState({summary:rectangleSummary,stock,stockMode:'manual',placement,orientation,wcs,
+  operation:defaultSixMmRectangle});
+expect(defaultSixMmState.ok,'E8A Ø6/R4/step2 rectangle must auto-subdivide below the 140 degree material limit: '+defaultSixMmState.errors.join(' '));
 const rectangleGuide=buildTrochoidalContourGuide(rectangleSummary.planarGeometry!.curves,rectangleOp);
 expect(rectangleGuide.ok,'E7 rectangle guide must be constructible');
 if(rectangleGuide.ok){

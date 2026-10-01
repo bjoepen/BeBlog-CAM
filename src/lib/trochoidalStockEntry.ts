@@ -44,7 +44,8 @@ export function buildTrochoidStockEntryReference(
     return fail('Startnut- und Bootstrap-Parameter sind ungültig.');
   const eligible=assessTrochoidalGuideEligibility(guide,loop.radiusMm,loop.forwardStepMm);
   if(!eligible.ok)return fail(eligible.errors.join(' '));
-  const target=buildProtectedTrochoidReference(guide,loop,eligible.freeSide,eligible.uniformRadiusMm);
+  const target=buildProtectedTrochoidReference(guide,loop,eligible.freeSide,eligible.uniformRadiusMm,
+    cutterRadiusMm,options.allowedExposedAngleDeg);
   if(!target.ok || target.segments[0]?.kind!=='arc')return fail('Native Konturreferenz fehlt.');
   const first=target.segments[0],center={...first.center};
   const unit={x:(first.start.x-center.x)/first.radius,y:(first.start.y-center.y)/first.radius};

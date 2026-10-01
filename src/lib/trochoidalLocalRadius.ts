@@ -3,6 +3,7 @@ import type { TrochoidalContourGuide } from './trochoidalContourGuide';
 import { measureSemanticGuide, stationAtLength } from './trochoidalSemanticMath';
 import { buildSemanticTrochoid } from './trochoidalSemanticMath';
 import type { StraightTrochoidOptions } from './trochoidalStraightMath';
+import { maximumLoopCentreAdvanceMm } from './trochoidalMaterialStep';
 
 export type LocalRadiusTrochoidResult =
  | {ok:true;segments:SemanticSegment[];loopCount:number;errors:[]}
@@ -22,25 +23,30 @@ const localRadius=(segment:SemanticSegment,requested:number,freeSide:'left'|'rig
 export function buildLocalRadiusTrochoid(
  guide:TrochoidalContourGuide,
  options:Omit<StraightTrochoidOptions,'freeSide'> & {freeSide:'left'|'right'},
- minimumRadiusMm=.25
+ minimumRadiusMm=.25,
+ cutterRadiusMm?:number,
+ allowedExposedAngleDeg?:number
 ):LocalRadiusTrochoidResult{
  const measured=measureSemanticGuide(guide.segments);
  if(!measured.ok||!measured.metric.closed)return fail(measured.ok?'Lokale Trochoide benötigt eine geschlossene Führung.':measured.errors[0]);
  if(!Number.isFinite(options.radiusMm)||options.radiusMm<=0||!Number.isFinite(options.forwardStepMm)||options.forwardStepMm<=0)
    return fail('Radius und Fortschritt müssen endlich und positiv sein.');
  const metric=measured.metric;
+ const materialStep=cutterRadiusMm!==undefined&&allowedExposedAngleDeg!==undefined
+   ?maximumLoopCentreAdvanceMm(options.radiusMm,cutterRadiusMm,allowedExposedAngleDeg):null;
+ const effectiveStep=materialStep===null?options.forwardStepMm:Math.min(options.forwardStepMm,materialStep);
  const distances:number[]=[0]; let traversed=0;
  for(let i=0;i<metric.segments.length;i++){
    const segment=metric.segments[i],length=metric.lengthsMm[i];
    const radius=localRadius(segment,options.radiusMm,options.freeSide);
    if(radius<minimumRadiusMm)return fail('Lokaler Trochoidenradius unterschreitet den Mindestradius.');
    let intervals:number;
-   if(segment.kind==='line') intervals=Math.max(1,Math.ceil(length/options.forwardStepMm));
+   if(segment.kind==='line') intervals=Math.max(1,Math.ceil(length/effectiveStep));
    else {
      const bendsTowardFreeSide=segment.ccw?options.freeSide==='left':options.freeSide==='right';
      const locusRadius=bendsTowardFreeSide?Math.abs(segment.radius-radius):segment.radius+radius;
      if(locusRadius<=EPS) return fail('Schleifenmittelpunkt kollabiert auf dem Führungsbogen.');
-     const maxAngle=2*Math.asin(Math.min(1,options.forwardStepMm/(2*locusRadius)));
+     const maxAngle=2*Math.asin(Math.min(1,effectiveStep/(2*locusRadius)));
      if(!Number.isFinite(maxAngle)||maxAngle<=0)return fail('Lokale Bogenunterteilung ist nicht bestimmbar.');
      const sweep=length/segment.radius;
      intervals=Math.max(1,Math.ceil(sweep/maxAngle));
@@ -60,7 +66,7 @@ export function buildLocalRadiusTrochoid(
    const sign=options.freeSide==='left'?1:-1,normal={x:-station.tangent.y*sign,y:station.tangent.x*sign};
    const shifted=(amount:number):P2=>({x:station.point.x+normal.x*amount,y:station.point.y+normal.y*amount});
    const touch=station.point,center=shifted(radius),apex=shifted(2*radius),ccw=options.loopDirection==='ccw';
-   if(previousCenter&&Math.hypot(center.x-previousCenter.x,center.y-previousCenter.y)>options.forwardStepMm+EPS)
+   if(previousCenter&&Math.hypot(center.x-previousCenter.x,center.y-previousCenter.y)>effectiveStep+EPS)
      return fail('Lokale Stationsfolge überschreitet den realen Schleifenmittelpunkt-Fortschritt.');
    if(previousApex)segments.push({kind:'line',start:previousApex,end:apex});
    segments.push({kind:'arc',start:apex,end:touch,center,radius,ccw},{kind:'arc',start:touch,end:apex,center,radius,ccw});
@@ -74,10 +80,12 @@ export function buildProtectedTrochoidReference(
  guide:TrochoidalContourGuide,
  options:Omit<StraightTrochoidOptions,'freeSide'>,
  freeSide:'left'|'right',
- uniformRadiusMm:number
+ uniformRadiusMm:number,
+ cutterRadiusMm?:number,
+ allowedExposedAngleDeg?:number
 ):LocalRadiusTrochoidResult{
  const rectangle=guide.source.length===4&&guide.segments.length===8&&guide.side==='outside';
- if(rectangle)return buildLocalRadiusTrochoid(guide,{...options,freeSide});
+ if(rectangle)return buildLocalRadiusTrochoid(guide,{...options,freeSide},.25,cutterRadiusMm,allowedExposedAngleDeg);
  const reference=buildSemanticTrochoid(guide.segments,{...options,radiusMm:uniformRadiusMm,freeSide});
  return reference.ok?{ok:true,segments:reference.segments,loopCount:reference.loopCount,errors:[]}:fail(reference.errors.join(' '));
 }
