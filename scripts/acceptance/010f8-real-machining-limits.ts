@@ -20,6 +20,15 @@ const smallTool={...op,depthMode:'manual' as const,totalDepthMm:3,overcutMm:0,st
   trochoidRadiusMm:2,forwardStepMm:.5,tool:{...op.tool,diameterMm:3,cuttingLengthMm:15,shaftDiameterMm:3}};
 const smallToolState=buildTrochoidalContourOperationState({summary,stock,stockMode:'manual',placement,orientation,wcs,operation:smallTool});
 expect(smallToolState.ok,'3 mm production cutter must retain the proven 140 degree exposure limit: '+smallToolState.errors.join(' '));
+const rectangleSummary:ImportSummary={kind:'dxf',fileName:'e7-rectangle.dxf',backend:'acceptance',status:'ready',
+  entities:{polyline:1},planarGeometry:{curves:[{kind:'polyline',closed:true,
+    points:[{x:15,y:15},{x:45,y:15},{x:45,y:35},{x:15,y:35}],bulges:[0,0,0,0]}]}};
+const rectangleOp={...smallTool,id:'e7-rectangle',side:'outside' as const};
+const rectangleState=buildTrochoidalContourOperationState({summary:rectangleSummary,stock,stockMode:'manual',placement,orientation,wcs,operation:rectangleOp});
+expect(rectangleState.ok,'E7 outside rectangle must pass the protected production path: '+rectangleState.errors.join(' '));
+const rectangleInside=buildTrochoidalContourOperationState({summary:rectangleSummary,stock,stockMode:'manual',placement,orientation,wcs,
+  operation:{...rectangleOp,side:'inside'}});
+expect(!rectangleInside.ok&&rectangleInside.toolpath===null,'E7 inside sharp-corner rectangle remains fail closed');
 const short={...op,tool:{...op.tool,cuttingLengthMm:12.2}};
 const rejectedShort=buildTrochoidalContourOperationState({summary,stock,stockMode:'manual',placement,orientation,wcs,operation:short});
 expect(!rejectedShort.ok&&rejectedShort.toolpath===null&&rejectedShort.errors.some(e=>e.includes('Schneidenlänge')),'short cutter fails closed');
