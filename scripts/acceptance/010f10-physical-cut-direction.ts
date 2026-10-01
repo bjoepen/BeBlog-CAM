@@ -3,11 +3,11 @@ import { resolveTrochoidalPhysicalDirection } from '../../src/lib/trochoidalPhys
 import { buildTrochoidalContourOperationState } from '../../src/lib/trochoidalOperationState';
 import { createOperation } from '../../src/lib/operationsProject';
 import type { ImportSummary, StockDefinition, PartPlacement, PartOrientation, WorkCoordinateSystem } from '../../src/lib/types';
-import type { TrochoidalContourContract } from '../../src/lib/trochoidalContourContract';
+import { defaultTrochoidalContourContract, type TrochoidalContourContract } from '../../src/lib/trochoidalContourContract';
 import type { Curve2 } from '../../src/lib/types';
 const expect=(ok:boolean,msg:string)=>{if(!ok)throw new Error(msg)};
 const circle:Curve2={kind:'circle',center:{x:0,y:0},radius:20};
-const op=(side:'inside'|'outside'):TrochoidalContourContract=>({id:'f10',kind:'trochoidal-contour-roughing',name:'F10',enabled:true,tool:{id:'t',name:'Endmill',diameterMm:4,kind:'end-mill',cuttingLengthMm:20},contourId:0,side,direction:'climb',trochoidRadiusMm:1.5,forwardStepMm:.5,radialAllowanceMm:0,depthMode:'manual',overcutMm:0,totalDepthMm:3,stepDownMm:1,feedMmMin:500,plungeMmMin:150,spindleRpm:12000,safeZMm:5,rampAngleDeg:3});
+const op=(side:'inside'|'outside'):TrochoidalContourContract=>({...defaultTrochoidalContourContract,id:'f10',name:'F10',tool:{...defaultTrochoidalContourContract.tool,id:'t',name:'Endmill',diameterMm:4,cuttingLengthMm:20},contourId:0,side,direction:'climb',trochoidRadiusMm:1.5,forwardStepMm:.5,radialAllowanceMm:0,axialAllowanceMm:0,depthMode:'manual',overcutMm:0,totalDepthMm:3,stepDownMm:1,feedMmMin:500,plungeMmMin:150,spindleRpm:12000,safeZMm:5,rampAngleDeg:3});
 const winding=(segments:any[])=>segments.reduce((a,s)=>a+(s.start.x*s.end.y-s.end.x*s.start.y)/2+(s.kind==='arc'?s.radius*s.radius*((()=>{let w=Math.atan2(s.end.y-s.center.y,s.end.x-s.center.x)-Math.atan2(s.start.y-s.center.y,s.start.x-s.center.x);if(s.ccw){while(w<=0)w+=Math.PI*2}else{while(w>=0)w-=Math.PI*2}return w-Math.sin(w)})())/2:0),0)>0?'ccw':'cw';
 for(const side of ['outside','inside'] as const){
   for(const direction of ['climb','conventional'] as const){
