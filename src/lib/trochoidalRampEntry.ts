@@ -10,8 +10,8 @@ export type SeedRampOptions = {
   startDepthMm: number; targetDepthMm: number; maximumAngleDeg: number; feedMmMin: number;
 };
 export type SeedRampResult =
-  | {ok:true; segments:CanonicalSpatialSegment[]; legCount:number; xyLengthMm:number; actualAngleDeg:number; errors:[]}
-  | {ok:false; segments:[]; legCount:0; xyLengthMm:0; actualAngleDeg:null; errors:string[]};
+  | {ok:true; segments:CanonicalSpatialSegment[]; turnCount:number; xyLengthMm:number; actualAngleDeg:number; errors:[]}
+  | {ok:false; segments:[]; turnCount:0; xyLengthMm:0; actualAngleDeg:null; errors:string[]};
 
 const RESERVE_MM=1e-5;
 const MAX_LEGS=2048;
@@ -21,7 +21,7 @@ const MAX_LEGS=2048;
 export function buildAssumedSeedRamp(
   disk:AssumedClearedDisk, endpoint:P2, cutterRadiusMm:number, options:SeedRampOptions
 ):SeedRampResult {
-  const fail=(error:string):SeedRampResult=>({ok:false,segments:[],legCount:0,xyLengthMm:0,actualAngleDeg:null,errors:[error]});
+  const fail=(error:string):SeedRampResult=>({ok:false,segments:[],turnCount:0,xyLengthMm:0,actualAngleDeg:null,errors:[error]});
   if(!disk?.center || !endpoint || !options
     || ![disk.center.x,disk.center.y,disk.radiusMm,disk.clearedToDepthMm,endpoint.x,endpoint.y,
       cutterRadiusMm,options.startDepthMm,options.targetDepthMm,options.maximumAngleDeg,options.feedMmMin].every(Number.isFinite)
@@ -69,7 +69,7 @@ export function buildAssumedSeedRamp(
   });
   const clearance=proveAssumedSeedClearance(disk,planar,cutterRadiusMm,options.targetDepthMm);
   if(!clearance.ok)return fail(clearance.errors.join(' '));
-  return{ok:true,segments:rotated,legCount:turns,xyLengthMm,actualAngleDeg,errors:[]};
+  return{ok:true,segments:rotated,turnCount:turns,xyLengthMm,actualAngleDeg,errors:[]};
 }
 
 export type ProtectedRampReferenceResult=
