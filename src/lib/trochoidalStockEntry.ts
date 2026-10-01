@@ -18,7 +18,7 @@ export type StockEntryOptions={
   seedExtraRadiusMm:number; bootstrapStepMm:number; allowedExposedAngleDeg:number;
 };
 export type StockEntryResult=
-  | {ok:true; startup:{fullWidth:true;segments:CanonicalSpatialSegment[];rampLegCount:number};
+  | {ok:true; startup:{fullWidth:true;segments:CanonicalSpatialSegment[];rampSegmentCount:number};
       bootstrap:SemanticSegment[]; bootstrapExposureBoundsDeg:number[]; seed:AssumedClearedDisk;
       bridge:SemanticSegment; bridgeExposureBoundDeg:number;
       contour:Extract<ProtectedSequentialResult,{ok:true}>;errors:[]}
@@ -105,7 +105,7 @@ export function buildTrochoidStockEntryReference(
   const contour=assessProtectedTrochoidSequentialMaterial(guide,loop,disk!,cutterRadiusMm,
     options.targetDepthMm,options.allowedExposedAngleDeg);
   if(!contour.ok)return fail(contour.errors.join(' '));
-  return {ok:true,startup:{fullWidth:true,segments:startup,rampLegCount:ramp.legCount},bootstrap,
+  return {ok:true,startup:{fullWidth:true,segments:startup,rampSegmentCount:ramp.segments.length},bootstrap,
     bootstrapExposureBoundsDeg:bounds,seed:disk!,bridge,bridgeExposureBoundDeg:bridgeProof.maxExposedAngleDeg,
     contour,errors:[]};
 }
