@@ -16,6 +16,10 @@ expect(depth.ok&&depth.targetDepthMm===12.3&&depth.workpieceBottomDepthMm===12&&
 const state=buildTrochoidalContourOperationState({summary,stock,stockMode:'manual',placement,orientation,wcs,operation:op});
 expect(state.ok,'through-cut state: '+state.errors.join(' '));
 if(state.ok)expect(JSON.stringify(state.toolpath.runs.map(r=>r.z))===JSON.stringify([-5,-10,-12.3]),'exact shortened final through-cut step');
+const smallTool={...op,depthMode:'manual' as const,totalDepthMm:3,overcutMm:0,stepDownMm:1,
+  trochoidRadiusMm:2,forwardStepMm:.5,tool:{...op.tool,diameterMm:3,cuttingLengthMm:15,shaftDiameterMm:3}};
+const smallToolState=buildTrochoidalContourOperationState({summary,stock,stockMode:'manual',placement,orientation,wcs,operation:smallTool});
+expect(smallToolState.ok,'3 mm production cutter must retain the proven 140 degree exposure limit: '+smallToolState.errors.join(' '));
 const short={...op,tool:{...op.tool,cuttingLengthMm:12.2}};
 const rejectedShort=buildTrochoidalContourOperationState({summary,stock,stockMode:'manual',placement,orientation,wcs,operation:short});
 expect(!rejectedShort.ok&&rejectedShort.toolpath===null&&rejectedShort.errors.some(e=>e.includes('Schneidenlänge')),'short cutter fails closed');
