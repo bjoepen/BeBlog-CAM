@@ -1,5 +1,6 @@
 import type { P2, SemanticSegment } from './contourMath';
 import type { CanonicalSpatialSegment } from './canonicalToolpath';
+import { buildCanonicalHelicalDescent } from './helicalMotion';
 import { proveAssumedSeedClearance, type AssumedClearedDisk } from './trochoidalSeedClearance';
 import { assessProtectedTrochoidSequentialMaterial, type ProtectedSequentialResult } from './trochoidalProtectedEnvelope';
 import type { TrochoidalContourGuide } from './trochoidalContourGuide';
@@ -42,26 +43,31 @@ export function buildAssumedSeedRamp(
   if(!Number.isFinite(requiredLength)||!Number.isFinite(xyLengthMm)||!Number.isInteger(turns)
     ||turns>MAX_LEGS||actualAngleDeg>options.maximumAngleDeg)
     return fail('Kreisrampe überschreitet Winkel-, Umlauf- oder numerisches Reservebudget.');
-  const segments:CanonicalSpatialSegment[]=[];
-  const planar:SemanticSegment[]=[];
-  const ccw=true;
-  for(let turn=0;turn<turns;turn++){
-    const z0=-(options.startDepthMm+drop*turn/turns);
-    const zm=-(options.startDepthMm+drop*(turn+.5)/turns);
-    const z1=turn===turns-1?-options.targetDepthMm:-(options.startDepthMm+drop*(turn+1)/turns);
-    const opposite={x:disk.center.x-dx,y:disk.center.y-dy};
-    segments.push(
-      {kind:'arc3',start:{...endpoint,z:z0},end:{...opposite,z:zm},center:{...disk.center},radius,ccw,feedMmMin:options.feedMmMin},
-      {kind:'arc3',start:{...opposite,z:zm},end:{...endpoint,z:z1},center:{...disk.center},radius,ccw,feedMmMin:options.feedMmMin}
-    );
-    planar.push(
-      {kind:'arc',start:{...endpoint},end:{...opposite},center:{...disk.center},radius,ccw},
-      {kind:'arc',start:{...opposite},end:{...endpoint},center:{...disk.center},radius,ccw}
-    );
-  }
+  const pitchMm=drop/turns;
+  const helix=buildCanonicalHelicalDescent({
+    centerX:disk.center.x,centerY:disk.center.y,radiusMm:radius,
+    startZ:-options.startDepthMm,targetZ:-options.targetDepthMm,pitchMm,feedMmMin:options.feedMmMin
+  });
+  if(!helix.ok||helix.turns!==turns)return fail(helix.error??'Kanonische Kreisrampe konnte nicht erzeugt werden.');
+  const segments=helix.segments;
+  // The shared primitive starts at centerX+radius. Rotate its XY geometry onto the
+  // requested endpoint while preserving centre, winding and Z.
+  const baseAngle=Math.atan2(dy,dx);
+  const rotate=(p:P2):P2=>{
+    const x=p.x-disk.center.x,y=p.y-disk.center.y,ca=Math.cos(baseAngle),sa=Math.sin(baseAngle);
+    return{x:disk.center.x+x*ca-y*sa,y:disk.center.y+x*sa+y*ca};
+  };
+  const rotated:CanonicalSpatialSegment[]=segments.map(segment=>{
+    if(segment.kind!=='arc3')throw new Error('Helixprimitive enthält unerwartetes Segment.');
+    return{...segment,start:{...rotate(segment.start),z:segment.start.z},end:{...rotate(segment.end),z:segment.end.z},center:{...disk.center}};
+  });
+  const planar:SemanticSegment[]=rotated.map(segment=>{
+    if(segment.kind!=='arc3')throw new Error('Helixprimitive enthält unerwartetes Segment.');
+    return{kind:'arc',start:{x:segment.start.x,y:segment.start.y},end:{x:segment.end.x,y:segment.end.y},center:{...disk.center},radius,ccw:segment.ccw};
+  });
   const clearance=proveAssumedSeedClearance(disk,planar,cutterRadiusMm,options.targetDepthMm);
   if(!clearance.ok)return fail(clearance.errors.join(' '));
-  return{ok:true,segments,legCount:turns,xyLengthMm,actualAngleDeg,errors:[]};
+  return{ok:true,segments:rotated,legCount:turns,xyLengthMm,actualAngleDeg,errors:[]};
 }
 
 export type ProtectedRampReferenceResult=
