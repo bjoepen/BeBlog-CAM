@@ -92,7 +92,8 @@ export function assessRectangleTrochoidSequentialMaterial(
   if(!binding.ok)return fail(binding.errors.join(' '));
   const eligible=assessTrochoidalGuideEligibility(guide,options.radiusMm,options.forwardStepMm);
   if(!eligible.ok)return fail(eligible.errors.join(' '));
-  const reference=buildLocalRadiusTrochoid(guide,{...options,radiusMm:options.radiusMm,freeSide:eligible.freeSide});
+  const reference=buildLocalRadiusTrochoid(guide,{...options,radiusMm:options.radiusMm,freeSide:eligible.freeSide},
+    .25,cutterRadiusMm,allowedExposedAngleDeg);
   if(!reference.ok)return fail(reference.errors.join(' '));
   const boundary=proveTrochoidalRectangleGuideBoundary(guide,reference.segments);
   if(!boundary.ok)return fail(boundary.errors.join(' '));
