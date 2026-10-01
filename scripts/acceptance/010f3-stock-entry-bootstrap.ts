@@ -23,12 +23,12 @@ for(const curves of shapes)for(const side of ['outside','inside'] as const)for(c
   const r=buildTrochoidStockEntryReference(guide,loop,3,options);
   expect(r.ok,`${side} stock entry: ${r.errors.join(' ')}`);
   if(!r.ok)continue;
-  expect(r.startup.fullWidth && r.startup.rampLegCount>=1,'startup full-width phase explicit');
+  expect(r.startup.fullWidth && r.startup.rampSegmentCount>=2,'startup full-width phase explicit');
   expect(r.startup.segments[0].start.z===0,'entry starts at stock surface');
   expect(r.bootstrapExposureBoundsDeg.every(a=>a<=140),'all bootstrap loops obey policy');
   expect(r.seed.radiusMm>=7.1-1e-9 && r.seed.clearedToDepthMm===1,'seed derived from completed circular startup/bootstrap');
   expect(JSON.stringify({guide,loop,options})===before,'inputs unchanged');
-  const seedArcs=r.startup.segments.slice(r.startup.rampLegCount*2);
+  const seedArcs=r.startup.segments.slice(r.startup.rampSegmentCount);
   expect(seedArcs.length===2 && seedArcs.every(s=>s.kind==='arc3'&&s.start.z===-1&&s.end.z===-1&&s.feedMmMin===120),
     'completed target-depth seed circle follows helix');
   const startupEnd=r.startup.segments.at(-1)!.end;
@@ -38,7 +38,7 @@ for(const curves of shapes)for(const side of ['outside','inside'] as const)for(c
     && JSON.stringify(r.bridge.end)===JSON.stringify(r.contour.material.segments[0].start),'continuous bootstrap bridge contour');
   for(const [i,s] of r.startup.segments.entries()) {
     if(i>0)expect(JSON.stringify(r.startup.segments[i-1].end)===JSON.stringify(s.start),'startup continuity');
-    if(i<r.startup.rampLegCount*2)expect(s.end.z<s.start.z && s.feedMmMin===180 && s.kind==='arc3','helix strictly descends');
+    if(i<r.startup.rampSegmentCount)expect(s.end.z<s.start.z && s.feedMmMin===180 && s.kind==='arc3','helix strictly descends');
     else expect(s.start.z===-1 && s.end.z===-1 && s.feedMmMin===120 && s.kind==='arc3','seed circle clears at target depth');
     if(s.kind!=='arc3')throw new Error('startup arc3');
     const radius=Math.hypot(s.start.x-s.center.x,s.start.y-s.center.y),a0=Math.atan2(s.start.y-s.center.y,s.start.x-s.center.x);
