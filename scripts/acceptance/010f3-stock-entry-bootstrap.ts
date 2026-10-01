@@ -23,29 +23,34 @@ for(const curves of shapes)for(const side of ['outside','inside'] as const)for(c
   const r=buildTrochoidStockEntryReference(guide,loop,3,options);
   expect(r.ok,`${side} stock entry: ${r.errors.join(' ')}`);
   if(!r.ok)continue;
-  expect(r.startup.fullWidth && r.startup.rampLegCount>=2,'startup full-width phase explicit');
+  expect(r.startup.fullWidth && r.startup.rampLegCount>=1,'startup full-width phase explicit');
   expect(r.startup.segments[0].start.z===0,'entry starts at stock surface');
   expect(r.bootstrapExposureBoundsDeg.every(a=>a<=140),'all bootstrap loops obey policy');
-  expect(Math.abs(r.seed.radiusMm-7.1)<1e-9 && r.seed.clearedToDepthMm===1,'seed derived from completed bootstrap');
+  expect(r.seed.radiusMm>=7.1-1e-9 && r.seed.clearedToDepthMm===1,'seed derived from completed circular startup/bootstrap');
   expect(JSON.stringify({guide,loop,options})===before,'inputs unchanged');
-  const end=r.startup.segments.at(-1)!.end,start=r.bootstrap[0].start;
-  expect(end.x===start.x && end.y===start.y && end.z===-1,'slot ends at bootstrap center');
-  expect(JSON.stringify(r.bootstrap.at(-1)!.end)===JSON.stringify(r.bridge.start)
+  const seedArcs=r.startup.segments.slice(r.startup.rampLegCount*2);
+  expect(seedArcs.length===2 && seedArcs.every(s=>s.kind==='arc3'&&s.start.z===-1&&s.end.z===-1&&s.feedMmMin===120),
+    'completed target-depth seed circle follows helix');
+  const startupEnd=r.startup.segments.at(-1)!.end;
+  const nextStart=r.bootstrap.length?r.bootstrap[0].start:r.bridge.start;
+  expect(startupEnd.x===nextStart.x && startupEnd.y===nextStart.y && startupEnd.z===-1,'seed circle joins bootstrap/bridge');
+  expect((!r.bootstrap.length || JSON.stringify(r.bootstrap.at(-1)!.end)===JSON.stringify(r.bridge.start))
     && JSON.stringify(r.bridge.end)===JSON.stringify(r.contour.material.segments[0].start),'continuous bootstrap bridge contour');
   for(const [i,s] of r.startup.segments.entries()) {
     if(i>0)expect(JSON.stringify(r.startup.segments[i-1].end)===JSON.stringify(s.start),'startup continuity');
-    if(i<r.startup.rampLegCount)expect(s.end.z<s.start.z && s.feedMmMin===180,'ramp strictly descends');
-    else expect(s.start.z===-1 && s.end.z===-1 && s.feedMmMin===120,'full chord clearing at target depth');
+    if(i<r.startup.rampLegCount*2)expect(s.end.z<s.start.z && s.feedMmMin===180 && s.kind==='arc3','helix strictly descends');
+    else expect(s.start.z===-1 && s.end.z===-1 && s.feedMmMin===120 && s.kind==='arc3','seed circle clears at target depth');
+    if(s.kind!=='arc3')throw new Error('startup arc3');
+    const radius=Math.hypot(s.start.x-s.center.x,s.start.y-s.center.y),a0=Math.atan2(s.start.y-s.center.y,s.start.x-s.center.x);
     for(let j=0;j<=16;j++)for(let k=0;k<128;k++) {
-      const t=j/16,a=2*Math.PI*k/128;
-      expect(sourceSafe(s.start.x+t*(s.end.x-s.start.x)+3*Math.cos(a),
-        s.start.y+t*(s.end.y-s.start.y)+3*Math.sin(a)),'startup cutter footprint protects source');
+      const t=j/16,a=a0+(s.ccw?1:-1)*Math.PI*t,b=2*Math.PI*k/128;
+      expect(sourceSafe(s.center.x+radius*Math.cos(a)+3*Math.cos(b),
+        s.center.y+radius*Math.sin(a)+3*Math.sin(b)),'startup cutter footprint protects source');
     }
   }
-  const flat=r.startup.segments[r.startup.rampLegCount];
   const cx=r.seed.center.x,cy=r.seed.center.y;
-  const vx=flat.start.x-flat.end.x,vy=flat.start.y-flat.end.y,L=Math.hypot(vx,vy),ux=vx/L,uy=vy/L;
-  let previousDiskRadius:number|null=null;
+  let previousDiskRadius=(seedArcs[0].kind==='arc3'?Math.hypot(seedArcs[0].start.x-seedArcs[0].center.x,
+    seedArcs[0].start.y-seedArcs[0].center.y):0)+3-1e-6;
   for(let cycle=0;cycle<r.bootstrapExposureBoundsDeg.length;cycle++) {
     const motions=r.bootstrap.slice(cycle*3,cycle*3+3),last=motions.at(-1)!;
     if(last.kind!=='arc')throw new Error('arc');
@@ -57,20 +62,13 @@ for(const curves of shapes)for(const side of ['outside','inside'] as const)for(c
       for(let j=0;j<2048;j++) {
         const b=2*Math.PI*j/2048,x=p.x+3*Math.cos(b)-cx,y=p.y+3*Math.sin(b)-cy;
         expect(sourceSafe(x+cx,y+cy),'bootstrap cutter footprint protects source');
-        const localX=x*ux+y*uy,localY=-x*uy+y*ux;
-        const free=cycle===0?Math.hypot(localX-Math.max(-L/2,Math.min(L/2,localX)),localY)<=3
-          :Math.hypot(x,y)<=previousDiskRadius!;
-        if(!free)outside++;
+        if(Math.hypot(x,y)>previousDiskRadius)outside++;
       }
-      expect(outside*360/2048<=r.bootstrapExposureBoundsDeg[cycle]+720/2048,'independent cleared-slot/disk circumference bound');
+      expect(outside*360/2048<=r.bootstrapExposureBoundsDeg[cycle]+720/2048,'independent cleared-disk circumference bound');
     }
-    // Independent coverage: new disk is old slot/disk union the full circle annulus.
     for(let radial=0;radial<=16;radial++)for(let j=0;j<64;j++) {
-      const d=(last.radius+3-1e-6)*radial/16,a=2*Math.PI*j/64;
-      const x=d*Math.cos(a),y=d*Math.sin(a),lx=x*ux+y*uy,ly=-x*uy+y*ux;
-      const old=cycle===0?Math.hypot(lx-Math.max(-L/2,Math.min(L/2,lx)),ly)<=3
-        :Math.hypot(x,y)<=previousDiskRadius!;
-      expect(old || Math.abs(Math.hypot(x,y)-last.radius)<=3,'bootstrap disk fully covered');
+      const d=(last.radius+3-1e-6)*radial/16,a=2*Math.PI*j/64,x=d*Math.cos(a),y=d*Math.sin(a);
+      expect(Math.hypot(x,y)<=previousDiskRadius || Math.abs(Math.hypot(x,y)-last.radius)<=3,'bootstrap disk fully covered');
     }
     previousDiskRadius=last.radius+3-1e-6;
   }
