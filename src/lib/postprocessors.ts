@@ -46,7 +46,7 @@ export function postProcessGrblHal(source:string):PostProcessResult{
   const errors:string[]=[],warnings:string[]=[],out:string[]=[];
   let transformedLines=0,x:number|null=null,y:number|null=null,z:number|null=null,arcModeInserted=false;
   const word=(line:string,letter:string):number|null=>{
-    const m=line.match(new RegExp('(?:^|\\\\s)'+letter+'([-+]?\\\\d+(?:\\\\.\\\\d+)?)','i'));
+    const m=line.match(new RegExp('(?:^|\s)'+letter+'([-+]?\d+(?:\.\d+)?)','i'));
     return m?Number(m[1]):null;
   };
   const setEnd=(line:string)=>{
