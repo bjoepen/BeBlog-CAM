@@ -22,7 +22,8 @@ export function buildCanonicalHelicalDescent(args:{centerX:number;centerY:number
   let z=startZ,turns=0;
   while(z>targetZ+1e-9){
     turns++;
-    const nextZ=Math.max(targetZ,z-pitchMm);
+    const remaining=z-targetZ;
+    const nextZ=remaining<=pitchMm+1e-9?targetZ:z-pitchMm;
     const halfZ=z-(z-nextZ)/2;
     segments.push({kind:'arc3',start:{x:rightX,y:centerY,z},end:{x:leftX,y:centerY,z:halfZ},center:{x:centerX,y:centerY},ccw:true,feedMmMin});
     segments.push({kind:'arc3',start:{x:leftX,y:centerY,z:halfZ},end:{x:rightX,y:centerY,z:nextZ},center:{x:centerX,y:centerY},ccw:true,feedMmMin});
