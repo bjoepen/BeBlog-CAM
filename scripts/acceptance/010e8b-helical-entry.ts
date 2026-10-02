@@ -19,4 +19,19 @@ expect(Math.hypot(first.start.x-endpoint.x,first.start.y-endpoint.y)<1e-8,'helix
 expect(Math.hypot(last.end.x-endpoint.x,last.end.y-endpoint.y)<1e-8,'helix ends at requested apex');
 expect(Math.abs(last.end.z+3)<1e-9,'helix ends at exact target Z');
 expect(ramp.turnCount>1,'3 mm / 3 degree case must use multiple turns, not a single plunge-like circle');
+
+const tenMm=buildAssumedSeedRamp(
+  {center:{x:0,y:0},radiusMm:6,clearedToDepthMm:10},
+  {x:3-1e-5,y:0},
+  3,
+  {startDepthMm:0,targetDepthMm:10,maximumAngleDeg:3,feedMmMin:120}
+);
+expect(tenMm.ok,'10 mm non-binary pitch helix must build: '+tenMm.errors.join(' '));
+if(tenMm.ok) {
+  expect(tenMm.turnCount===11,'10 mm / 3 degree reference uses eleven turns');
+  expect(tenMm.segments.at(-1)!.end.z===-10,'final helix Z is canonicalized to exact target depth');
+  for(let i=1;i<tenMm.segments.length;i++)
+    expect(JSON.stringify(tenMm.segments[i-1].end)===JSON.stringify(tenMm.segments[i].start),
+      'non-binary pitch helix remains bit-exact XYZ-continuous');
+}
 console.log('010-E8B protected helical startup: PASS', {turns:ramp.turnCount,xyLengthMm:ramp.xyLengthMm,actualAngleDeg:ramp.actualAngleDeg});
