@@ -6,7 +6,7 @@
 
 BeBlog CAM ist eine quelloffene, makerfreundliche CAM-Anwendung für macOS. Sie macht aus DXF- und STEP-Geometrie sichtbare, prüfbare Werkzeugwege, ohne den Anwender durch Objektbäume, permanente Werkzeugleisten und tief verschachtelte Dialoge zu schicken.
 
-**Aktueller Softwarestand: 0.2.0-beta.2 — Beta / Production Qualification.**
+**Aktueller Softwarestand: 0.2.0-beta.3 — Beta / Production Qualification.**
 
 > **Klarheit ist nicht weniger Information. Klarheit ist Information zur richtigen Zeit.**
 
@@ -170,7 +170,7 @@ Ein einfaches `pnpm tauri build` gilt deshalb **nicht als gültiger Production B
 
 ## Release und Installation
 
-Der Quell- und Entwicklungsstand ist **0.2.0-beta.2**.
+Der Quell- und Entwicklungsstand ist **0.2.0-beta.3**.
 
 Veröffentlichte Binärartefakte sollten separat anhand des jeweiligen Releases, Dateinamens und SHA-256-Werts verifiziert werden. Diese README übernimmt bewusst keinen Prüfsummenwert eines älteren Beta-Artefakts für einen neueren Softwarestand.
 
@@ -186,7 +186,7 @@ Build 009 baute die Werkzeugbibliothek mit Import/Export und erweitertem Werkzeu
 
 Build 010 etablierte das konturgeführte Wirbelfräsen als vollständige CAM-Strategie: von semantischer Führungsgeometrie und Materialnachweis über geschützten Einstieg, Multi-Depth und reale Bearbeitungsgrenzen bis zur kanonischen Vorschau und NC-Ausgabe.
 
-**Status: Beta / Production Qualification — 0.2.0-beta.2.**
+**Status: Beta / Production Qualification — 0.2.0-beta.3.**
 
 Features gelten erst dann als etabliert, wenn technische Gates und reale Acceptance zusammenpassen.
 

@@ -6,7 +6,7 @@
 
 BeBlog CAM is an open-source, maker-friendly CAM application for macOS. It turns DXF and STEP geometry into visible, verifiable toolpaths without forcing users through object trees, permanent toolbars and deeply nested dialogs.
 
-**Current software version: 0.2.0-beta.2 — Beta / Production Qualification.**
+**Current software version: 0.2.0-beta.3 — Beta / Production Qualification.**
 
 > **Clarity is not less information. Clarity is information at the right time.**
 
@@ -170,7 +170,7 @@ A plain `pnpm tauri build` is therefore **not considered a valid production buil
 
 ## Release and installation
 
-The current source and development version is **0.2.0-beta.2**.
+The current source and development version is **0.2.0-beta.3**.
 
 Published binary artifacts should be verified separately against the corresponding release, filename and SHA-256 value. This README deliberately does not reuse the checksum of an older beta artifact for a newer software version.
 
@@ -186,7 +186,7 @@ Build 009 expanded the standalone tool library, import/export and tool model.
 
 Build 010 established contour-guided trochoidal milling as a complete CAM strategy: from semantic guide geometry and material proof through protected entry, multi-depth machining and real machining limits to canonical preview and NC output.
 
-**Status: Beta / Production Qualification — 0.2.0-beta.2.**
+**Status: Beta / Production Qualification — 0.2.0-beta.3.**
 
 Features are considered established only when technical gates and real-world acceptance agree.
 
