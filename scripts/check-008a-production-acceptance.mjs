@@ -32,7 +32,7 @@ for (const kind of productionKinds) {
 assert(preflight.includes('materializeSafeMotionChain'), 'Preflight must materialize 004T safe motion.');
 assert(preflight.includes('validateCanonicalToolpath'), 'Preflight must validate canonical toolpaths.');
 assert(safeMotion.includes('buildJobSafeTransitions'), 'job-level safe transitions must remain available.');
-assert(post.includes("'grbl'|'estlcam'|'linuxcnc'"), 'postprocessor identities changed unexpectedly.');
+assert(post.includes("'grbl'|'grblhal'|'estlcam'|'linuxcnc'"), 'postprocessor identities changed unexpectedly.');
 assert(post.includes('postProcessEstlcam'), 'Estlcam production postprocessor missing.');
 assert(post.includes('Geometry and machine motions are never reconstructed here'), 'Estlcam syntax-only boundary is no longer explicit.');
 assert(packageJson.scripts?.['native:build'] === 'bash scripts/build-macos-native-app.sh', 'native:build must remain the production macOS entry point.');
