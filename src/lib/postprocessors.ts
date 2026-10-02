@@ -44,67 +44,65 @@ export function postProcessGrbl(source:string):PostProcessResult{
  */
 export function postProcessGrblHal(source:string):PostProcessResult{
   const errors:string[]=[],warnings:string[]=[],out:string[]=[];
-  let transformedLines=0,x:number|null=null,y:number|null=null,z:number|null=null,arcModeInserted=false;
+  let transformedLines=0,x:number|null=null,y:number|null=null,arcModeInserted=false;
   const word=(line:string,letter:string):number|null=>{
-    const m=line.match(new RegExp('(?:^|\s)'+letter+'([-+]?\d+(?:\.\d+)?)','i'));
+    const m=line.match(new RegExp(String.raw\`(?:^|\\s)\${letter}([-+]?\\d+(?:\\.\\d+)?)\`,'i'));
     return m?Number(m[1]):null;
   };
   const setEnd=(line:string)=>{
-    const nx=word(line,'X'),ny=word(line,'Y'),nz=word(line,'Z');
-    if(nx!==null)x=nx;if(ny!==null)y=ny;if(nz!==null)z=nz;
+    const nx=word(line,'X'),ny=word(line,'Y');
+    if(nx!==null)x=nx;if(ny!==null)y=ny;
   };
 
-  for(const raw of source.split(/\\r?\\n/)){
+  for(const raw of source.split(/\r?\n/)){
     const line=raw.trim();
     if(!line)continue;
     if(isComment(line)){out.push(line);continue;}
 
-    if(/^G20\\b/i.test(line)){errors.push('Zollmodus G20 ist für den BeBlog-grblHAL-Postprozessor nicht freigegeben.');continue;}
-    if(/^G91\\b/i.test(line)&&!/^G91\\.1\\b/i.test(line)){errors.push('Inkrementelle XYZ-Koordinaten G91 sind für den BeBlog-grblHAL-Postprozessor nicht freigegeben.');continue;}
-    if(/^G90\\.1\\b/i.test(line)){errors.push('Absolute Arc-Center G90.1 sind für den BeBlog-grblHAL-Postprozessor nicht freigegeben; BeBlog verwendet inkrementelle I/J-Offsets.');continue;}
-    if(/^G91\\.1\\b/i.test(line)){if(!arcModeInserted){out.push('G91.1');arcModeInserted=true;}continue;}
+    if(/^G20\b/i.test(line)){errors.push('Zollmodus G20 ist für den BeBlog-grblHAL-Postprozessor nicht freigegeben.');continue;}
+    if(/^G91\b/i.test(line)&&!/^G91\.1\b/i.test(line)){errors.push('Inkrementelle XYZ-Koordinaten G91 sind für den BeBlog-grblHAL-Postprozessor nicht freigegeben.');continue;}
+    if(/^G90\.1\b/i.test(line)){errors.push('Absolute Arc-Center G90.1 sind für den BeBlog-grblHAL-Postprozessor nicht freigegeben; BeBlog verwendet inkrementelle I/J-Offsets.');continue;}
+    if(/^G91\.1\b/i.test(line)){if(!arcModeInserted){out.push('G91.1');arcModeInserted=true;}continue;}
 
-    if(/^G17\\b/i.test(line)){
+    if(/^G17\b/i.test(line)){
       out.push('G17');
       if(!arcModeInserted){out.push('G91.1');arcModeInserted=true;transformedLines++;}
       continue;
     }
-    if(/^(G21|G40|G49|G80|G90|G94)\\b/i.test(line)){out.push(line.toUpperCase());continue;}
+    if(/^(G21|G40|G49|G80|G90|G94)\b/i.test(line)){out.push(line.toUpperCase());continue;}
 
     const motion=normalizeMotion(line);
     if(motion){
-      if(/^G[23]\\b/i.test(motion)){
-        if(/\\bR[-+]?\\d/i.test(motion)){errors.push(`grblHAL v1 akzeptiert keine R-Arcs; I/J sind erforderlich: ${line}`);continue;}
-        if(/\\bP[-+]?\\d/i.test(motion)){errors.push(`grblHAL v1 akzeptiert keine Multi-Turn-Arcs: ${line}`);continue;}
+      if(/^G[23]\b/i.test(motion)){
+        if(/\bR[-+]?\d/i.test(motion)){errors.push(\`grblHAL v1 akzeptiert keine R-Arcs; I/J sind erforderlich: \${line}\`);continue;}
+        if(/\bP[-+]?\d/i.test(motion)){errors.push(\`grblHAL v1 akzeptiert keine Multi-Turn-Arcs: \${line}\`);continue;}
         const ex=word(motion,'X'),ey=word(motion,'Y'),i=word(motion,'I'),j=word(motion,'J');
         if(x===null||y===null||ex===null||ey===null||i===null||j===null){
-          errors.push(`grblHAL Arc benötigt bekannten XY-Start sowie X/Y/I/J: ${line}`);continue;
+          errors.push(\`grblHAL Arc benötigt bekannten XY-Start sowie X/Y/I/J: \${line}\`);continue;
         }
-        if(![ex,ey,i,j].every(Number.isFinite)){errors.push(`grblHAL Arc enthält nicht-endliche Koordinaten: ${line}`);continue;}
+        if(![ex,ey,i,j].every(Number.isFinite)){errors.push(\`grblHAL Arc enthält nicht-endliche Koordinaten: \${line}\`);continue;}
         const radius=Math.hypot(i,j);
-        if(!(radius>=0.001)){errors.push(`grblHAL Arc besitzt einen degenerierten Kreismittelpunkt: ${line}`);continue;}
+        if(!(radius>=0.001)){errors.push(\`grblHAL Arc besitzt einen degenerierten Kreismittelpunkt: \${line}\`);continue;}
         const endRadius=Math.hypot(ex-(x+i),ey-(y+j));
-        // BeBlog serialises to 0.001 mm. Allow only the rounding envelope plus a
-        // tiny numerical reserve; larger mismatches indicate an invalid arc.
         if(Math.abs(endRadius-radius)>0.003){
-          errors.push(`grblHAL Arc-Radien stimmen nicht überein (Start ${radius.toFixed(6)} mm, Ende ${endRadius.toFixed(6)} mm): ${line}`);continue;
+          errors.push(\`grblHAL Arc-Radien stimmen nicht überein (Start \${radius.toFixed(6)} mm, Ende \${endRadius.toFixed(6)} mm): \${line}\`);continue;
         }
       }
       out.push(motion);if(motion!==line)transformedLines++;setEnd(motion);continue;
     }
 
-    if(/^S[-+]?\\d+(?:[.,]\\d+)?(?:\\s+M0?3)?$/i.test(line)||/^M0?3(?:\\s+S[-+]?\\d+(?:[.,]\\d+)?)?$/i.test(line)||/^F[-+]?\\d+(?:[.,]\\d+)?$/i.test(line)){out.push(line.toUpperCase().replace(/M03\\b/g,'M3'));continue;}
-    if(/^M0?(0|1|5|8|9|30)(?:\\s+(.*))?$/i.test(line)){out.push(line.replace(/^M0?(\\d+)/i,(_,n)=>`M${Number(n)}`));continue;}
+    if(/^S[-+]?\d+(?:[.,]\d+)?(?:\s+M0?3)?$/i.test(line)||/^M0?3(?:\s+S[-+]?\d+(?:[.,]\d+)?)?$/i.test(line)||/^F[-+]?\d+(?:[.,]\d+)?$/i.test(line)){out.push(line.toUpperCase().replace(/M03\b/g,'M3'));continue;}
+    if(/^M0?(0|1|5|8|9|30)(?:\s+(.*))?$/i.test(line)){out.push(line.replace(/^M0?(\d+)/i,(_,n)=>\`M\${Number(n)}\`));continue;}
 
-    if(/^T\\d+\\b/i.test(line)||/^M0?6\\b/i.test(line)||/^G43(?:\\.1|\\.2)?\\b/i.test(line)||/^G49\\b/i.test(line)){
-      errors.push(`grblHAL v1 übernimmt keine Werkzeugtabellen-/Längenkorrektur-Befehle: ${line}`);continue;
+    if(/^T\d+\b/i.test(line)||/^M0?6\b/i.test(line)||/^G43(?:\.1|\.2)?\b/i.test(line)){
+      errors.push(\`grblHAL v1 übernimmt keine Werkzeugtabellen-/Längenkorrektur-Befehle: \${line}\`);continue;
     }
-    if(/^[GMT]\\d+/i.test(line))errors.push(`Nicht unterstützter grblHAL-v1-Befehl: ${line}`);
-    else{warnings.push(`Unbekannte Zeile wurde unverändert übernommen: ${line}`);out.push(line);}
+    if(/^[GMT]\d+/i.test(line))errors.push(\`Nicht unterstützter grblHAL-v1-Befehl: \${line}\`);
+    else{warnings.push(\`Unbekannte Zeile wurde unverändert übernommen: \${line}\`);out.push(line);}
   }
 
-  if(!arcModeInserted){const insert=Math.max(0,out.findIndex(line=>/^G90\\b/i.test(line))+1);out.splice(insert,0,'G91.1');transformedLines++;}
-  const code=out.join('\\n')+'\\n';
+  if(!arcModeInserted){const insert=Math.max(0,out.findIndex(line=>/^G90\b/i.test(line))+1);out.splice(insert,0,'G91.1');transformedLines++;}
+  const code=out.join('\n')+'\n';
   return{ok:errors.length===0,code,errors,warnings,removedLines:0,transformedLines};
 }
 
