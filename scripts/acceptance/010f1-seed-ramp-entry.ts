@@ -12,20 +12,29 @@ const options={startDepthMm:0,targetDepthMm:1,maximumAngleDeg:3,feedMmMin:180};
 const ramp=buildAssumedSeedRamp(disk,endpoint,3,options);
 expect(ramp.ok,'reference ramp passes');
 if(ramp.ok) {
-  expect(ramp.legCount===4 && ramp.xyLengthMm===32,'1mm at max 3deg uses four 8mm legs');
-  expect(ramp.actualAngleDeg<3 && ramp.actualAngleDeg>0,'actual slope within caller maximum');
-  expect(ramp.segments.every(s=>s.kind==='line3' && s.feedMmMin===180),'native linear ramp with ramp feed');
+  expect(ramp.turnCount>=1 && ramp.xyLengthMm>=1/Math.tan(3*Math.PI/180),'1mm at max 3deg has sufficient circular XY length');
+  expect(ramp.actualAngleDeg<=3 && ramp.actualAngleDeg>0,'actual slope within caller maximum');
+  expect(ramp.segments.length===ramp.turnCount*2 && ramp.segments.every(s=>s.kind==='arc3' && s.feedMmMin===180),'two canonical half arcs per helical turn');
   expect(ramp.segments[0].start.z===0,'starts at surface');
   const last=ramp.segments[ramp.segments.length-1];
-  expect(last.end.x===endpoint.x && last.end.y===endpoint.y && last.end.z===-1,'exact depth and XY endpoint');
+  expect(Math.abs(last.end.x-endpoint.x)<1e-9 && Math.abs(last.end.y-endpoint.y)<1e-9 && last.end.z===-1,'exact depth and XY endpoint');
   for(const [i,s] of ramp.segments.entries()) {
-    expect(s.end.z<s.start.z,'every move strictly descends');
-    expect(Math.atan2(s.start.z-s.end.z,Math.hypot(s.end.x-s.start.x,s.end.y-s.start.y))*180/Math.PI<=3,'every move obeys max angle');
-    if(i>0)expect(JSON.stringify(ramp.segments[i-1].end)===JSON.stringify(s.start),'continuous native 3D moves');
+    expect(s.kind==='arc3','helical entry remains canonical arc3');
+    if(s.kind!=='arc3')continue;
+    expect(s.end.z<s.start.z,'every half turn strictly descends');
+    const halfArcLength=Math.PI*Math.hypot(s.start.x-s.center.x,s.start.y-s.center.y);
+    expect(Math.atan2(s.start.z-s.end.z,halfArcLength)*180/Math.PI<=3+1e-9,'every half turn obeys max angle');
+    if(i>0) {
+      const prev=ramp.segments[i-1];
+      expect(Math.hypot(prev.end.x-s.start.x,prev.end.y-s.start.y)<1e-9 && Math.abs(prev.end.z-s.start.z)<1e-9,'continuous native 3D moves');
+    }
+    const a0=Math.atan2(s.start.y-s.center.y,s.start.x-s.center.x);
+    const sweep=s.ccw?Math.PI:-Math.PI;
     for(let j=0;j<=16;j++)for(let k=0;k<128;k++) {
-      const t=j/16,a=2*Math.PI*k/128;
-      const x=s.start.x+t*(s.end.x-s.start.x)+3*Math.cos(a);
-      const y=s.start.y+t*(s.end.y-s.start.y)+3*Math.sin(a);
+      const t=j/16,a=a0+sweep*t,cutter=2*Math.PI*k/128;
+      const cx=s.center.x+Math.hypot(s.start.x-s.center.x,s.start.y-s.center.y)*Math.cos(a);
+      const cy=s.center.y+Math.hypot(s.start.x-s.center.x,s.start.y-s.center.y)*Math.sin(a);
+      const x=cx+3*Math.cos(cutter),y=cy+3*Math.sin(cutter);
       expect(Math.hypot(x-disk.center.x,y-disk.center.y)<disk.radiusMm,'independent cutter samples stay inside seed');
     }
   }
@@ -40,7 +49,7 @@ for(const bad of [{maximumAngleDeg:0},{maximumAngleDeg:16},{maximumAngleDeg:NaN}
   const r=buildAssumedSeedRamp(disk,endpoint,3,{...options,...bad});
   expect(!r.ok && r.segments.length===0,'invalid or over-budget ramp returns no partial moves');
 }
-expect(!buildAssumedSeedRamp(disk,disk.center,3,options).ok,'no radial pendulum span fails');
+expect(!buildAssumedSeedRamp(disk,disk.center,3,options).ok,'zero helix radius fails');
 expect(!buildAssumedSeedRamp(disk,{x:0,y:9},3,options).ok,'endpoint cutter outside seed fails');
 expect(!buildAssumedSeedRamp({...disk,center:{x:NaN,y:4}},endpoint,3,options).ok,'invalid seed fails');
 expect(!buildAssumedSeedRamp(disk,endpoint,8,options).ok,'tool too large fails');
