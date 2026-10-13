@@ -34,7 +34,8 @@ const finitePositive = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v > 0;
 const round = (v: number) => Math.round(v * 1000) / 1000;
 const supportedMaterials: MaterialKind[] = ['wood-mdf', 'plastic', 'aluminium', 'steel'];
-const supportedOperations: CuttingRecommendationInput['operation'][] =
+type SupportedOperation = 'facing' | 'contour' | 'pocket' | 'trochoidal-contour-roughing' | 'z-level-roughing' | '3d-roughing';
+const supportedOperations: SupportedOperation[] =
   ['facing', 'contour', 'pocket', 'trochoidal-contour-roughing', 'z-level-roughing', '3d-roughing'];
 const rigidityFactors = { light: 0.55, medium: 0.8, rigid: 1 } as const;
 
@@ -43,7 +44,7 @@ const rigidityFactors = { light: 0.55, medium: 0.8, rigid: 1 } as const;
 const materialFactors: Record<MaterialKind, number> = {
   'wood-mdf': 1, plastic: 0.8, aluminium: 0.6, steel: 0.35
 };
-const radialFractions: Record<(typeof supportedOperations)[number], number> = {
+const radialFractions: Record<SupportedOperation, number> = {
   facing: 0.45,
   contour: 0.22,
   pocket: 0.28,
@@ -51,7 +52,7 @@ const radialFractions: Record<(typeof supportedOperations)[number], number> = {
   'z-level-roughing': 0.25,
   '3d-roughing': 0.2
 };
-const axialFractions: Record<(typeof supportedOperations)[number], number> = {
+const axialFractions: Record<SupportedOperation, number> = {
   facing: 0.2,
   contour: 0.3,
   pocket: 0.24,
@@ -83,10 +84,11 @@ export function recommendCuttingEngagement(input: CuttingRecommendationInput): C
   if (!finitePositive(input.cuttingLengthMm))
     return unavailable('Eine gültige Schneidenlänge ist für eine axiale Empfehlung erforderlich.');
 
+  const op = input.operation as SupportedOperation;
   const factor = rigidityFactors[input.machineRigidity] * materialFactors[input.material];
-  const radial = range(input.diameterMm * radialFractions[input.operation] * factor,
+  const radial = range(input.diameterMm * radialFractions[op] * factor,
     input.diameterMm, 'Heuristischer Startbereich nach Material, Strategie und Maschinenklasse');
-  const axial = range(input.diameterMm * axialFractions[input.operation] * factor,
+  const axial = range(input.diameterMm * axialFractions[op] * factor,
     input.cuttingLengthMm, 'Heuristischer Startbereich, begrenzt durch die Schneidenlänge');
   if (!radial || !axial) return unavailable('Die Empfehlungswerte sind für diese Abmessungen nicht sinnvoll darstellbar.');
 
