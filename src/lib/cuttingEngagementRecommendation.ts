@@ -79,7 +79,7 @@ export function recommendCuttingEngagement(input: CuttingRecommendationInput): C
     return unavailable('Ungültige Werkzeug-, Material- oder Maschinenangaben.');
   if (input.toolKind !== 'end-mill')
     return unavailable('011-B berechnet zunächst nur Empfehlungen für Schaftfräser; keine Übertragung auf andere Werkzeugtypen.');
-  if (!supportedOperations.includes(input.operation))
+  if (!supportedOperations.some(op => op === input.operation))
     return unavailable('Für diese Operation liegt noch kein freigegebener Empfehlungsansatz vor.');
   if (!finitePositive(input.cuttingLengthMm))
     return unavailable('Eine gültige Schneidenlänge ist für eine axiale Empfehlung erforderlich.');
