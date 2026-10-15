@@ -2,6 +2,7 @@
   import FeedsSpeedsCalculatorCore from './FeedsSpeedsCalculatorCore.svelte';
   import type { MillingToolKind } from './toolTypes';
   import type { CamOperation } from './types';
+  import type { MaterialKind } from './materialContext';
 
   type ToolOperationChoice={id:string;label:string;name:string;summary:string};
   type ToolOperationTransfer={operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number;cuttingLengthMm:number;stickoutMm:number;shaftDiameterMm:number;holderDiameterMm:number};
@@ -20,6 +21,7 @@
   export let operationChoices:ToolOperationChoice[]=[];
   export let onOperationSelect:((id:string)=>void)|undefined=undefined;
   export let onTransfer:((transfer:ToolOperationTransfer)=>void)|undefined=undefined;
+  export let onEngagementTransfer:((request:{operationId:string;operationSnapshot:string;material:MaterialKind;machineRigidity:'light'|'medium'|'rigid';applyAxial:boolean;applyRadial:boolean})=>void)|undefined=undefined;
 
   // The approved App UI currently supplies the assigned-tool fields separately.
   // Keep accepting them here while the calculator core owns the actual tool editor/library state.
@@ -33,6 +35,7 @@
   targetOperation={operation}
   onTargetOperationChange={onOperationSelect}
   onApplyToOperation={onTransfer}
+  {onEngagementTransfer}
 />
 
 {#if false && assignedToolSummary}<span>{assignedToolSummary}</span>{/if}
