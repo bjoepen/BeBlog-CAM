@@ -71,7 +71,10 @@ requireText(app,'onStepContourChange={(patch)=>operation.kind===\'contour\'&&upd
 requireText(app,'Offene Kontur: Klicke die Seitenfläche(n)','Bearbeiten explains face-first STEP contour selection');
 requireText(app,'stepContourFaceIds.length','Bearbeiten reports selected STEP side faces');
 requireText(geometryView,"stepSelectionOperation.kind==='contour')return !!stepContourSelection?.eligibleSideFaceIds.includes(faceId)",'STEP side faces are primary selectable hit areas');
-requireText(geometryView,"onStepContourChange({topology:'open',stepContourFaceIds:",'clicking a side face directly builds an open contour selection');
+requireText(geometryView,"onStepContourChange({topology:stepSelectionOperation.topology,stepContourFaceIds:",'clicking a side face preserves the explicitly selected open or closed contour mode');
+rejectText(geometryView,"onStepContourChange({topology:'open',stepContourFaceIds:",'STEP side-face clicks must not force an explicitly closed contour back to open');
+requireText(sideFaces,"topology:chain.topology",'STEP side-face chains report open versus closed topology');
+requireText(state,"if(sideResult.target?.topology==='closed') effective=sideResult.target;",'explicit closed side-face ring is a supported STEP manufacturing target');
 requireText(geometryView,"if(stepSelectionOperation.topology==='open')return stepContourSelection.selectedEdgeIds.includes(edgeId)",'open mode exposes only the active target edges');
 requireText(geometryView,'class="step-edge-hit"','edge refinement has a dedicated invisible hit path');
 requireText(geometryView,'stroke-width:14','edge refinement uses a generous hit stroke');
