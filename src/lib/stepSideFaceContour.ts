@@ -64,7 +64,7 @@ function sampleTopEdge(summary:ImportSummary,edge:StepManufacturingEdgeSource,z:
   return Array.from({length:steps+1},(_,i)=>{const a=a0+d*i/steps;return{x:center.x+Math.cos(a)*r,y:center.y+Math.sin(a)*r};});
 }
 
-function chainSegments(segments:StepSideFaceContourSegment[]){
+export function chainSegments(segments:StepSideFaceContourSegment[]){
   if(!segments.length)return null;
   const remaining=segments.map(segment=>({edgeId:segment.edgeId,points:[...segment.points]}));
   const out=[remaining.shift()!];
