@@ -24,4 +24,20 @@ const trochoid = recommendCuttingEngagement({ ...base, operation: 'trochoidal-co
 assert(trochoid.notes.some(n => n.includes('140°')), 'existing safety boundary is acknowledged');
 assert(JSON.stringify(base) === JSON.stringify({ material: 'aluminium', toolKind: 'end-mill', diameterMm: 3,
   cuttingLengthMm: 10, operation: 'pocket', machineRigidity: 'light' }), 'input unchanged');
+
+const fractionalCap = 1.5875;
+const precise = recommendCuttingEngagement({ ...base, material: 'wood-mdf', machineRigidity: 'rigid', diameterMm: 10, cuttingLengthMm: fractionalCap });
+assert(precise.status === 'advisory' && precise.axial, 'fractional physical cap produces advice');
+if (precise.axial) {
+  assert(precise.axial.preferredMm <= fractionalCap, 'rounded axial preferred never exceeds physical cap');
+  assert(precise.axial.maxMm <= fractionalCap, 'rounded axial maximum never exceeds physical cap');
+  assert(precise.axial.maxMm === 1.587, 'fractional cap is rounded downward');
+}
+const inheritedKey = recommendCuttingEngagement({
+  ...base, machineRigidity: 'toString' as unknown as typeof base.machineRigidity
+});
+assert(inheritedKey.status === 'unavailable' && inheritedKey.radial === null && inheritedKey.axial === null,
+  'inherited object properties cannot become machine classes');
+const tinyCap = recommendCuttingEngagement({ ...base, cuttingLengthMm: 0.0009 });
+assert(tinyCap.status === 'unavailable', 'unrepresentable precision yields no numeric advice');
 console.log('011-B cutting engagement recommendations: PASS');
