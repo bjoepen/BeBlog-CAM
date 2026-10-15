@@ -46,6 +46,7 @@
   let machineRigidity:'light'|'medium'|'rigid'='light';
   let applyAxial=false, applyRadial=false;
   let reviewedContext:string|null=null;
+  let lastSeenContext:string|null=null;
 
   const STORAGE_KEY='beblog-cam.tool-library.v1';
   $: materialProfile=materialProfiles[$stockMaterial];
@@ -82,6 +83,10 @@
   $: currentContext=JSON.stringify({operation:targetOperation,operationId:targetOperationId,
     material:$stockMaterial,machineRigidity,toolKind:tool.kind,diameter:calculationDiameter,
     cuttingLength:tool.kind==='end-mill'?tool.cuttingLengthMm:null});
+  $: if(currentContext!==lastSeenContext){
+    lastSeenContext=currentContext;
+    applyAxial=false;applyRadial=false;reviewedContext=null;
+  }
   $: selectionCurrent=reviewedContext===currentContext;
   $: selectedAxial=selectionCurrent&&applyAxial&&axialAllowed;
   $: selectedRadial=selectionCurrent&&applyRadial&&radialAllowed;
