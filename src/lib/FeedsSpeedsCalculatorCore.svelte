@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
+  import { recommendCuttingEngagement } from './cuttingEngagementRecommendation';
+  import { assessAdvisoryRange, assessChipThickness } from './chipThicknessAdvisory';
   import { parsePortableToolLibrary, portableToolLibraryFilename, serializePortableToolLibrary } from './toolLibraryPortable';
   import { materialKinds, materialProfiles, setStockMaterial, stockMaterial, type MaterialKind } from './materialContext';
   import type { CamOperation } from './types';
@@ -38,6 +40,7 @@
   let importInput:HTMLInputElement;
   let transferMessage='';
   let appliedMaterial:MaterialKind|null=null;
+  let machineRigidity:'light'|'medium'|'rigid'='light';
 
   const STORAGE_KEY='beblog-cam.tool-library.v1';
   $: materialProfile=materialProfiles[$stockMaterial];
@@ -56,6 +59,26 @@
   $: candidateOperation=targetOperation?({...targetOperation,tool:{...targetOperation.tool,id:selectedToolId??'tool-calculator',name:tool.name.trim()||millingToolLabels[tool.kind],diameterMm:calculationDiameter,kind:tool.kind}} as CamOperation):null;
   $: toolCompatibility=candidateOperation?validateToolCompatibility(candidateOperation):null;
   $: toolTransferBlocked=toolCompatibility?.level==='fail';
+  // Advisory-only. The actual ae is not inferred from lane spacing or toolpath preview.
+  $: engagementAdvice=targetOperation?recommendCuttingEngagement({
+    material:$stockMaterial,
+    toolKind:tool.kind,
+    diameterMm:calculationDiameter,
+    cuttingLengthMm:tool.kind==='end-mill'?tool.cuttingLengthMm:undefined,
+    operation:targetOperation.kind,
+    machineRigidity
+  }):null;
+  $: helixDepth=targetOperation?.kind==='pocket'&&targetOperation.entry==='helix';
+  $: axialCheck=engagementAdvice?.status==='advisory'&&engagementAdvice.axial&&targetOperation&&!helixDepth
+    ?assessAdvisoryRange(targetOperation.stepDownMm,engagementAdvice.axial):null;
+  $: radialPercent=targetOperation&&('stepoverPercent' in targetOperation)
+    ?targetOperation.stepoverPercent:null;
+  $: radialCheck=engagementAdvice?.status==='advisory'&&engagementAdvice.radial&&radialPercent!=null
+    ?assessAdvisoryRange(calculationDiameter*radialPercent/100,engagementAdvice.radial):null;
+  $: displayedChip=engagementAdvice?.status==='advisory'&&engagementAdvice.radial&&recommendedRpm!=null&&recommendedFeed!=null
+    ?assessChipThickness({cutterDiameterMm:calculationDiameter,
+      radialWidthMm:engagementAdvice.radial.preferredMm,fluteCount:tool.flutes,
+      spindleRpm:recommendedRpm,programmedFeedMmMin:recommendedFeed}):null;
   const n=(v:number|null|undefined,d=0)=>v==null?'—':v.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d});
 
   onMount(()=>{
@@ -238,6 +261,32 @@
     </main>
     <aside class="side-column">
       <section class="results"><div class="result-head"><b>EMPFOHLENE EINSTELLUNGEN</b><span class:warning={!insideProfile}>{insideProfile?'✓ Im Maschinenprofil':'↘ Maschinenlimit aktiv'}</span></div><div class="result-values"><div><p>Drehzahl</p><strong>{n(recommendedRpm)} <small>1/min</small></strong></div><div><p>Vorschub</p><strong>{n(recommendedFeed)} <small>mm/min</small></strong></div></div></section>
+      <section class="card" aria-label="Bearbeitungsempfehlung">
+        <h3>Radiale und axiale Zustellung · Orientierung</h3>
+        <label>Maschinensteifigkeit (manuelle Einschätzung)
+          <select bind:value={machineRigidity} aria-label="Maschinensteifigkeit" style="display:block;margin-top:7px;max-width:100%;padding:7px">
+            <option value="light">Leicht / Hobby-CNC</option>
+            <option value="medium">Mittel</option>
+            <option value="rigid">Steif</option>
+          </select>
+        </label>
+        {#if !targetOperation}
+          <p class="body-copy">Bitte zuerst eine Bearbeitung auswählen.</p>
+        {:else if engagementAdvice?.status==='advisory'&&engagementAdvice.radial&&engagementAdvice.axial}
+          <div class="kv"><span>ae Startwert</span><b>{n(engagementAdvice.radial.preferredMm,3)} mm</b></div>
+          <p class="body-copy">Bereich: {n(engagementAdvice.radial.minMm,3)}–{n(engagementAdvice.radial.maxMm,3)} mm</p>
+          <div class="kv"><span>ap Startwert</span><b>{n(engagementAdvice.axial.preferredMm,3)} mm</b></div>
+          <p class="body-copy">Bereich: {n(engagementAdvice.axial.minMm,3)}–{n(engagementAdvice.axial.maxMm,3)} mm</p>
+          {#if axialCheck}<p class="body-copy">Aktuelle Z-Zustellung: {axialCheck.level.toUpperCase()} – {axialCheck.messages[0]}</p>{/if}
+          {#if radialCheck}<p class="body-copy">Spurabstand-Vergleich: {radialCheck.level.toUpperCase()} – {radialCheck.messages[0]}</p>{/if}
+          {#if displayedChip?.status==='advisory'}
+            <p class="body-copy">Idealisierte Spanungsdicke bei ae-Startwert: {n(displayedChip.estimatedMaxChipThicknessMm,4)} mm. Kein tatsächlicher Materialkontakt-Nachweis.</p>
+          {/if}
+          <p class="note-line">ae ist eine Eingriffsbreite, nicht zwingend der Spurabstand. Helix-Zustellung pro Umdrehung ist kein gewöhnliches ap. Die Werte werden in 011-D1 nicht automatisch übernommen. Bestehende NC- und Preflight-Prüfungen bleiben maßgeblich.</p>
+        {:else}
+          <p class="body-copy">{engagementAdvice?.notes[0]??'Für diese Werkzeug- und Operationskombination liegen noch keine Empfehlungen vor.'}</p>
+        {/if}
+      </section>
       <section class="card"><h3>Aktives Werkzeug</h3><div class="kv"><span>Typ</span><b>{millingToolLabels[tool.kind]}</b></div><div class="kv"><span>Name</span><b>{tool.name}</b></div><div class="kv"><span>Rechen-Ø</span><b>{n(calculationDiameter,2)} mm</b></div><div class="kv"><span>Schneiden</span><b>{tool.flutes}</b></div><div class="kv"><span>fz Werkzeug</span><b>{n(tool.chipLoadMm,3)} mm</b></div><div class="kv"><span>fz wirksam</span><b>{n(effectiveChipLoad,3)} mm</b></div></section>
       {#if targetOperationId&&onApplyToOperation}<section class="apply-card"><div><h3>{targetOperationChoice?`In ${targetOperationChoice.label} übernehmen`:'Bearbeitung wählen'}</h3><p>Ziel: <b>{targetOperationChoice?.name??activeOperationName}</b></p><p>Übernommen werden Werkzeugname, Fräsertyp, Rechen-Ø sowie die aus <b>{materialProfile.label}</b> berechnete Drehzahl und der Vorschub. Eintauchvorschub, Zustellung und weitere CAM-Parameter bleiben bewusst Eigentum der Bearbeitung.</p>{#if toolCompatibility}<p class="compatibility" class:compat-pass={toolCompatibility.level==='pass'} class:compat-warn={toolCompatibility.level==='warn'} class:compat-fail={toolCompatibility.level==='fail'}><strong>{toolCompatibility.level.toUpperCase()}:</strong> {toolCompatibility.detail}</p>{/if}</div><button class="primary-action apply-button" disabled={toolTransferBlocked||recommendedRpm==null||recommendedFeed==null} onclick={applyToOperation}>Werkzeug &amp; Schnittdaten übernehmen</button>{#if transferMessage}<p class="transfer-message">✓ {transferMessage}</p>{/if}</section>{/if}
       <section class="card"><h3>Werkstoff des Rohlings</h3><div class="material-grid">{#each materialKinds as material}<button class:active={$stockMaterial===material} aria-pressed={$stockMaterial===material} onclick={()=>chooseMaterial(material)}>{materialProfiles[material].shortLabel}</button>{/each}</div><div class="material-summary"><b>{materialProfile.label}</b><span>vc {n(materialProfile.cuttingSpeedMMin)} m/min · fz-Faktor {n(materialProfile.chipLoadFactor,2)}</span></div></section>
