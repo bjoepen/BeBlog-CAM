@@ -10,7 +10,6 @@ export type CuttingRecommendationInput = {
   toolKind: MillingToolKind;
   diameterMm: number;
   cuttingLengthMm?: number;
-  maxDepthOfCutMm?: number;
   operation: 'facing' | 'contour' | 'pocket' | 'trochoidal-contour-roughing' |
     'z-level-roughing' | '3d-roughing' | 'surface-finishing' | 'drill' | 'carve';
   machineRigidity: 'light' | 'medium' | 'rigid';
@@ -32,7 +31,8 @@ export type CuttingRecommendation = {
 
 const finitePositive = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v) && v > 0;
-const round = (v: number) => Math.round(v * 1000) / 1000;
+// Round downward: a displayed recommendation must never exceed a physical cap.
+const roundDown = (v: number) => Math.floor(v * 1000) / 1000;
 const supportedMaterials: MaterialKind[] = ['wood-mdf', 'plastic', 'aluminium', 'steel'];
 type SupportedOperation = 'facing' | 'contour' | 'pocket' | 'trochoidal-contour-roughing' | 'z-level-roughing' | '3d-roughing';
 const supportedOperations: SupportedOperation[] =
@@ -63,8 +63,12 @@ const axialFractions: Record<SupportedOperation, number> = {
 
 function range(preferred: number, physicalCap: number, basis: string): RecommendationRange | null {
   const best = Math.min(preferred, physicalCap);
-  const min = round(best * 0.6), recommended = round(best), max = round(Math.min(best * 1.25, physicalCap));
-  if (min <= 0 || recommended <= 0 || max < recommended) return null;
+  if (!finitePositive(best) || !finitePositive(physicalCap)) return null;
+  const min = roundDown(best * 0.6);
+  const recommended = roundDown(best);
+  const max = roundDown(Math.min(best * 1.25, physicalCap));
+  if (![min, recommended, max].every(Number.isFinite) ||
+      min <= 0 || recommended <= 0 || max < recommended || max > physicalCap) return null;
   return { minMm: min, preferredMm: recommended, maxMm: max, basis };
 }
 
@@ -74,7 +78,7 @@ export function recommendCuttingEngagement(input: CuttingRecommendationInput): C
     ({ status: 'unavailable', radial: null, axial: null, notes: [reason] });
 
   if (!input || !finitePositive(input.diameterMm) ||
-      !(input.machineRigidity in rigidityFactors) ||
+      !Object.prototype.hasOwnProperty.call(rigidityFactors, input.machineRigidity) ||
       !supportedMaterials.includes(input.material))
     return unavailable('Ungültige Werkzeug-, Material- oder Maschinenangaben.');
   if (input.toolKind !== 'end-mill')
