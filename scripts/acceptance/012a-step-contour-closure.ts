@@ -1,0 +1,13 @@
+import { chainSegments } from '../../src/lib/stepSideFaceContour';
+import { offsetPolygon, validateOffsetSegments } from '../../src/lib/contourMath';
+const a={x:0,y:0},b={x:40,y:0},c={x:40,y:30},d={x:0,y:30};
+const s=(edgeId:number,p:{x:number;y:number},q:{x:number;y:number})=>({edgeId,points:[p,q]});
+const three=chainSegments([s(1,a,b),s(2,b,c),s(3,c,d)]);
+if(!three||three.topology!=='open'||three.edgeIds.length!==3)throw Error('3 faces must remain open');
+const four=chainSegments([s(1,a,b),s(3,c,d),s(4,d,a),s(2,b,c)]);
+if(!four||four.topology!=='closed'||four.edgeIds.length!==4)throw Error('4 faces must form closed ring');
+const offset=offsetPolygon(four.points,1.5);
+if(!validateOffsetSegments(four.points,offset,1.5,.01).ok)throw Error('closed contour offset geometry failed');
+const disconnected=chainSegments([s(1,a,b),s(7,{x:100,y:100},{x:120,y:100})]);
+if(disconnected!==null)throw Error('disconnected geometry must fail closed');
+console.log('012-A STEP contour open/closed chain: PASS');
