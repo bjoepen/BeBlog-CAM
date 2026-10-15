@@ -19,11 +19,20 @@ kein Operation-Objekt.
 - Werkzeugtyp und Wertgrenzen werden erneut geprüft.
 - Keine Änderung von NC, Toolpath, Preflight, oder Fertigungsfreigaben.
 
-## Phase 2 – nach Policy-PASS
-Explizite UI-Checkboxen und Übernahme-Button; Ziel-Operation-ID,
-Stale-Selection-Verhinderung, erneute Validierung im App-Handler,
-Warnungen direkt bei »Bearbeiten«, keinerlei automatische Änderungen
-bei bloßem Tabwechsel.
+## Phase 2 – UI-Integration
+Nach lokal gemeldetem Phase-1-PASS umgesetzt: zwei separate, standardmäßig
+abgewählte Checkboxen sowie Übernahmebutton im Rechner. Der App-Handler
+prüft die Ziel-Operations-ID und den vollständigen Operations-Snapshot und
+berechnet die Empfehlung gegen das tatsächlich zugewiesene Werkzeug erneut.
+
+Änderungen erscheinen nach bestätigter Übernahme an den bestehenden
+Eingabefeldern unter »Bearbeiten«. Eine zusätzliche persistierte ae-Eigenschaft
+wird bewusst **nicht** eingeführt. Maschinensteifigkeit bleibt eine
+manuelle heuristische Einschätzung und ist kein Maschinenzertifikat.
+
+UI-/CI-Abnahme ist noch offen; bei Helix, radial gesperrten Operationen,
+Tool-Geometrie-Mismatch, nicht ausgewählten Checkboxen und stale target
+jeweils Sperre ohne Mutation prüfen.
 
 ## Workflow
 `node scripts/check-011d2-engagement-transfer.mjs`
