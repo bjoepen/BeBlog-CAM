@@ -45,6 +45,7 @@
   let appliedMaterial:MaterialKind|null=null;
   let machineRigidity:'light'|'medium'|'rigid'='light';
   let applyAxial=false, applyRadial=false;
+  let reviewedContext:string|null=null;
 
   const STORAGE_KEY='beblog-cam.tool-library.v1';
   $: materialProfile=materialProfiles[$stockMaterial];
@@ -76,8 +77,16 @@
   $: geometryMatches=!!targetOperation&&targetOperation.tool.kind==='end-mill'&&tool.kind==='end-mill'&&Math.abs(targetOperation.tool.diameterMm-calculationDiameter)<1e-9&&Math.abs((targetOperation.tool.cuttingLengthMm??0)-tool.cuttingLengthMm)<1e-9;
   $: axialAllowed=!!targetOperation&&!helixDepth;
   $: radialAllowed=targetOperation?.kind==='facing'||targetOperation?.kind==='pocket'||targetOperation?.kind==='z-level-roughing'||targetOperation?.kind==='3d-roughing';
-  $: transferPreview=targetOperation&&engagementAdvice&&geometryMatches
-    ?prepareEngagementTransfer(targetOperation,engagementAdvice,{applyAxial:applyAxial&&axialAllowed,applyRadial:applyRadial&&radialAllowed}):null;
+  // Each affirmative checkbox selection is bound to the exact reviewed operation
+  // and advice inputs; switching operations cannot carry consent over.
+  $: currentContext=JSON.stringify({operation:targetOperation,operationId:targetOperationId,
+    material:$stockMaterial,machineRigidity,toolKind:tool.kind,diameter:calculationDiameter,
+    cuttingLength:tool.kind==='end-mill'?tool.cuttingLengthMm:null});
+  $: selectionCurrent=reviewedContext===currentContext;
+  $: selectedAxial=selectionCurrent&&applyAxial&&axialAllowed;
+  $: selectedRadial=selectionCurrent&&applyRadial&&radialAllowed;
+  $: transferPreview=targetOperation&&engagementAdvice&&geometryMatches&&selectionCurrent
+    ?prepareEngagementTransfer(targetOperation,engagementAdvice,{applyAxial:selectedAxial,applyRadial:selectedRadial}):null;
   $: axialCheck=engagementAdvice?.status==='advisory'&&engagementAdvice.axial&&targetOperation&&!helixDepth
     ?assessAdvisoryRange(targetOperation.stepDownMm,engagementAdvice.axial):null;
   $: radialPercent=targetOperation&&('stepoverPercent' in targetOperation)
@@ -161,12 +170,18 @@
     if(id)onTargetOperationChange?.(id);
     transferMessage='';
   }
+  function selectEngagement(field:'axial'|'radial',checked:boolean){
+    if(reviewedContext!==currentContext){applyAxial=false;applyRadial=false;}
+    reviewedContext=currentContext;
+    if(field==='axial')applyAxial=checked;
+    else applyRadial=checked;
+  }
   function transferEngagement(){
     if(!onEngagementTransfer||!targetOperation||!targetOperationId||targetOperation.id!==targetOperationId||
-      !geometryMatches||transferPreview?.status!=='ready')return;
+      !geometryMatches||!selectionCurrent||transferPreview?.status!=='ready')return;
     onEngagementTransfer({operationId:targetOperation.id,operationSnapshot:JSON.stringify(targetOperation),
-      material:$stockMaterial,machineRigidity,applyAxial:applyAxial&&axialAllowed,applyRadial:applyRadial&&radialAllowed});
-    applyAxial=false;applyRadial=false;
+      material:$stockMaterial,machineRigidity,applyAxial:selectedAxial,applyRadial:selectedRadial});
+    applyAxial=false;applyRadial=false;reviewedContext=null;
   }
   function applyToOperation(){
     if(!onApplyToOperation||!targetOperationId||toolTransferBlocked||recommendedRpm==null||recommendedFeed==null||!(calculationDiameter>0))return;
@@ -307,10 +322,10 @@
         <section class="apply-card" aria-label="Zustellungsempfehlungen übernehmen">
           <h3>Zustellungen ausdrücklich übernehmen</h3>
           {#if !geometryMatches}<p class="note-line">Bitte Werkzeugtyp, Durchmesser und Schneidenlänge mit der Zieloperation abgleichen. Ohne identische Werkzeuggeometrie ist die Übernahme gesperrt.</p>{/if}
-          <label style="display:block;margin:9px 0"><input type="checkbox" bind:checked={applyAxial} disabled={!geometryMatches||!axialAllowed}/> ap als Zustellung übernehmen</label>
-          <label style="display:block;margin:9px 0"><input type="checkbox" bind:checked={applyRadial} disabled={!geometryMatches||!radialAllowed}/> ae-Startwert in Spurabstand umrechnen</label>
+          <label style="display:block;margin:9px 0"><input type="checkbox" checked={selectedAxial} onchange={e=>selectEngagement('axial',e.currentTarget.checked)} disabled={!geometryMatches||!axialAllowed}/> ap als Zustellung übernehmen</label>
+          <label style="display:block;margin:9px 0"><input type="checkbox" checked={selectedRadial} onchange={e=>selectEngagement('radial',e.currentTarget.checked)} disabled={!geometryMatches||!radialAllowed}/> ae-Startwert in Spurabstand umrechnen</label>
           {#if helixDepth}<p class="note-line">Helix: axiale Zustellung pro Umdrehung wird nicht überschrieben.</p>{/if}
-          {#if transferPreview?.status==='unavailable'&&(applyAxial||applyRadial)}
+          {#if transferPreview?.status==='unavailable'&&(selectedAxial||selectedRadial)}
             <p class="note-line">{transferPreview.reason}</p>
           {/if}
           <p class="body-copy">Nur gewählte Felder werden nach erneuter Prüfung übernommen. Keine Werkzeug-/Drehzahl-/Vorschubübernahme und keine Fertigungsfreigabe. Spurabstand ist nicht tatsächlicher ae.</p>
