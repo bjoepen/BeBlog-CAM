@@ -34,7 +34,9 @@ const round = (x: number) => Math.round(x * 1e6) / 1e6;
  * Standard idealized peripheral milling: maximum chip-thickness factor.
  * For ae/D < 0.5: 2 sqrt(q(1-q)), where q = ae/D.
  * For ae/D >= 0.5: 1 (maximum chip thickness reaches fz).
- * Not applicable to plunging, helixes, full tool immersion, ballnose or
+ * Full radial immersion (ae = D, slotting) is mathematically covered by
+ * factor = 1; this does NOT imply that full-slot machining is safe.
+ * Not applicable to plunging, helixes, ballnose or
  * evolving stock contact without a known effective ae.
  */
 export function assessChipThickness(input: ChipThicknessInput): ChipThicknessResult {
