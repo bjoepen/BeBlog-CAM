@@ -68,7 +68,8 @@
     operation:targetOperation.kind,
     machineRigidity
   }):null;
-  $: axialCheck=engagementAdvice?.status==='advisory'&&engagementAdvice.axial&&targetOperation
+  $: helixDepth=targetOperation?.kind==='pocket'&&targetOperation.entry==='helix';
+  $: axialCheck=engagementAdvice?.status==='advisory'&&engagementAdvice.axial&&targetOperation&&!helixDepth
     ?assessAdvisoryRange(targetOperation.stepDownMm,engagementAdvice.axial):null;
   $: radialPercent=targetOperation&&('stepoverPercent' in targetOperation)
     ?targetOperation.stepoverPercent:null;
