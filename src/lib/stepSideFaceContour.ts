@@ -11,7 +11,7 @@ export type StepSideFaceContourTarget={
   segments:StepSideFaceContourSegment[];
   points:P2[];
   zMm:number;
-  topology:'open';
+  topology:'open'|'closed';
 };
 export type StepSideFaceContourResult={target:StepSideFaceContourTarget|null;eligibleFaceIds:number[];errors:string[]};
 
@@ -87,8 +87,9 @@ function chainSegments(segments:StepSideFaceContourSegment[]){
     const next=remaining.splice(index,1)[0];out.push({edgeId:next.edgeId,points:reverse?[...next.points].reverse():next.points});
   }
   const points=[...out[0].points];for(const segment of out.slice(1))points.push(...segment.points.slice(1));
-  if(points.length<2||same2(points[0],points.at(-1)!))return null;
-  return{segments:out,edgeIds:out.map(segment=>segment.edgeId),points};
+  if(points.length<2)return null;
+  return{segments:out,edgeIds:out.map(segment=>segment.edgeId),points,
+    topology:same2(points[0],points.at(-1)!)?'closed' as const:'open' as const};
 }
 
 export function buildStepSideFaceContour(summary:ImportSummary,selectedFaceIds:number[],orientation:PartOrientation={rotationXDeg:0,rotationYDeg:0,rotationZDeg:0}):StepSideFaceContourResult{
@@ -105,7 +106,7 @@ export function buildStepSideFaceContour(summary:ImportSummary,selectedFaceIds:n
   const segments=edges.flatMap(edge=>{const points=sampleTopEdge(summary,edge,z);return points?[{edgeId:edge.edgeId,points}]:[];});
   const chain=chainSegments(segments);
   if(!chain)return{target:null,eligibleFaceIds,errors:['Die gewählten STEP-Seitenflächen ergeben noch keine einzelne zusammenhängende offene Profilkante.']};
-  return{target:{targetKey:`step-side-faces:${selected.join(',')}`,faceIds:selected,edgeIds:chain.edgeIds,segments:chain.segments,points:chain.points,zMm:z,topology:'open'},eligibleFaceIds,errors:[]};
+  return{target:{targetKey:`step-side-faces:${selected.join(',')}`,faceIds:selected,edgeIds:chain.edgeIds,segments:chain.segments,points:chain.points,zMm:z,topology:chain.topology},eligibleFaceIds,errors:[]};
 }
 
 export function stepSideFaceContourAfterExclusions(target:StepSideFaceContourTarget,excludedEdgeIds:number[]):StepSideFaceContourTarget|null{
