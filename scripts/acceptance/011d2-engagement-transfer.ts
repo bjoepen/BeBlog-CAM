@@ -1,0 +1,22 @@
+import { defaultContourOperation, defaultPocketOperation, defaultThreeDRoughingOperation, type CamOperation } from '../../src/lib/types';
+import { prepareEngagementTransfer } from '../../src/lib/engagementTransfer';
+import { recommendCuttingEngagement } from '../../src/lib/cuttingEngagementRecommendation';
+const assert = (value: unknown, description: string) => { if (!value) throw new Error(description); };
+const base = { material: 'aluminium' as const, toolKind: 'end-mill' as const, diameterMm: 3,
+  cuttingLengthMm: 10, operation: 'contour' as const, machineRigidity: 'light' as const };
+const advice = recommendCuttingEngagement(base);
+const contour = { ...defaultContourOperation, tool:{...defaultContourOperation.tool,kind:'end-mill' as const} };
+const initial = JSON.stringify(contour);
+const axial = prepareEngagementTransfer(contour, advice, {applyAxial:true,applyRadial:false});
+assert(axial.status === 'ready' && axial.changed.length === 1 && axial.changed[0] === 'stepDownMm', 'contour ap opt in');
+assert(JSON.stringify(contour) === initial, 'original operation immutable');
+const contourRadial = prepareEngagementTransfer(contour, advice, {applyAxial:false,applyRadial:true});
+assert(contourRadial.status === 'unavailable', 'contour has no radial stepover');
+const pocket = {...defaultPocketOperation, tool:{...defaultPocketOperation.tool,kind:'end-mill' as const},entry:'helix' as const};
+const pocketAdvice = recommendCuttingEngagement({...base,operation:'pocket'});
+assert(prepareEngagementTransfer(pocket,pocketAdvice,{applyAxial:true,applyRadial:false}).status==='unavailable','helix pitch not ap');
+const radial = prepareEngagementTransfer({...pocket,entry:'ramp'},pocketAdvice,{applyAxial:false,applyRadial:true});
+assert(radial.status==='ready' && radial.changed[0]==='stepoverPercent','pocket radial only');
+assert(prepareEngagementTransfer(contour,advice,{applyAxial:false,applyRadial:false}).status==='unavailable','explicit selection required');
+assert(prepareEngagementTransfer({...contour,tool:{...contour.tool,kind:'ball-nose'}},advice,{applyAxial:true,applyRadial:false}).status==='unavailable','tool kind guarded');
+console.log('011-D2 explicit transfer policy: PASS');
