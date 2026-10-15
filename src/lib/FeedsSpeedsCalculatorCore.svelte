@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
   import { recommendCuttingEngagement } from './cuttingEngagementRecommendation';
+  import { prepareEngagementTransfer } from './engagementTransfer';
+  import type { MaterialKind as EngagementMaterial } from './materialContext';
   import { assessAdvisoryRange, assessChipThickness } from './chipThicknessAdvisory';
   import { parsePortableToolLibrary, portableToolLibraryFilename, serializePortableToolLibrary } from './toolLibraryPortable';
   import { materialKinds, materialProfiles, setStockMaterial, stockMaterial, type MaterialKind } from './materialContext';
@@ -29,6 +31,7 @@
   export let targetOperation:CamOperation|null=null;
   export let onTargetOperationChange:((id:string)=>void)|undefined=undefined;
   export let onApplyToOperation:((transfer:ToolOperationTransfer)=>void)|undefined=undefined;
+  export let onEngagementTransfer:((request:{operationId:string;operationSnapshot:string;material:EngagementMaterial;machineRigidity:'light'|'medium'|'rigid';applyAxial:boolean;applyRadial:boolean})=>void)|undefined=undefined;
 
   let activeTab:ToolTab='data';
   let tool:MillingTool=createMillingTool('end-mill','tool-draft');
@@ -41,6 +44,7 @@
   let transferMessage='';
   let appliedMaterial:MaterialKind|null=null;
   let machineRigidity:'light'|'medium'|'rigid'='light';
+  let applyAxial=false, applyRadial=false;
 
   const STORAGE_KEY='beblog-cam.tool-library.v1';
   $: materialProfile=materialProfiles[$stockMaterial];
@@ -69,6 +73,11 @@
     machineRigidity
   }):null;
   $: helixDepth=targetOperation?.kind==='pocket'&&targetOperation.entry==='helix';
+  $: geometryMatches=!!targetOperation&&targetOperation.tool.kind==='end-mill'&&tool.kind==='end-mill'&&Math.abs(targetOperation.tool.diameterMm-calculationDiameter)<1e-9&&Math.abs((targetOperation.tool.cuttingLengthMm??0)-tool.cuttingLengthMm)<1e-9;
+  $: axialAllowed=!!targetOperation&&!helixDepth;
+  $: radialAllowed=targetOperation?.kind==='facing'||targetOperation?.kind==='pocket'||targetOperation?.kind==='z-level-roughing'||targetOperation?.kind==='3d-roughing';
+  $: transferPreview=targetOperation&&engagementAdvice&&geometryMatches
+    ?prepareEngagementTransfer(targetOperation,engagementAdvice,{applyAxial:applyAxial&&axialAllowed,applyRadial:applyRadial&&radialAllowed}):null;
   $: axialCheck=engagementAdvice?.status==='advisory'&&engagementAdvice.axial&&targetOperation&&!helixDepth
     ?assessAdvisoryRange(targetOperation.stepDownMm,engagementAdvice.axial):null;
   $: radialPercent=targetOperation&&('stepoverPercent' in targetOperation)
@@ -151,6 +160,13 @@
     const id=(event.currentTarget as HTMLSelectElement).value;
     if(id)onTargetOperationChange?.(id);
     transferMessage='';
+  }
+  function transferEngagement(){
+    if(!onEngagementTransfer||!targetOperation||!targetOperationId||targetOperation.id!==targetOperationId||
+      !geometryMatches||transferPreview?.status!=='ready')return;
+    onEngagementTransfer({operationId:targetOperation.id,operationSnapshot:JSON.stringify(targetOperation),
+      material:$stockMaterial,machineRigidity,applyAxial:applyAxial&&axialAllowed,applyRadial:applyRadial&&radialAllowed});
+    applyAxial=false;applyRadial=false;
   }
   function applyToOperation(){
     if(!onApplyToOperation||!targetOperationId||toolTransferBlocked||recommendedRpm==null||recommendedFeed==null||!(calculationDiameter>0))return;
@@ -287,6 +303,20 @@
           <p class="body-copy">{engagementAdvice?.notes[0]??'Für diese Werkzeug- und Operationskombination liegen noch keine Empfehlungen vor.'}</p>
         {/if}
       </section>
+      {#if targetOperation&&engagementAdvice?.status==='advisory'&&onEngagementTransfer}
+        <section class="apply-card" aria-label="Zustellungsempfehlungen übernehmen">
+          <h3>Zustellungen ausdrücklich übernehmen</h3>
+          {#if !geometryMatches}<p class="note-line">Bitte Werkzeugtyp, Durchmesser und Schneidenlänge mit der Zieloperation abgleichen. Ohne identische Werkzeuggeometrie ist die Übernahme gesperrt.</p>{/if}
+          <label style="display:block;margin:9px 0"><input type="checkbox" bind:checked={applyAxial} disabled={!geometryMatches||!axialAllowed}/> ap als Zustellung übernehmen</label>
+          <label style="display:block;margin:9px 0"><input type="checkbox" bind:checked={applyRadial} disabled={!geometryMatches||!radialAllowed}/> ae-Startwert in Spurabstand umrechnen</label>
+          {#if helixDepth}<p class="note-line">Helix: axiale Zustellung pro Umdrehung wird nicht überschrieben.</p>{/if}
+          {#if transferPreview?.status==='unavailable'&&(applyAxial||applyRadial)}
+            <p class="note-line">{transferPreview.reason}</p>
+          {/if}
+          <p class="body-copy">Nur gewählte Felder werden nach erneuter Prüfung übernommen. Keine Werkzeug-/Drehzahl-/Vorschubübernahme und keine Fertigungsfreigabe. Spurabstand ist nicht tatsächlicher ae.</p>
+          <button class="primary-action apply-button" disabled={!geometryMatches||transferPreview?.status!=='ready'} onclick={transferEngagement}>Ausgewählte Zustellungen übernehmen</button>
+        </section>
+      {/if}
       <section class="card"><h3>Aktives Werkzeug</h3><div class="kv"><span>Typ</span><b>{millingToolLabels[tool.kind]}</b></div><div class="kv"><span>Name</span><b>{tool.name}</b></div><div class="kv"><span>Rechen-Ø</span><b>{n(calculationDiameter,2)} mm</b></div><div class="kv"><span>Schneiden</span><b>{tool.flutes}</b></div><div class="kv"><span>fz Werkzeug</span><b>{n(tool.chipLoadMm,3)} mm</b></div><div class="kv"><span>fz wirksam</span><b>{n(effectiveChipLoad,3)} mm</b></div></section>
       {#if targetOperationId&&onApplyToOperation}<section class="apply-card"><div><h3>{targetOperationChoice?`In ${targetOperationChoice.label} übernehmen`:'Bearbeitung wählen'}</h3><p>Ziel: <b>{targetOperationChoice?.name??activeOperationName}</b></p><p>Übernommen werden Werkzeugname, Fräsertyp, Rechen-Ø sowie die aus <b>{materialProfile.label}</b> berechnete Drehzahl und der Vorschub. Eintauchvorschub, Zustellung und weitere CAM-Parameter bleiben bewusst Eigentum der Bearbeitung.</p>{#if toolCompatibility}<p class="compatibility" class:compat-pass={toolCompatibility.level==='pass'} class:compat-warn={toolCompatibility.level==='warn'} class:compat-fail={toolCompatibility.level==='fail'}><strong>{toolCompatibility.level.toUpperCase()}:</strong> {toolCompatibility.detail}</p>{/if}</div><button class="primary-action apply-button" disabled={toolTransferBlocked||recommendedRpm==null||recommendedFeed==null} onclick={applyToOperation}>Werkzeug &amp; Schnittdaten übernehmen</button>{#if transferMessage}<p class="transfer-message">✓ {transferMessage}</p>{/if}</section>{/if}
       <section class="card"><h3>Werkstoff des Rohlings</h3><div class="material-grid">{#each materialKinds as material}<button class:active={$stockMaterial===material} aria-pressed={$stockMaterial===material} onclick={()=>chooseMaterial(material)}>{materialProfiles[material].shortLabel}</button>{/each}</div><div class="material-summary"><b>{materialProfile.label}</b><span>vc {n(materialProfile.cuttingSpeedMMin)} m/min · fz-Faktor {n(materialProfile.chipLoadFactor,2)}</span></div></section>
