@@ -71,17 +71,25 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
   let effective:EffectiveTarget|null=null;
 
   if(operation.topology==='closed'){
-    if(!all.length)errors.push('Keine horizontale geschlossene STEP-Kontur als Fertigungsziel erkannt.');
-    if(operation.stepWireId==null)errors.push('Keine geschlossene STEP-Kontur explizit gewählt. Wähle eine Kontur im Viewport.');
-    if(operation.stepWireId!=null&&!chosen)errors.push('Gewähltes STEP-Konturziel ist nicht mehr verfügbar.');
-    if(chosen&&chosen.topology!=='closed')errors.push('Geschlossene STEP-Bearbeitung benötigt ein geschlossenes Konturziel.');
     if(excluded.length)errors.push('Bei geschlossener STEP-Kontur dürfen keine Kanten ausgeschlossen sein.');
-    if(chosen)effective=chosen;
+    if((operation.stepContourFaceIds?.length??0)>0){
+      errors.push(...sideResult.errors);
+      if(sideResult.target?.topology==='closed') effective=sideResult.target;
+      else if(sideResult.target) errors.push('Die ausgewählten STEP-Seitenflächen bilden noch keinen geschlossenen Profilring.');
+    }else{
+      if(!all.length)errors.push('Keine horizontale geschlossene STEP-Kontur als Fertigungsziel erkannt.');
+      if(operation.stepWireId==null)errors.push('Keine geschlossene STEP-Kontur explizit gewählt. Wähle eine Randkante oder Seitenflächen im Viewport.');
+      if(operation.stepWireId!=null&&!chosen)errors.push('Gewähltes STEP-Konturziel ist nicht mehr verfügbar.');
+      if(chosen&&chosen.topology!=='closed')errors.push('Geschlossene STEP-Bearbeitung benötigt ein geschlossenes Konturziel.');
+      if(chosen)effective=chosen;
+    }
   }else if((operation.stepContourFaceIds?.length??0)>0){
     errors.push(...sideResult.errors);
     if(sideResult.target){
+      if(sideResult.target.topology==='closed')errors.push('Geschlossene Seitenflächen-Kette erkannt: Konturtyp auf Geschlossen stellen.');
       const refined=stepSideFaceContourAfterExclusions(sideResult.target,excluded);
       if(!refined)errors.push('Die ausgeschlossenen STEP-Kanten trennen die Seitenflächen-Kontur in mehrere Teilstücke.');
+      else if(refined.topology!=='open')errors.push('Offene STEP-Kontur benötigt zwei getrennte Endpunkte.');
       else effective=refined;
     }
   }else{
