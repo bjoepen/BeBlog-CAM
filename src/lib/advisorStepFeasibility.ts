@@ -65,9 +65,18 @@ export function captureAdvisorContext(context: AdvisorContext): AdvisorContextSn
     if (typeof value !== 'object') return false;
     if (seen.has(value)) return false;
     seen.add(value);
-    if (Array.isArray(value)) return value.every(valid);
+    if (Array.isArray(value)) {
+      return Object.keys(value).length === value.length && value.every(valid);
+    }
+    // JSON.stringify silently collapses Map, Set, Date and class instances.
+    // Only JSON-shaped plain objects are permitted in reviewed context.
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
     const object = value as Record<string, unknown>;
-    return Object.keys(object).every(key => valid(object[key]));
+    if (Object.getOwnPropertySymbols(object).length > 0) return false;
+    const keys = Object.keys(object);
+    if (Reflect.ownKeys(object).length !== keys.length) return false;
+    return keys.every(key => valid(object[key]));
   };
   if (!valid(context)) return null;
   return { version: 1, serialized: JSON.stringify(context) };
