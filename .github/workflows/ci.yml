@@ -171,6 +171,8 @@ jobs:
           pnpm check:010f11
           pnpm check:010f12
           pnpm check:010f13
+      - name: Advisor 011-B regression gate
+        run: pnpm check:011b
       - name: Frontend build
         run: pnpm build
       - name: Rust check
