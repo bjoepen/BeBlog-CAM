@@ -16,7 +16,7 @@ pub(crate) fn source_fingerprint(path:&Path)->Result<String,String>{
  Ok(format!("src-v1:{hash:016x}:{}",bytes.len()))
 }
 
-pub fn inspect(path:&str)->Result<ImportSummary,String>{let path=Path::new(path);let file_name=path.file_name().and_then(|v|v.to_str()).unwrap_or("Bauteil").to_string();let ext=path.extension().and_then(|v|v.to_str()).unwrap_or("").to_ascii_lowercase();let fingerprint=source_fingerprint(path)?;match ext.as_str(){"dxf"=>inspect_dxf(path,file_name,fingerprint),"step"|"stp"=>{let sha256=source_sha256(path)?;inspect_step(path,file_name,fingerprint,sha256)},_=>Err("BeBlog CAM unterstützt STEP/STP und DXF.".into())}}
+pub fn inspect(path:&str)->Result<ImportSummary,String>{let path=Path::new(path);let file_name=path.file_name().and_then(|v|v.to_str()).unwrap_or("Bauteil").to_string();let ext=path.extension().and_then(|v|v.to_str()).unwrap_or("").to_ascii_lowercase();let fingerprint=source_fingerprint(path)?;match ext.as_str(){"dxf"=>inspect_dxf(path,file_name,fingerprint),"step"|"stp"=>{inspect_step_consistent(path,file_name,fingerprint)},_=>Err("BeBlog CAM unterstützt STEP/STP und DXF.".into())}}
 
 fn source_sha256(path:&Path)->Result<String,String>{
  let mut file=std::fs::File::open(path).map_err(|e|format!("STEP-Quelldatei konnte für SHA-256 nicht geöffnet werden: {e}"))?;
@@ -36,6 +36,28 @@ mod sha256_tests {
  }
 
  #[test]
+ fn source_change_during_step_inspection_is_rejected() {
+  let path=std::env::temp_dir().join(format!("beblog-011e3-change-{}-{:?}.step",std::process::id(),std::thread::current().id()));
+  std::fs::write(&path,b"original").expect("create source");
+  let fingerprint=source_fingerprint(&path).expect("initial fingerprint");
+  let result=verify_step_source(&path,&fingerprint,|_|{
+   std::fs::write(&path,b"modified").expect("modify source during inspection");
+  });
+  std::fs::remove_file(&path).expect("cleanup source");
+  assert!(result.is_err(),"modified STEP must not be accepted");
+ }
+
+ #[test]
+ fn stable_step_source_is_accepted() {
+  let path=std::env::temp_dir().join(format!("beblog-011e3-stable-{}-{:?}.step",std::process::id(),std::thread::current().id()));
+  std::fs::write(&path,b"stable").expect("create source");
+  let fingerprint=source_fingerprint(&path).expect("initial fingerprint");
+  let result=verify_step_source(&path,&fingerprint,|digest|digest.len());
+  std::fs::remove_file(&path).expect("cleanup source");
+  assert_eq!(result.expect("unchanged source"),64);
+ }
+
+ #[test]
  fn source_sha256_hashes_file_contents() {
   use std::io::Write;
   let path = std::env::temp_dir().join(format!("beblog-011e2-sha256-{}-{:?}.step", std::process::id(), std::thread::current().id()));
@@ -47,6 +69,23 @@ mod sha256_tests {
   std::fs::remove_file(&path).expect("remove temporary STEP");
   assert_eq!(digest.expect("hash temporary STEP"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
  }
+}
+
+// 011-E3: reject ordinary source mutations between the pre-import hash and
+// the post-import verification. This is not an atomic file snapshot: a source
+// that changes and returns to identical bytes can still evade detection.
+fn verify_step_source<T>(path:&Path,expected_fingerprint:&str,inspect:impl FnOnce(&str)->T)->Result<T,String>{
+ let before=source_sha256(path)?;
+ let result=inspect(&before);
+ let after=source_sha256(path)?;
+ if before!=after || source_fingerprint(path)?!=expected_fingerprint {
+  return Err("STEP-Quelldatei wurde während des Imports verändert. Import verworfen; Datei erneut laden.".into());
+ }
+ Ok(result)
+}
+
+fn inspect_step_consistent(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{
+ verify_step_source(path,&source_fingerprint,|digest|inspect_step(path,file_name,source_fingerprint.clone(),digest.to_string()))
 }
 
 fn inspect_step(path:&Path,file_name:String,source_fingerprint:String,source_content_sha256:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256.clone())})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256)})}}
