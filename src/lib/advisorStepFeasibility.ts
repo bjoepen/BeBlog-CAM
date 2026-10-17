@@ -73,11 +73,16 @@ export function screenStepFeasibility(args: {
   const features: AdvisorFeature[] = recognized.holes.map(hole => {
     const reasons: string[] = [];
     const strategies: AdvisorStrategy[] = [];
-    if (Math.abs(Math.abs(hole.axisDirection[2]) - 1) > 1e-5) {
+    if (!Number.isFinite(hole.diameterMm) || hole.diameterMm <= 0 ||
+        !Number.isFinite(hole.depthMm) || hole.depthMm <= 0 ||
+        !Array.isArray(hole.axisDirection) || hole.axisDirection.length !== 3 ||
+        !hole.axisDirection.every(Number.isFinite)) {
+      reasons.push('Bohrungsgeometrie unvollständig oder ungültig; keine Strategie bewertbar.');
+    } else if (Math.abs(Math.abs(hole.axisDirection[2]) - 1) > 1e-5) {
       reasons.push('Bohrungsachse nicht parallel zur Maschinen-Z-Achse.');
     } else {
       for (const tool of tools) {
-        if (!(tool.diameterMm > 0)) continue;
+        if (!Number.isFinite(tool.diameterMm) || tool.diameterMm <= 0) continue;
         const methods: DrillMethod[] = ['drill', 'helical-mill'];
         for (const method of methods) {
           const compatibilityLevel = compatibility(method, tool);
@@ -87,8 +92,8 @@ export function screenStepFeasibility(args: {
           const cautions: string[] = [];
           if (compatibilityLevel === 'warn') cautions.push('Werkzeugkompatibilität ist nur mit Warnung freigegeben.');
           if (method === 'drill' && tool.kind !== 'drill') cautions.push('Axiales Eintauchen mit Schaftfräser muss gesondert freigegeben werden.');
-          if (!('cuttingLengthMm' in tool) || !(tool.cuttingLengthMm >= hole.depthMm)) cautions.push('Schneidenlänge nicht nachgewiesen oder kürzer als Featuretiefe.');
-          if (!(tool.stickoutMm > hole.depthMm)) cautions.push('Auskragung nicht nachgewiesen oder unzureichend.');
+          if (!('cuttingLengthMm' in tool) || !Number.isFinite(tool.cuttingLengthMm) || !(tool.cuttingLengthMm >= hole.depthMm)) cautions.push('Schneidenlänge nicht nachgewiesen oder kürzer als Featuretiefe.');
+          if (!Number.isFinite(tool.stickoutMm) || !(tool.stickoutMm > hole.depthMm)) cautions.push('Auskragung nicht nachgewiesen oder unzureichend.');
           if (method === 'helical-mill') cautions.push('Helix-Eintauchfähigkeit, Freiraum und Preflight noch nicht geprüft.');
           if (method === 'drill') cautions.push('Bohrtiefe, Werkzeugspitze, Freiraum und vollständiger Preflight noch nicht geprüft.');
           strategies.push({ method, toolId: tool.id, toolName: tool.name, status: cautions.length ? 'conditional' : 'candidate', reasons: cautions });

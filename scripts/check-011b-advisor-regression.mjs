@@ -94,6 +94,23 @@ check('unclassified cylinder remains UNKNOWN', () => {
   rejected = [7];
   try { assert.equal(run([]).features.find(f => f.faceIds.includes(7)).coverage, 'UNKNOWN'); } finally { rejected = []; }
 });
+check('invalid hole measurements fail closed', () => {
+  for (const changes of [{ diameterMm: NaN }, { diameterMm: Infinity }, { diameterMm: 0 },
+    { depthMm: NaN }, { depthMm: -1 }, { axisDirection: [0, 0, NaN] },
+    { axisDirection: [0, 0] }, { axisDirection: undefined }]) {
+    holes = [{ ...hole, ...changes }];
+    try {
+      const feature = run([tool('drill', 4)]).features[0];
+      assert.equal(feature.coverage, 'NOT_COVERED');
+      assert.equal(feature.strategies.length, 0);
+    } finally { holes = [hole]; }
+  }
+});
+check('nonfinite tool diameter cannot become a strategy', () => {
+  const r = run([tool('drill', Infinity), tool('end-mill', NaN)]);
+  assert.equal(r.features[0].coverage, 'NOT_COVERED');
+  assert.equal(r.features[0].strategies.length, 0);
+});
 check('screen is deterministic and does not mutate inputs', () => {
   const tools = Object.freeze([tool('drill', 4)]);
   const first = run(tools);
@@ -101,4 +118,4 @@ check('screen is deterministic and does not mutate inputs', () => {
   assert.equal(tools[0].diameterMm, 4);
   assert.equal(base.wcs.z, 'top');
 });
-console.log('PASS 011-B: 14 isolated advisor regression cases');
+console.log('PASS 011-B: 16 isolated advisor regression cases');
