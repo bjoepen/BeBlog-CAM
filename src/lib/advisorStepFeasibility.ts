@@ -101,8 +101,12 @@ export function createStepAdvisorContext(args: {
 }): AdvisorContext | null {
   const { summary, sourceContentSha256, capabilityRevision, orientation, stockMode,
     stockSnapshot, wcs, material, tools } = args;
+  // 011-E5A: identity must come from the snapshot-backed import summary itself.
+  // A caller-supplied digest is not evidence of the geometry OCCT inspected.
   if (summary.kind !== 'step' || summary.status !== 'ready' || !summary.brep?.nativeBrep ||
-      !sourceContentSha256 || !/^[a-fA-F0-9]{64}$/.test(sourceContentSha256)) return null;
+      !sourceContentSha256 || !/^[a-fA-F0-9]{64}$/.test(sourceContentSha256) ||
+      !summary.sourceContentSha256 ||
+      summary.sourceContentSha256.toLowerCase() !== sourceContentSha256.toLowerCase()) return null;
   const context: AdvisorContext = {
     geometryIdentity: `sha256:${sourceContentSha256.toLowerCase()}`,
     capabilityRevision, summary, orientation, stockMode, stockSnapshot, wcs, material, tools,
