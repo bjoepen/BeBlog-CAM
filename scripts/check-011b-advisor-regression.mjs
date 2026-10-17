@@ -111,6 +111,40 @@ check('nonfinite tool diameter cannot become a strategy', () => {
   assert.equal(r.features[0].coverage, 'NOT_COVERED');
   assert.equal(r.features[0].strategies.length, 0);
 });
+check('advisor context invalidates on every relevant dependency', () => {
+  const context = {
+    geometryIdentity: 'step-sha256-fixture', capabilityRevision: '011-D-v1',
+    ...base, stockSnapshot: { widthMm: 50, heightMm: 20 },
+    tools: [tool('drill', 4)],
+  };
+  const snapshot = exports.captureAdvisorContext(context);
+  assert.ok(snapshot);
+  assert.equal(exports.isAdvisorContextCurrent(snapshot, context), true);
+  const changed = [
+    { geometryIdentity: 'different-geometry' },
+    { capabilityRevision: '011-D-v2' },
+    { summary: { ...context.summary, fileName: 'renamed.step' } },
+    { orientation: { ...context.orientation, rotationZDeg: 90 } },
+    { stockMode: 'auto' },
+    { stockSnapshot: { ...context.stockSnapshot, widthMm: 51 } },
+    { wcs: { ...context.wcs, z: 'bottom' } },
+    { material: 'wood' },
+    { tools: [tool('drill', 5)] },
+  ];
+  for (const change of changed) {
+    assert.equal(exports.isAdvisorContextCurrent(snapshot, { ...context, ...change }), false);
+  }
+  assert.equal(exports.isAdvisorContextCurrent(snapshot, { ...context, tools: [tool('drill', 4)] }), true);
+});
+check('advisor context rejects incomplete or unsafe snapshots', () => {
+  const context = { geometryIdentity: 'id', capabilityRevision: 'rev', ...base,
+    stockSnapshot: { widthMm: 20 }, tools: [tool('drill', 4)] };
+  assert.equal(exports.captureAdvisorContext({ ...context, geometryIdentity: '' }), null);
+  assert.equal(exports.captureAdvisorContext({ ...context, capabilityRevision: '' }), null);
+  assert.equal(exports.captureAdvisorContext({ ...context, stockSnapshot: { widthMm: NaN } }), null);
+  assert.equal(exports.captureAdvisorContext({ ...context, stockSnapshot: undefined }), null);
+  assert.equal(exports.isAdvisorContextCurrent(null, context), false);
+});
 check('screen is deterministic and does not mutate inputs', () => {
   const tools = Object.freeze([tool('drill', 4)]);
   const first = run(tools);
@@ -118,4 +152,4 @@ check('screen is deterministic and does not mutate inputs', () => {
   assert.equal(tools[0].diameterMm, 4);
   assert.equal(base.wcs.z, 'top');
 });
-console.log('PASS 011-B: 16 isolated advisor regression cases');
+console.log('PASS 011-B: 18 isolated advisor regression cases');
