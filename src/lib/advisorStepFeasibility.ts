@@ -38,12 +38,12 @@ export type AdvisorReport = {
 };
 
 /** Use existing operation/tool compatibility as the source of truth; do not reproduce tool-kind policy. */
-function compatible(method: DrillMethod, tool: MillingTool): boolean {
+function compatibility(method: DrillMethod, tool: MillingTool): 'pass' | 'warn' | 'fail' {
   const operation = {
     kind: 'drill', method,
     tool: { id: tool.id, name: tool.name, diameterMm: tool.diameterMm, kind: tool.kind },
   } as DrillOperation;
-  return validateToolCompatibility(operation).level !== 'fail';
+  return validateToolCompatibility(operation).level;
 }
 
 export function screenStepFeasibility(args: {
@@ -80,14 +80,17 @@ export function screenStepFeasibility(args: {
         if (!(tool.diameterMm > 0)) continue;
         const methods: DrillMethod[] = ['drill', 'helical-mill'];
         for (const method of methods) {
-          if (!compatible(method, tool)) continue;
+          const compatibilityLevel = compatibility(method, tool);
+          if (compatibilityLevel === 'fail') continue;
           if (method === 'drill' && Math.abs(tool.diameterMm - hole.diameterMm) > 0.01) continue;
           if (method === 'helical-mill' && tool.diameterMm >= hole.diameterMm - 1e-6) continue;
           const cautions: string[] = [];
+          if (compatibilityLevel === 'warn') cautions.push('Werkzeugkompatibilität ist nur mit Warnung freigegeben.');
           if (method === 'drill' && tool.kind !== 'drill') cautions.push('Axiales Eintauchen mit Schaftfräser muss gesondert freigegeben werden.');
           if (!('cuttingLengthMm' in tool) || !(tool.cuttingLengthMm >= hole.depthMm)) cautions.push('Schneidenlänge nicht nachgewiesen oder kürzer als Featuretiefe.');
           if (!(tool.stickoutMm > hole.depthMm)) cautions.push('Auskragung nicht nachgewiesen oder unzureichend.');
           if (method === 'helical-mill') cautions.push('Helix-Eintauchfähigkeit, Freiraum und Preflight noch nicht geprüft.');
+          if (method === 'drill') cautions.push('Bohrtiefe, Werkzeugspitze, Freiraum und vollständiger Preflight noch nicht geprüft.');
           strategies.push({ method, toolId: tool.id, toolName: tool.name, status: cautions.length ? 'conditional' : 'candidate', reasons: cautions });
         }
       }
