@@ -69,6 +69,31 @@ mod sha256_tests {
  }
 
  #[test]
+ fn snapshot_identity_matches_original_and_cleans_up() {
+  let path=std::env::temp_dir().join(format!("beblog-011e4b-source-{}-{:?}.step",std::process::id(),std::thread::current().id()));
+  std::fs::write(&path,b"ISO-10303-21;\\nDATA;\\nENDSEC;").expect("create source");
+  let snapshot=step_snapshot(&path).expect("snapshot");
+  assert_eq!(snapshot.fingerprint,source_fingerprint(&path).unwrap());
+  assert_eq!(snapshot.sha256,source_sha256(&path).unwrap());
+  assert_eq!(std::fs::read(&snapshot.path).unwrap(),std::fs::read(&path).unwrap());
+  let snapshot_path=snapshot.path.clone();
+  drop(snapshot);
+  assert!(!snapshot_path.exists(),"snapshot must be cleaned up");
+  std::fs::remove_file(&path).unwrap();
+ }
+
+ #[test]
+ fn snapshot_isolated_from_original_mutation() {
+  let path=std::env::temp_dir().join(format!("beblog-011e4b-mutation-{}-{:?}.stp",std::process::id(),std::thread::current().id()));
+  std::fs::write(&path,b"before").unwrap();
+  let snapshot=step_snapshot(&path).unwrap();
+  std::fs::write(&path,b"after").unwrap();
+  assert_eq!(std::fs::read(&snapshot.path).unwrap(),b"before");
+  assert_ne!(snapshot.sha256,source_sha256(&path).unwrap());
+  std::fs::remove_file(&path).unwrap();
+ }
+
+ #[test]
  fn source_sha256_hashes_file_contents() {
   use std::io::Write;
   let path = std::env::temp_dir().join(format!("beblog-011e2-sha256-{}-{:?}.step", std::process::id(), std::thread::current().id()));
@@ -132,17 +157,16 @@ fn step_snapshot(source: &Path) -> Result<StepSnapshot,String> {
  Ok(guard)
 }
 
-fn inspect_step_consistent(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{
+fn inspect_step_consistent(path:&Path,file_name:String,expected_fingerprint:String)->Result<ImportSummary,String>{
  let snapshot=step_snapshot(path)?;
- if snapshot.fingerprint!=source_fingerprint {return Err("STEP-Quelldatei wurde vor der Snapshot-Erstellung verändert. Import verworfen.".into());}
+ if snapshot.fingerprint!=expected_fingerprint {return Err("STEP-Quelldatei wurde vor der Snapshot-Erstellung verändert. Import verworfen.".into());}
  let result=inspect_step(&snapshot.path,file_name,snapshot.fingerprint.clone(),snapshot.sha256.clone());
- if source_fingerprint_fn(path)?!=snapshot.fingerprint || source_sha256(path)?!=snapshot.sha256 {
+ if source_fingerprint(path)?!=snapshot.fingerprint || source_sha256(path)?!=snapshot.sha256 {
   return Err("STEP-Quelldatei wurde während des Imports verändert. Import verworfen; Datei erneut laden.".into());
  }
  result
 }
 
-fn source_fingerprint_fn(path:&Path)->Result<String,String>{source_fingerprint(path)}
 
 fn inspect_step(path:&Path,file_name:String,source_fingerprint:String,source_content_sha256:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256.clone())})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256)})}}
 
