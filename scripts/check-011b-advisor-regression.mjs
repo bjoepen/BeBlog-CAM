@@ -169,7 +169,7 @@ check('advisor context rejects Map, Set and non-plain stock objects', () => {
 check('STEP advisor context requires verified content identity', () => {
   const digest = 'a'.repeat(64);
   const args = { ...base, summary: { ...base.summary, status: 'ready',
-    brep: { nativeBrep: true } }, sourceContentSha256: digest,
+    brep: { nativeBrep: true }, sourceContentSha256: digest }, sourceContentSha256: digest,
     capabilityRevision: '011-E1-v1', stockSnapshot: { widthMm: 40 },
     tools: [tool('drill', 4)] };
   const context = exports.createStepAdvisorContext(args);
@@ -178,13 +178,19 @@ check('STEP advisor context requires verified content identity', () => {
   const snapshot = exports.captureAdvisorContext(context);
   assert.ok(snapshot);
   assert.equal(exports.isAdvisorContextCurrent(snapshot, context), true);
+  const mismatched = exports.createStepAdvisorContext({ ...args,
+    sourceContentSha256: 'b'.repeat(64) });
+  assert.equal(mismatched, null);
   const modified = exports.createStepAdvisorContext({ ...args,
+    summary: { ...args.summary, sourceContentSha256: 'b'.repeat(64) },
     sourceContentSha256: 'b'.repeat(64) });
   assert.ok(modified);
   assert.equal(exports.isAdvisorContextCurrent(snapshot, modified), false);
   for (const changes of [
     { sourceContentSha256: null }, { sourceContentSha256: 'filename.step' },
     { sourceContentSha256: '0'.repeat(63) },
+    { summary: { ...args.summary, sourceContentSha256: null } },
+    { summary: { ...args.summary, sourceContentSha256: 'invalid' } },
     { summary: { ...args.summary, kind: 'dxf' } },
     { summary: { ...args.summary, status: 'native-adapter-pending' } },
     { summary: { ...args.summary, brep: { nativeBrep: false } } },
