@@ -71,7 +71,9 @@ export function captureAdvisorContext(context: AdvisorContext): AdvisorContextSn
     // JSON.stringify silently collapses Map, Set, Date and class instances.
     // Only JSON-shaped plain objects are permitted in reviewed context.
     const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return false;
+    // Accept plain objects across VM/iframe realms (their Object.prototype differs).
+    // Reject Map/Set/Date/class instances whose prototype has another ancestor.
+    if (prototype !== null && Object.getPrototypeOf(prototype) !== null) return false;
     const object = value as Record<string, unknown>;
     if (Object.getOwnPropertySymbols(object).length > 0) return false;
     const keys = Object.keys(object);
