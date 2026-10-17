@@ -20,7 +20,7 @@
   import type { SpindleHeadGeometry } from './lib/spindleHeadCollision';
   import FeedsSpeedsCalculator from './lib/FeedsSpeedsCalculator.svelte';
   import { recommendCuttingEngagement } from './lib/cuttingEngagementRecommendation';
-  import { prepareEngagementTransfer } from './lib/engagementTransfer';
+  import { prepareEngagementTransfer, isEngagementTransferTargetCurrent } from './lib/engagementTransfer';
   import type { MaterialKind } from './lib/materialContext';
   import type { MillingToolKind } from './lib/toolTypes';
   import type { Curve2, ImportSummary, StockDefinition, StockMode, PartPlacement, PartOrientation, WorkCoordinateSystem, CamOperation, FacingOperation, ContourOperation, PocketOperation, CarveOperation, DrillOperation, ZLevelRoughingOperation, ThreeDRoughingOperation, SurfaceFinishingOperation, OperationKind, CarveSelectionMode, DrillSelectionMode, OperationsProject } from './lib/types';
@@ -137,7 +137,7 @@
   function applyToolOperationTransfer(transfer:{operationId:string;toolId:string;toolName:string;toolKind:MillingToolKind;diameterMm:number;feedMmMin:number;spindleRpm:number;cuttingLengthMm:number;stickoutMm:number;shaftDiameterMm:number;holderDiameterMm:number}){if(!(transfer.diameterMm>0&&transfer.feedMmMin>0&&transfer.spindleRpm>0))return;emitThreeDRoughingAppDiagnostic(captureThreeDRoughingAppDiagnostic({event:'tool-transfer-before',operation,project:operationsProject,canonical:activeCanonicalToolpath}));const target=operationsProject.operations.find(op=>op.id===transfer.operationId);if(!target)return;if(target.kind==='surface-finishing'&&transfer.toolKind!=='ball-nose'){error='3D Schlichten erlaubt ausschließlich Vollradiusfräser.';return;}const updated={...target,tool:{id:transfer.toolId,name:transfer.toolName,diameterMm:transfer.diameterMm,kind:transfer.toolKind,cuttingLengthMm:transfer.cuttingLengthMm,stickoutMm:transfer.stickoutMm,shaftDiameterMm:transfer.shaftDiameterMm,holderDiameterMm:transfer.holderDiameterMm},feedMmMin:transfer.feedMmMin,spindleRpm:transfer.spindleRpm} as CamOperation;operationsProject=replaceOperation(operationsProject,updated);if(operation.id===updated.id)operation=cloneOperation(operationsProject.operations.find(op=>op.id===updated.id)??updated);emitThreeDRoughingAppDiagnostic(captureThreeDRoughingAppDiagnostic({event:'tool-transfer-after',operation,project:operationsProject,canonical:activeCanonicalToolpath}));}
   function applyEngagementTransfer(request:{operationId:string;operationSnapshot:string;material:MaterialKind;machineRigidity:'light'|'medium'|'rigid';applyAxial:boolean;applyRadial:boolean}){
     const target=operationsProject.operations.find(op=>op.id===request.operationId);
-    if(!target||toolTargetOperationId!==target.id||JSON.stringify(target)!==request.operationSnapshot){
+    if(!target || !isEngagementTransferTargetCurrent(operationsProject.operations,toolTargetOperationId,request.operationId,request.operationSnapshot)){
       error='Zielbearbeitung hat sich verändert. Bitte Empfehlungen erneut prüfen.';return;
     }
     const advice=recommendCuttingEngagement({material:request.material,toolKind:target.tool.kind??'end-mill',
