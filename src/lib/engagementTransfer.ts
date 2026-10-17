@@ -58,3 +58,15 @@ export function prepareEngagementTransfer(
   }
   return { status: 'ready', operation: updated, changed, notices };
 }
+
+/** Reject a UI confirmation if the target or its reviewed snapshot changed. */
+export function isEngagementTransferTargetCurrent(
+  operations: readonly CamOperation[],
+  selectedOperationId: string | null,
+  requestedOperationId: string,
+  reviewedSnapshot: string
+): boolean {
+  const target = operations.find(op => op.id === requestedOperationId);
+  return !!target && selectedOperationId === requestedOperationId &&
+    JSON.stringify(target) === reviewedSnapshot;
+}
