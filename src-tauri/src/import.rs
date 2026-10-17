@@ -2,11 +2,12 @@ use crate::geometry::{Curve2, PlanarGeometry, Point2};
 use crate::occt::{BrepBackend, BrepSummary, Occt8Backend};
 use dxf::entities::EntityType;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportSummary { pub kind:String,pub file_name:String,pub backend:String,pub status:String,pub entities:BTreeMap<String,usize>,pub planar_geometry:Option<PlanarGeometry>,pub brep:Option<BrepSummary>,pub note:Option<String>,pub source_fingerprint:String }
+pub struct ImportSummary { pub kind:String,pub file_name:String,pub backend:String,pub status:String,pub entities:BTreeMap<String,usize>,pub planar_geometry:Option<PlanarGeometry>,pub brep:Option<BrepSummary>,pub note:Option<String>,pub source_fingerprint:String,pub source_content_sha256:Option<String> }
 
 pub(crate) fn source_fingerprint(path:&Path)->Result<String,String>{
  let bytes=std::fs::read(path).map_err(|e|format!("Quelldatei konnte für die Identitätsprüfung nicht gelesen werden: {e}"))?;
@@ -15,8 +16,40 @@ pub(crate) fn source_fingerprint(path:&Path)->Result<String,String>{
  Ok(format!("src-v1:{hash:016x}:{}",bytes.len()))
 }
 
-pub fn inspect(path:&str)->Result<ImportSummary,String>{let path=Path::new(path);let file_name=path.file_name().and_then(|v|v.to_str()).unwrap_or("Bauteil").to_string();let ext=path.extension().and_then(|v|v.to_str()).unwrap_or("").to_ascii_lowercase();let fingerprint=source_fingerprint(path)?;match ext.as_str(){"dxf"=>inspect_dxf(path,file_name,fingerprint),"step"|"stp"=>inspect_step(path,file_name,fingerprint),_=>Err("BeBlog CAM unterstützt STEP/STP und DXF.".into())}}
-fn inspect_step(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note),source_fingerprint})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note),source_fingerprint})}}
+pub fn inspect(path:&str)->Result<ImportSummary,String>{let path=Path::new(path);let file_name=path.file_name().and_then(|v|v.to_str()).unwrap_or("Bauteil").to_string();let ext=path.extension().and_then(|v|v.to_str()).unwrap_or("").to_ascii_lowercase();let fingerprint=source_fingerprint(path)?;match ext.as_str(){"dxf"=>inspect_dxf(path,file_name,fingerprint),"step"|"stp"=>{let sha256=source_sha256(path)?;inspect_step(path,file_name,fingerprint,sha256)},_=>Err("BeBlog CAM unterstützt STEP/STP und DXF.".into())}}
+
+fn source_sha256(path:&Path)->Result<String,String>{
+ let mut file=std::fs::File::open(path).map_err(|e|format!("STEP-Quelldatei konnte für SHA-256 nicht geöffnet werden: {e}"))?;
+ let mut hasher=Sha256::new();
+ std::io::copy(&mut file,&mut hasher).map_err(|e|format!("STEP-Quelldatei konnte für SHA-256 nicht gelesen werden: {e}"))?;
+ Ok(format!("{:x}",hasher.finalize()))
+}
+
+#[cfg(test)]
+mod sha256_tests {
+ use super::*;
+ #[test]
+ fn known_sha256_vector() {
+  let mut hasher=Sha256::new();
+  hasher.update(b"abc");
+  assert_eq!(format!("{:x}",hasher.finalize()),"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+ }
+
+ #[test]
+ fn source_sha256_hashes_file_contents() {
+  use std::io::Write;
+  let path = std::env::temp_dir().join(format!("beblog-011e2-sha256-{}-{:?}.step", std::process::id(), std::thread::current().id()));
+  let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path).expect("create unique temporary STEP");
+  file.write_all(b"abc").expect("write source bytes");
+  file.flush().expect("flush source bytes");
+  drop(file);
+  let digest = source_sha256(&path);
+  std::fs::remove_file(&path).expect("remove temporary STEP");
+  assert_eq!(digest.expect("hash temporary STEP"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+ }
+}
+
+fn inspect_step(path:&Path,file_name:String,source_fingerprint:String,source_content_sha256:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256.clone())})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256)})}}
 
 fn inspect_dxf(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{
  let drawing=dxf::Drawing::load_file(path).map_err(|e|format!("DXF konnte nicht gelesen werden: {e}"))?;
@@ -29,5 +62,5 @@ fn inspect_dxf(path:&Path,file_name:String,source_fingerprint:String)->Result<Im
   other=>{let source_kind=format!("{other:?}").split([' ','{','(']).next().unwrap_or("Entity").to_string();*counts.entry(format!("Weitere: {source_kind}")).or_insert(0)+=1;}
  }}
  if ignored_zero_lines>0{counts.insert("Null-Linien ignoriert".into(),ignored_zero_lines);}counts.insert("Layer".into(),drawing.layers().count());
- Ok(ImportSummary{kind:"dxf".into(),file_name,backend:"dxf-rs → BeBlog Geometry".into(),status:"ready".into(),entities:counts,planar_geometry:Some(PlanarGeometry::from_curves_with_layers(curves,curve_layers)),brep:None,note:Some("DXF-Elemente wurden in das interne planare BeBlog-Geometriemodell normalisiert. Die originale Layer-Zuordnung bleibt erhalten, damit offene Geometrien für Carve-Operationen gezielt und gesammelt ausgewählt werden können.".into()),source_fingerprint})
+ Ok(ImportSummary{kind:"dxf".into(),file_name,backend:"dxf-rs → BeBlog Geometry".into(),status:"ready".into(),entities:counts,planar_geometry:Some(PlanarGeometry::from_curves_with_layers(curves,curve_layers)),brep:None,note:Some("DXF-Elemente wurden in das interne planare BeBlog-Geometriemodell normalisiert. Die originale Layer-Zuordnung bleibt erhalten, damit offene Geometrien für Carve-Operationen gezielt und gesammelt ausgewählt werden können.".into()),source_fingerprint,source_content_sha256:None})
 }

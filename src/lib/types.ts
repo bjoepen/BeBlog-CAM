@@ -8,7 +8,7 @@ export type Curve2=|{kind:'line';start:Point2;end:Point2}|{kind:'circle';center:
 export interface PlanarGeometry { curves:Curve2[];curveLayers?:string[];layerNames?:string[];bounds?:Bounds2; }
 export interface SurfaceTypeSummary {kind:string;count:number;}
 export interface BrepSummary {backend:string;nativeBrep:boolean;faces:number;edges:number;vertices:number;solids:number;surfaceTypes:SurfaceTypeSummary[];cylinderRadiiMm:number[];displayTriangles:number;displayVertices:number[];displayFaceIds?:number[];displayEdges?:number[][];note:string;}
-export interface ImportSummary {kind:ImportKind;fileName:string;backend:string;status:'ready'|'native-adapter-pending';entities:Record<string,number>;planarGeometry?:PlanarGeometry;brep?:BrepSummary;note?:string;}
+export interface ImportSummary {kind:ImportKind;fileName:string;backend:string;status:'ready'|'native-adapter-pending';entities:Record<string,number>;planarGeometry?:PlanarGeometry;brep?:BrepSummary;note?:string;sourceFingerprint?:string;sourceContentSha256?:string|null;}
 
 export type StockMode='manual'|'part-bounds'|'none';
 export interface StockDefinition{width:number;height:number;thickness:number;offsetX:number;offsetY:number;offsetZ:number;}
