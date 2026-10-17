@@ -37,6 +37,62 @@ export type AdvisorReport = {
   notes: string[];
 };
 
+/** 011-D: A report is only reusable against the exact reviewed input context.
+ * The caller supplies the geometry identity and capability revision explicitly;
+ * filename alone is not a safe geometry identity. No mutable stores are read.
+ */
+export type AdvisorContext = {
+  geometryIdentity: string;
+  capabilityRevision: string;
+  summary: ImportSummary;
+  orientation: PartOrientation;
+  stockMode: StockMode;
+  stockSnapshot: unknown;
+  wcs: WorkCoordinateSystem;
+  material: MaterialKind;
+  tools: readonly MillingTool[];
+};
+export type AdvisorContextSnapshot = { version: 1; serialized: string };
+
+export function captureAdvisorContext(context: AdvisorContext): AdvisorContextSnapshot | null {
+  if (!context.geometryIdentity.trim() || !context.capabilityRevision.trim()) return null;
+  // JSON snapshots reject undefined and nonfinite values instead of silently
+  // dropping or coercing them (JSON.stringify alone is not fail-closed).
+  const seen = new WeakSet<object>();
+  const valid = (value: unknown): boolean => {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value !== 'object') return false;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      return Object.keys(value).length === value.length && value.every(valid);
+    }
+    // JSON.stringify silently collapses Map, Set, Date and class instances.
+    // Only JSON-shaped plain objects are permitted in reviewed context.
+    const prototype = Object.getPrototypeOf(value);
+    // Accept plain objects across VM/iframe realms (their Object.prototype differs).
+    // Reject Map/Set/Date/class instances whose prototype has another ancestor.
+    if (prototype !== null && Object.getPrototypeOf(prototype) !== null) return false;
+    const object = value as Record<string, unknown>;
+    if (Object.getOwnPropertySymbols(object).length > 0) return false;
+    const keys = Object.keys(object);
+    if (Reflect.ownKeys(object).length !== keys.length) return false;
+    return keys.every(key => valid(object[key]));
+  };
+  if (!valid(context)) return null;
+  return { version: 1, serialized: JSON.stringify(context) };
+}
+
+export function isAdvisorContextCurrent(
+  reviewed: AdvisorContextSnapshot | null,
+  current: AdvisorContext
+): boolean {
+  if (!reviewed || reviewed.version !== 1) return false;
+  const next = captureAdvisorContext(current);
+  return !!next && next.serialized === reviewed.serialized;
+}
+
 /** Use existing operation/tool compatibility as the source of truth; do not reproduce tool-kind policy. */
 function compatibility(method: DrillMethod, tool: MillingTool): 'pass' | 'warn' | 'fail' {
   const operation = {
