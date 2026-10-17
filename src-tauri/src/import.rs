@@ -34,6 +34,19 @@ mod sha256_tests {
   hasher.update(b"abc");
   assert_eq!(format!("{:x}",hasher.finalize()),"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
  }
+
+ #[test]
+ fn source_sha256_hashes_file_contents() {
+  use std::io::Write;
+  let path = std::env::temp_dir().join(format!("beblog-011e2-sha256-{}-{:?}.step", std::process::id(), std::thread::current().id()));
+  let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path).expect("create unique temporary STEP");
+  file.write_all(b"abc").expect("write source bytes");
+  file.flush().expect("flush source bytes");
+  drop(file);
+  let digest = source_sha256(&path);
+  std::fs::remove_file(&path).expect("remove temporary STEP");
+  assert_eq!(digest.expect("hash temporary STEP"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+ }
 }
 
 fn inspect_step(path:&Path,file_name:String,source_fingerprint:String,source_content_sha256:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256.clone())})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256)})}}
