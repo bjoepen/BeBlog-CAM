@@ -171,6 +171,12 @@ jobs:
           pnpm check:010f11
           pnpm check:010f12
           pnpm check:010f13
+      - name: Cutting engagement 011-B acceptance
+        run: node scripts/check-011b-cutting-engagement.mjs
+      - name: Chip thickness 011-C acceptance
+        run: node scripts/check-011c-chip-thickness.mjs
+      - name: Explicit engagement transfer 011-D2 acceptance
+        run: node scripts/check-011d2-engagement-transfer.mjs
       - name: Advisor 011-B regression gate
         run: pnpm check:011b
       - name: Frontend build
