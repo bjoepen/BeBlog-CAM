@@ -85,7 +85,7 @@ fn verify_step_source<T>(path:&Path,expected_fingerprint:&str,inspect:impl FnOnc
 }
 
 fn inspect_step_consistent(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{
- verify_step_source(path,&source_fingerprint,|digest|inspect_step(path,file_name,source_fingerprint.clone(),digest.to_string()))
+ verify_step_source(path,&source_fingerprint,|digest|inspect_step(path,file_name,source_fingerprint.clone(),digest.to_string()))?
 }
 
 fn inspect_step(path:&Path,file_name:String,source_fingerprint:String,source_content_sha256:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256.clone())})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256)})}}
