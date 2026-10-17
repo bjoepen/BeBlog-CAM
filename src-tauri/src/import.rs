@@ -40,8 +40,10 @@ mod sha256_tests {
   let path=std::env::temp_dir().join(format!("beblog-011e3-change-{}-{:?}.step",std::process::id(),std::thread::current().id()));
   std::fs::write(&path,b"original").expect("create source");
   let fingerprint=source_fingerprint(&path).expect("initial fingerprint");
-  let result=verify_step_source(&path,&fingerprint,|_|{
+  let result=inspect_step_snapshot_with(&path,&fingerprint,|snapshot|{
+   assert_eq!(std::fs::read(&snapshot.path).unwrap(),b"original");
    std::fs::write(&path,b"modified").expect("modify source during inspection");
+   Ok(())
   });
   std::fs::remove_file(&path).expect("cleanup source");
   assert!(result.is_err(),"modified STEP must not be accepted");
@@ -52,10 +54,15 @@ mod sha256_tests {
   let path=std::env::temp_dir().join(format!("beblog-011e3-early-{}-{:?}.step",std::process::id(),std::thread::current().id()));
   std::fs::write(&path,b"original").expect("create source");
   let fingerprint=source_fingerprint(&path).expect("capture initial fingerprint");
-  std::fs::write(&path,b"changed-before-hash").expect("mutate source before SHA-256");
-  let result=verify_step_source(&path,&fingerprint,|digest|digest.len());
+  std::fs::write(&path,b"changed-before-snapshot").expect("mutate source before snapshot");
+  let mut invoked=false;
+  let result=inspect_step_snapshot_with(&path,&fingerprint,|_|{
+   invoked=true;
+   Ok(())
+  });
   std::fs::remove_file(&path).expect("cleanup source");
   assert!(result.is_err(),"source modified after initial fingerprint must be rejected");
+  assert!(!invoked,"native inspection must not run for stale source");
  }
 
  #[test]
@@ -63,7 +70,10 @@ mod sha256_tests {
   let path=std::env::temp_dir().join(format!("beblog-011e3-stable-{}-{:?}.step",std::process::id(),std::thread::current().id()));
   std::fs::write(&path,b"stable").expect("create source");
   let fingerprint=source_fingerprint(&path).expect("initial fingerprint");
-  let result=verify_step_source(&path,&fingerprint,|digest|digest.len());
+  let result=inspect_step_snapshot_with(&path,&fingerprint,|snapshot|{
+   assert_eq!(std::fs::read(&snapshot.path).unwrap(),b"stable");
+   Ok(snapshot.sha256.len())
+  });
   std::fs::remove_file(&path).expect("cleanup source");
   assert_eq!(result.expect("unchanged source"),64);
  }
@@ -136,19 +146,6 @@ mod sha256_tests {
   std::fs::remove_file(&path).expect("remove temporary STEP");
   assert_eq!(digest.expect("hash temporary STEP"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
  }
-}
-
-// 011-E3: reject ordinary source mutations between the pre-import hash and
-// the post-import verification. This is not an atomic file snapshot: a source
-// that changes and returns to identical bytes can still evade detection.
-fn verify_step_source<T>(path:&Path,expected_fingerprint:&str,inspect:impl FnOnce(&str)->T)->Result<T,String>{
- let before=source_sha256(path)?;
- let result=inspect(&before);
- let after=source_sha256(path)?;
- if before!=after || source_fingerprint(path)?!=expected_fingerprint {
-  return Err("STEP-Quelldatei wurde während des Imports verändert. Import verworfen; Datei erneut laden.".into());
- }
- Ok(result)
 }
 
 // A private directory prevents untrusted users from swapping the path OCCT opens.
