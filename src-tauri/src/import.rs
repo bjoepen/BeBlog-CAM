@@ -3,7 +3,7 @@ use crate::occt::{BrepBackend, BrepSummary, Occt8Backend};
 use dxf::entities::EntityType;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, io::{Read, Write}, path::{Path, PathBuf}, sync::atomic::{AtomicU64, Ordering}};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -95,9 +95,54 @@ fn verify_step_source<T>(path:&Path,expected_fingerprint:&str,inspect:impl FnOnc
  Ok(result)
 }
 
-fn inspect_step_consistent(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{
- verify_step_source(path,&source_fingerprint,|digest|inspect_step(path,file_name,source_fingerprint.clone(),digest.to_string()))?
+static SNAPSHOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+struct StepSnapshot { path: PathBuf, fingerprint: String, sha256: String }
+impl Drop for StepSnapshot { fn drop(&mut self) { let _ = std::fs::remove_file(&self.path); } }
+
+fn step_snapshot(source: &Path) -> Result<StepSnapshot,String> {
+ let extension=source.extension().and_then(|v|v.to_str()).unwrap_or("step");
+ let mut input=std::fs::File::open(source).map_err(|e|format!("STEP-Quelldatei konnte nicht geöffnet werden: {e}"))?;
+ let mut snapshot=None;
+ for _ in 0..32 {
+  let sequence=SNAPSHOT_SEQUENCE.fetch_add(1,Ordering::Relaxed);
+  let path=std::env::temp_dir().join(format!("beblog-step-{}-{}-{}.{}",std::process::id(),sequence,std::thread::current().name().unwrap_or("import").replace(|c:char|!c.is_ascii_alphanumeric(),""),extension));
+  match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+   Ok(file)=>{snapshot=Some((path,file));break;},
+   Err(e) if e.kind()==std::io::ErrorKind::AlreadyExists=>continue,
+   Err(e)=>return Err(format!("STEP-Snapshot konnte nicht angelegt werden: {e}")),
+  }
+ }
+ let (path,mut output)=snapshot.ok_or("STEP-Snapshot: kein freier temporärer Dateiname")?;
+ let mut guard=StepSnapshot{path,fingerprint:String::new(),sha256:String::new()};
+ let mut sha=Sha256::new();let mut fnv:u64=0xcbf29ce484222325;let mut len=0u64;
+ let mut buffer=[0u8;65536];
+ loop {
+  let n=input.read(&mut buffer).map_err(|e|format!("STEP-Quelle konnte nicht gelesen werden: {e}"))?;
+  if n==0 {break;}
+  len=len.checked_add(n as u64).ok_or("STEP-Quelle zu groß")?;
+  sha.update(&buffer[..n]);
+  for byte in &buffer[..n] {fnv^=u64::from(*byte);fnv=fnv.wrapping_mul(0x100000001b3);}
+  output.write_all(&buffer[..n]).map_err(|e|format!("STEP-Snapshot konnte nicht geschrieben werden: {e}"))?;
+ }
+ output.flush().map_err(|e|format!("STEP-Snapshot konnte nicht abgeschlossen werden: {e}"))?;
+ drop(output);
+ guard.fingerprint=format!("src-v1:{fnv:016x}:{len}");
+ guard.sha256=format!("{:x}",sha.finalize());
+ Ok(guard)
 }
+
+fn inspect_step_consistent(path:&Path,file_name:String,source_fingerprint:String)->Result<ImportSummary,String>{
+ let snapshot=step_snapshot(path)?;
+ if snapshot.fingerprint!=source_fingerprint {return Err("STEP-Quelldatei wurde vor der Snapshot-Erstellung verändert. Import verworfen.".into());}
+ let result=inspect_step(&snapshot.path,file_name,snapshot.fingerprint.clone(),snapshot.sha256.clone());
+ if source_fingerprint_fn(path)?!=snapshot.fingerprint || source_sha256(path)?!=snapshot.sha256 {
+  return Err("STEP-Quelldatei wurde während des Imports verändert. Import verworfen; Datei erneut laden.".into());
+ }
+ result
+}
+
+fn source_fingerprint_fn(path:&Path)->Result<String,String>{source_fingerprint(path)}
 
 fn inspect_step(path:&Path,file_name:String,source_fingerprint:String,source_content_sha256:String)->Result<ImportSummary,String>{match Occt8Backend.inspect_step(path){Ok(brep)=>{let mut entities=BTreeMap::new();entities.insert("Flächen".into(),brep.faces);entities.insert("Kanten".into(),brep.edges);entities.insert("Volumenkörper".into(),brep.solids);let note=brep.note.clone();let backend=brep.backend.clone();Ok(ImportSummary{kind:"step".into(),file_name,backend,status:"ready".into(),entities,planar_geometry:None,brep:Some(brep),note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256.clone())})},Err(note)=>Ok(ImportSummary{kind:"step".into(),file_name,backend:"OCCT 8 / BRep".into(),status:"native-adapter-pending".into(),entities:BTreeMap::new(),planar_geometry:None,brep:None,note:Some(note),source_fingerprint,source_content_sha256:Some(source_content_sha256)})}}
 
