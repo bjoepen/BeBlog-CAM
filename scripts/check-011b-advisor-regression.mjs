@@ -145,6 +145,27 @@ check('advisor context rejects incomplete or unsafe snapshots', () => {
   assert.equal(exports.captureAdvisorContext({ ...context, stockSnapshot: undefined }), null);
   assert.equal(exports.isAdvisorContextCurrent(null, context), false);
 });
+check('advisor context rejects Map, Set and non-plain stock objects', () => {
+  const context = { geometryIdentity: 'id', capabilityRevision: 'rev', ...base,
+    stockSnapshot: { widthMm: 20 }, tools: [tool('drill', 4)] };
+  const accepted = exports.captureAdvisorContext(context);
+  assert.ok(accepted);
+  for (const stockSnapshot of [
+    new Map([['widthMm', 20]]),
+    new Set([20]),
+    new Date('2026-10-17T00:00:00Z'),
+    Object.assign(Object.create({ inheritedWidthMm: 20 }), { heightMm: 5 }),
+  ]) {
+    assert.equal(exports.captureAdvisorContext({ ...context, stockSnapshot }), null);
+    assert.equal(exports.isAdvisorContextCurrent(accepted, { ...context, stockSnapshot }), false);
+  }
+  const alteredMap = new Map([['widthMm', 21]]);
+  assert.equal(exports.captureAdvisorContext({ ...context, stockSnapshot: alteredMap }), null);
+  assert.equal(exports.captureAdvisorContext({ ...context,
+    stockSnapshot: { widthMm: 20, hidden: undefined } }), null);
+  const withSymbol = { widthMm: 20, [Symbol('width')]: 21 };
+  assert.equal(exports.captureAdvisorContext({ ...context, stockSnapshot: withSymbol }), null);
+});
 check('screen is deterministic and does not mutate inputs', () => {
   const tools = Object.freeze([tool('drill', 4)]);
   const first = run(tools);
@@ -152,4 +173,4 @@ check('screen is deterministic and does not mutate inputs', () => {
   assert.equal(tools[0].diameterMm, 4);
   assert.equal(base.wcs.z, 'top');
 });
-console.log('PASS 011-B: 18 isolated advisor regression cases');
+console.log('PASS 011-B: 19 isolated advisor regression cases');
