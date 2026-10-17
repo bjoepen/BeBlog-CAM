@@ -1,5 +1,5 @@
 import { defaultContourOperation, defaultPocketOperation, defaultThreeDRoughingOperation, type CamOperation } from '../../src/lib/types';
-import { prepareEngagementTransfer } from '../../src/lib/engagementTransfer';
+import { prepareEngagementTransfer, isEngagementTransferTargetCurrent } from '../../src/lib/engagementTransfer';
 import { recommendCuttingEngagement } from '../../src/lib/cuttingEngagementRecommendation';
 const assert = (value: unknown, description: string) => { if (!value) throw new Error(description); };
 const base = { material: 'aluminium' as const, toolKind: 'end-mill' as const, diameterMm: 3,
@@ -37,4 +37,15 @@ if(radial.status==='ready'&&pocketAdvice.status==='advisory'&&pocketAdvice.radia
 assert(JSON.stringify(rampPocket)===beforeRadial,'radial operation remains immutable');
 assert(prepareEngagementTransfer(contour,advice,{applyAxial:false,applyRadial:false}).status==='unavailable','explicit selection required');
 assert(prepareEngagementTransfer({...contour,tool:{...contour.tool,kind:'ball-nose'}},advice,{applyAxial:true,applyRadial:false}).status==='unavailable','tool kind guarded');
-console.log('011-D2 explicit transfer policy: PASS');
+
+// UI-to-App confirmation guard: changing the target, editing the operation or
+// removing it invalidates the prior explicit confirmation.
+const reviewedSnapshot=JSON.stringify(contour);
+assert(isEngagementTransferTargetCurrent([contour],'contour-op', 'contour-op',reviewedSnapshot) === (contour.id==='contour-op'), 'guard sanity');
+assert(isEngagementTransferTargetCurrent([contour],contour.id,contour.id,reviewedSnapshot), 'unchanged reviewed target accepted');
+assert(!isEngagementTransferTargetCurrent([contour],'other-id',contour.id,reviewedSnapshot), 'operation selection switch rejected');
+assert(!isEngagementTransferTargetCurrent([] ,contour.id,contour.id,reviewedSnapshot), 'removed target rejected');
+assert(!isEngagementTransferTargetCurrent([{...contour,stepDownMm:contour.stepDownMm+0.5}],contour.id,contour.id,reviewedSnapshot), 'edited target rejected');
+assert(!isEngagementTransferTargetCurrent([contour],contour.id,contour.id,JSON.stringify({...contour,feedMmMin:contour.feedMmMin+1})), 'stale confirmation rejected');
+
+console.log('011-D2 explicit transfer policy and UI target guards: PASS');
