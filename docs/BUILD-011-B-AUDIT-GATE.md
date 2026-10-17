@@ -11,7 +11,7 @@ Status: **HOLD — do not merge yet**.
 
 ## Remaining acceptance gaps
 
-1. **Executable regression tests** are still missing for recognized Ø4 hole / Ø4 drill, Ø3 end-mill helix alternative, wrong diameter, insufficient cutting length, insufficient stickout, invalid WCS, missing stock, unsupported DXF, rejected cylindrical faces and read-only behavior.
+1. **Executable regression tests** have been added in `scripts/check-011b-advisor-regression.mjs` (14 isolated cases; run `pnpm check:011b`), but CI execution and results remain unverified. Previously missing cases included for recognized Ø4 hole / Ø4 drill, Ø3 end-mill helix alternative, wrong diameter, insufficient cutting length, insufficient stickout, invalid WCS, missing stock, unsupported DXF, rejected cylindrical faces and read-only behavior.
 2. **Status semantics:** `DIRECT` and `ALTERNATIVE` should be reserved for verified capability, not merely candidate geometry. Current screen intentionally emits `CONDITIONAL` for unverified drilling.
 3. **Coverage:** report evaluates holes and rejected cylinders only; other BRep faces, pockets and contours remain unassessed. No overall manufacturability claim is permitted.
 4. **Freshness:** report does not yet bind to source geometry identity, tool library snapshot, stock dimensions, setup and operation capability version. Do not cache or persist as valid after changes.
@@ -20,7 +20,7 @@ Status: **HOLD — do not merge yet**.
 
 ## Merge gate
 
-- Add automated fixtures/tests for positive, negative and mutation-free behavior.
+- Run `pnpm check:011b` and confirm all isolated regression cases pass; follow up with integration-level native STEP fixtures.
 - Verify current CI on the final head SHA.
 - Re-audit output semantics and missing-coverage behavior.
 - Only then mark ready and merge. Keep the PR as Draft until the gate passes.
