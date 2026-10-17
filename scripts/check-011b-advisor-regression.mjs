@@ -166,6 +166,31 @@ check('advisor context rejects Map, Set and non-plain stock objects', () => {
   const withSymbol = { widthMm: 20, [Symbol('width')]: 21 };
   assert.equal(exports.captureAdvisorContext({ ...context, stockSnapshot: withSymbol }), null);
 });
+check('STEP advisor context requires verified content identity', () => {
+  const digest = 'a'.repeat(64);
+  const args = { ...base, summary: { ...base.summary, status: 'ready',
+    brep: { nativeBrep: true } }, sourceContentSha256: digest,
+    capabilityRevision: '011-E1-v1', stockSnapshot: { widthMm: 40 },
+    tools: [tool('drill', 4)] };
+  const context = exports.createStepAdvisorContext(args);
+  assert.ok(context);
+  assert.equal(context.geometryIdentity, 'sha256:' + digest);
+  const snapshot = exports.captureAdvisorContext(context);
+  assert.ok(snapshot);
+  assert.equal(exports.isAdvisorContextCurrent(snapshot, context), true);
+  const modified = exports.createStepAdvisorContext({ ...args,
+    sourceContentSha256: 'b'.repeat(64) });
+  assert.ok(modified);
+  assert.equal(exports.isAdvisorContextCurrent(snapshot, modified), false);
+  for (const changes of [
+    { sourceContentSha256: null }, { sourceContentSha256: 'filename.step' },
+    { sourceContentSha256: '0'.repeat(63) },
+    { summary: { ...args.summary, kind: 'dxf' } },
+    { summary: { ...args.summary, status: 'native-adapter-pending' } },
+    { summary: { ...args.summary, brep: { nativeBrep: false } } },
+    { stockSnapshot: new Map([['widthMm', 40]]) },
+  ]) assert.equal(exports.createStepAdvisorContext({ ...args, ...changes }), null);
+});
 check('screen is deterministic and does not mutate inputs', () => {
   const tools = Object.freeze([tool('drill', 4)]);
   const first = run(tools);
@@ -173,4 +198,4 @@ check('screen is deterministic and does not mutate inputs', () => {
   assert.equal(tools[0].diameterMm, 4);
   assert.equal(base.wcs.z, 'top');
 });
-console.log('PASS 011-B: 19 isolated advisor regression cases');
+console.log('PASS 011-B: 20 isolated advisor regression cases');

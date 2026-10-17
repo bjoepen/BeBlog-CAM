@@ -84,6 +84,32 @@ export function captureAdvisorContext(context: AdvisorContext): AdvisorContextSn
   return { version: 1, serialized: JSON.stringify(context) };
 }
 
+/** 011-E1: construct a complete advisor context only with an independently
+ * verified content identity. A filename, path or display mesh is insufficient.
+ * Source bytes must be hashed by the import boundary before calling this.
+ */
+export function createStepAdvisorContext(args: {
+  summary: ImportSummary;
+  sourceContentSha256: string | null;
+  capabilityRevision: string;
+  orientation: PartOrientation;
+  stockMode: StockMode;
+  stockSnapshot: unknown;
+  wcs: WorkCoordinateSystem;
+  material: MaterialKind;
+  tools: readonly MillingTool[];
+}): AdvisorContext | null {
+  const { summary, sourceContentSha256, capabilityRevision, orientation, stockMode,
+    stockSnapshot, wcs, material, tools } = args;
+  if (summary.kind !== 'step' || summary.status !== 'ready' || !summary.brep?.nativeBrep ||
+      !sourceContentSha256 || !/^[a-fA-F0-9]{64}$/.test(sourceContentSha256)) return null;
+  const context: AdvisorContext = {
+    geometryIdentity: `sha256:${sourceContentSha256.toLowerCase()}`,
+    capabilityRevision, summary, orientation, stockMode, stockSnapshot, wcs, material, tools,
+  };
+  return captureAdvisorContext(context) ? context : null;
+}
+
 export function isAdvisorContextCurrent(
   reviewed: AdvisorContextSnapshot | null,
   current: AdvisorContext
