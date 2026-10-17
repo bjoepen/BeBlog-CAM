@@ -48,6 +48,17 @@ mod sha256_tests {
  }
 
  #[test]
+ fn source_change_before_step_inspection_is_rejected() {
+  let path=std::env::temp_dir().join(format!("beblog-011e3-early-{}-{:?}.step",std::process::id(),std::thread::current().id()));
+  std::fs::write(&path,b"original").expect("create source");
+  let fingerprint=source_fingerprint(&path).expect("capture initial fingerprint");
+  std::fs::write(&path,b"changed-before-hash").expect("mutate source before SHA-256");
+  let result=verify_step_source(&path,&fingerprint,|digest|digest.len());
+  std::fs::remove_file(&path).expect("cleanup source");
+  assert!(result.is_err(),"source modified after initial fingerprint must be rejected");
+ }
+
+ #[test]
  fn stable_step_source_is_accepted() {
   let path=std::env::temp_dir().join(format!("beblog-011e3-stable-{}-{:?}.step",std::process::id(),std::thread::current().id()));
   std::fs::write(&path,b"stable").expect("create source");
