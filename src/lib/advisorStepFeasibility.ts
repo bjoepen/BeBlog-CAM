@@ -85,7 +85,7 @@ export function screenStepFeasibility(args: {
           if (method === 'helical-mill' && tool.diameterMm >= hole.diameterMm - 1e-6) continue;
           const cautions: string[] = [];
           if (method === 'drill' && tool.kind !== 'drill') cautions.push('Axiales Eintauchen mit Schaftfräser muss gesondert freigegeben werden.');
-          if (!(tool.cuttingLengthMm >= hole.depthMm)) cautions.push('Schneidenlänge nicht nachgewiesen oder kürzer als Featuretiefe.');
+          if (!('cuttingLengthMm' in tool) || !(tool.cuttingLengthMm >= hole.depthMm)) cautions.push('Schneidenlänge nicht nachgewiesen oder kürzer als Featuretiefe.');
           if (!(tool.stickoutMm > hole.depthMm)) cautions.push('Auskragung nicht nachgewiesen oder unzureichend.');
           if (method === 'helical-mill') cautions.push('Helix-Eintauchfähigkeit, Freiraum und Preflight noch nicht geprüft.');
           strategies.push({ method, toolId: tool.id, toolName: tool.name, status: cautions.length ? 'conditional' : 'candidate', reasons: cautions });
