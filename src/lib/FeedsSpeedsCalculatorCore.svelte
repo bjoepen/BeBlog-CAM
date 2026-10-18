@@ -119,6 +119,12 @@
   });
 
   function persist(next:MillingTool[]):boolean{
+    // An external storage change or failed startup read invalidates the
+    // snapshot. Never overwrite newer external data from a stale editor.
+    if(!get(advisorToolLibrary).ready){
+      libraryMessage='Werkzeugbibliothek geändert oder ungültig. Bitte App neu laden, bevor Werkzeuge gespeichert werden.';
+      return false;
+    }
     // One canonical in-memory source. A storage failure cannot make the
     // editor revert to older on-disk tools when the tab is reopened.
     publishAdvisorToolLibrary(next);
