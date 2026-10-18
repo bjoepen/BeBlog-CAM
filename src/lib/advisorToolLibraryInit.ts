@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { advisorToolLibrary, publishAdvisorToolLibrary } from './advisorToolLibrary';
+import { advisorToolLibrary, invalidateAdvisorToolLibrary, publishAdvisorToolLibrary } from './advisorToolLibrary';
 import { migrateMillingTool, type MillingTool } from './toolTypes';
 
 export const TOOL_LIBRARY_STORAGE_KEY = 'beblog-cam.tool-library.v1';
@@ -15,14 +15,15 @@ export function initializeAdvisorToolLibrary(storage: { getItem(key: string): st
       return true;
     }
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return false;
+    if (!Array.isArray(parsed)) { invalidateAdvisorToolLibrary(); return false; }
     const migrated = parsed.map(migrateMillingTool);
-    if (migrated.some(tool => tool === null)) return false;
+    if (migrated.some(tool => tool === null)) { invalidateAdvisorToolLibrary(); return false; }
     const tools = migrated as MillingTool[];
-    if (new Set(tools.map(tool => tool.id)).size !== tools.length) return false;
+    if (new Set(tools.map(tool => tool.id)).size !== tools.length) { invalidateAdvisorToolLibrary(); return false; }
     publishAdvisorToolLibrary(tools);
     return true;
   } catch {
+    invalidateAdvisorToolLibrary();
     return false;
   }
 }
