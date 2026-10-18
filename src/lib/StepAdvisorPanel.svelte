@@ -11,6 +11,11 @@
   export let cuttingAdvice: StepCuttingAdvice[] = [];
   export let operationProposals: StepOperationProposal[] = [];
   export let proposalReviews: ProposalReview[] = [];
+  import { toggleExpandedFeature } from './stepAdvisorDisclosure';
+  let expandedFeatureIds: string[] = [];
+  const toggleFeature = (id: string) => {
+    expandedFeatureIds = toggleExpandedFeature(expandedFeatureIds, id);
+  };
 </script>
 
 <section class="placement-section" aria-label="STEP CAM Advisor Vorprüfung">
@@ -25,8 +30,19 @@
     <p class="note"><strong>011-F2 · Schnittdaten:</strong> Rechnerische Startwerte nach Materialprofil, keine automatische Übernahme oder Freigabe.</p>
     <p class="note"><strong>011-F3 · Operationsvorschläge:</strong> Nur lesende Entwürfe, keine Erzeugung oder Änderung von Bearbeitungen.</p>
     <p class="note"><strong>011-F4 · Offene Prüfungen:</strong> Alle Prüfpunkte bleiben ohne realen Werkzeugweg und Produktions-Preflight offen.</p>
+    <p class="note"><strong>011-F5 · Übersicht:</strong> Vorschläge und offene Prüfungen pro Feature. Details lassen sich einzeln aufklappen.</p>
     {#each report.features as feature (feature.featureId)}
-      <div class="note">
+      <div class="note advisor-feature-card">
+        <div class="advisor-feature-header">
+          <span class="advisor-feature-symbol" aria-hidden="true">{feature.kind === 'hole' ? '◎' : '?'}</span>
+          <div class="advisor-feature-heading">
+            <strong>{feature.kind === 'hole' ? 'Bohrung' : 'Nicht klassifizierter Zylinder'} · {feature.featureId}</strong>
+            <span>{feature.diameterMm != null && Number.isFinite(feature.diameterMm) ? `Ø ${feature.diameterMm.toFixed(2)} mm` : 'Ø unbekannt'} · {feature.depthMm != null && Number.isFinite(feature.depthMm) ? `Tiefe ${feature.depthMm.toFixed(2)} mm` : 'Tiefe unbekannt'}</span>
+            <span>{operationProposals.filter(proposal => proposal.featureId === feature.featureId).length} bedingte Vorschläge · keine Freigabe</span>
+          </div>
+          <button type="button" class="advisor-details-toggle" aria-expanded={expandedFeatureIds.includes(feature.featureId)} onclick={() => toggleFeature(feature.featureId)}>{expandedFeatureIds.includes(feature.featureId) ? 'Details schließen' : 'Details anzeigen'}</button>
+        </div>
+        {#if expandedFeatureIds.includes(feature.featureId)}
         <strong>{feature.kind === 'hole' ? 'Bohrung' : 'Nicht klassifizierter Zylinder'} · {feature.featureId}</strong>
         <span> — {feature.coverage}</span>
         {#if feature.diameterMm != null}<span> · Ø {feature.diameterMm.toFixed(2)} mm</span>{/if}
@@ -55,8 +71,18 @@
           {#each proposal.cautions as caution}<p>{caution}</p>{/each}
         {/each}
         {#each feature.reasons as message}<p>{message}</p>{/each}
+        {/if}
       </div>
     {/each}
     {#each report.notes as note}<p class="note">{note}</p>{/each}
   {/if}
 </section>
+
+<style>
+  .advisor-feature-card { border: 1px solid var(--border, #8b8b8b); border-radius: 0.65rem; padding: 0.8rem; margin: 0.7rem 0; }
+  .advisor-feature-header { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; }
+  .advisor-feature-symbol { font-size: 1.8rem; line-height: 1; opacity: 0.8; }
+  .advisor-feature-heading { display: grid; gap: 0.2rem; flex: 1 1 12rem; min-width: 0; }
+  .advisor-feature-heading span { font-size: 0.9rem; }
+  .advisor-details-toggle { cursor: pointer; padding: 0.4rem 0.65rem; }
+</style>

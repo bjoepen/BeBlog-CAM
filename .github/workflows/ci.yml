@@ -191,6 +191,8 @@ jobs:
         run: pnpm check:011f3
       - name: Advisor 011-F4 proposal review regression
         run: pnpm check:011f4
+      - name: Advisor 011-F5 visual panel regression
+        run: pnpm check:011f5
       - name: Frontend build
         run: pnpm build
       - name: Rust check

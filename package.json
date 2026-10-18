@@ -146,7 +146,8 @@
     "check:011f1": "node scripts/check-011f1-step-tool-matching.mjs",
     "check:011f2": "node scripts/check-011f2-material-cutting-advice.mjs",
     "check:011f3": "node scripts/check-011f3-operation-proposals.mjs",
-    "check:011f4": "node scripts/check-011f4-proposal-review.mjs"
+    "check:011f4": "node scripts/check-011f4-proposal-review.mjs",
+    "check:011f5": "node scripts/check-011f5-visual-advisor.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
