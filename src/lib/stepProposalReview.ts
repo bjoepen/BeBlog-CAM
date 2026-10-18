@@ -18,15 +18,17 @@ export function reviewStepProposals(proposals: readonly StepOperationProposal[])
   for (const proposal of proposals) {
     if (proposal.status !== 'conditional' ||
         (proposal.method !== 'drill' && proposal.method !== 'helical-mill') ||
-        !proposal.featureId || !proposal.toolId || !proposal.toolName ||
+        !proposal.featureId || !proposal.toolId || typeof proposal.toolName !== 'string' ||
         !Number.isFinite(proposal.diameterMm) || proposal.diameterMm <= 0 ||
         !Number.isFinite(proposal.depthMm) || proposal.depthMm <= 0 ||
         !Number.isFinite(proposal.spindleRpm) || proposal.spindleRpm <= 0 ||
         !Number.isFinite(proposal.feedMmMin) || proposal.feedMmMin <= 0) return [];
     const key = JSON.stringify([proposal.featureId, proposal.toolId, proposal.method]);
-    if (seen.has(key)) return [];
+    if (seen.has(key)) continue;
     seen.add(key);
     const checks: ProposalReview['checks'] = [
+      ...(!proposal.toolName.trim() ? [{ label: 'Werkzeugbezeichnung', status: 'open' as const,
+        reason: 'Werkzeugname fehlt; Identität und Zuordnung vor Bearbeitung klären.' }] : []),
       { label: 'Werkzeug und Schneidenlänge', status: 'open', reason: 'Reale Werkzeuggeometrie und Auskragung noch nicht nachgewiesen.' },
       { label: 'Maschine und Spannmittel', status: 'open', reason: 'Arbeitsraum, Spindelgrenzen und Kollisionen nicht geprüft.' },
       { label: 'Schnittdaten und Zustellung', status: 'open', reason: 'Richtwerte sind keine freigegebenen Bearbeitungsparameter.' },
