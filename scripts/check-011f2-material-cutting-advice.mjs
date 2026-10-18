@@ -35,6 +35,9 @@ assert.equal(advice(matches,[{...drill,cuttingLengthMm:drill.stickoutMm+1}], 'al
 const result=advice(matches,[drill,mill],'aluminium',true);
 assert.equal(result.length,2);
 assert.equal(result[0].status,'conditional');
+assert.equal(result[0].toolName,drill.name);
+assert.equal(result[0].toolId,drill.id);
+assert.equal(result[1].toolName,mill.name);
 const expected=feeds.calculateFeedsSpeeds({
   toolDiameterMm:drill.diameterMm,cuttingSpeedMMin:materials.materialProfiles.aluminium.cuttingSpeedMMin,
   flutes:drill.flutes,chipLoadMm:drill.chipLoadMm*materials.materialProfiles.aluminium.chipLoadFactor
@@ -48,4 +51,5 @@ const app=fs.readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
 const panel=fs.readFileSync(new URL('../src/lib/StepAdvisorPanel.svelte',import.meta.url),'utf8');
 assert.match(app,/adviseStepCuttingData\(advisorMatches, advisorTools, \$stockMaterial, \$advisorToolLibrary.ready\)/);
 assert.match(panel,/keine automatische Übernahme oder Freigabe/);
+assert.match(panel,/advice\.toolName/);
 console.log('011-F2 material cutting advice PASS');
