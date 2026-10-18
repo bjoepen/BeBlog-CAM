@@ -119,21 +119,23 @@
     }
   });
 
-  function persist(next:MillingTool[]){
-    // Publish first: the in-memory store remains the session source of truth
-    // even if browser storage is unavailable. Reopening the editor reuses it.
+  function persist(next:MillingTool[]):boolean{
+    // One canonical in-memory source. A storage failure cannot make the
+    // editor revert to older on-disk tools when the tab is reopened.
     publishAdvisorToolLibrary(next);
     const snapshot=get(advisorToolLibrary);
     if(!snapshot.ready){
       libraryMessage='Werkzeugbibliothek ungültig. Änderung nicht übernommen.';
-      return;
+      return false;
     }
     library=snapshot.tools.map(item=>({...item}));
     try{
       localStorage.setItem(STORAGE_KEY,JSON.stringify(library));
     }catch{
       libraryMessage='Werkzeugbibliothek nur in dieser Sitzung geändert; Speichern auf Datenträger fehlgeschlagen.';
+      return false;
     }
+    return true;
   }
   function setSpindlePreset(v:number){maxSpindleRpm=v;transferMessage=''}
   function chooseMaterial(material:MaterialKind){setStockMaterial(material);transferMessage=''}
@@ -155,12 +157,14 @@
     const id=selectedToolId??`tool-${Date.now()}`;
     const saved={...tool,id,name:tool.name.trim()||millingToolLabels[tool.kind]} as MillingTool;
     const exists=library.some(item=>item.id===id);
-    persist(exists?library.map(item=>item.id===id?saved:item):[...library,saved]);
-    tool=saved;selectedToolId=id;libraryMessage=exists?'Werkzeug aktualisiert.':'Werkzeug gespeichert.';transferMessage='';
+    const savedToDisk=persist(exists?library.map(item=>item.id===id?saved:item):[...library,saved]);
+    tool=saved;selectedToolId=id;
+    if(savedToDisk)libraryMessage=exists?'Werkzeug aktualisiert.':'Werkzeug gespeichert.';
+    transferMessage='';
   }
   function loadTool(saved:MillingTool){tool={...saved} as MillingTool;selectedToolId=saved.id;libraryMessage=`${saved.name} in Werkzeugdaten geladen.`;transferMessage='';activeTab='data'}
   function editTool(saved:MillingTool){loadTool(saved);libraryMessage='Werkzeug zum Bearbeiten geladen.'}
-  function deleteTool(id:string){persist(library.filter(item=>item.id!==id));if(selectedToolId===id){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft')}libraryMessage='Werkzeug entfernt.';transferMessage=''}
+  function deleteTool(id:string){const savedToDisk=persist(library.filter(item=>item.id!==id));if(selectedToolId===id){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft')}if(savedToDisk)libraryMessage='Werkzeug entfernt.';transferMessage=''}
   function newTool(){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft');activeTab='data';libraryMessage='';transferMessage=''}
   function exportLibrary(){
     const blob=new Blob([serializePortableToolLibrary(library)],{type:'application/json;charset=utf-8'});
@@ -184,8 +188,8 @@
     const existingIds=new Set(library.map(item=>item.id));
     const collision=parsed.tools.find(item=>existingIds.has(item.id));
     if(collision){libraryMessage=`Import abgelehnt: Werkzeug-ID ${collision.id} ist bereits vorhanden. Die Bibliothek wurde nicht verändert.`;return}
-    persist([...library,...parsed.tools]);
-    libraryMessage=`${parsed.tools.length} Werkzeug${parsed.tools.length===1?'':'e'} importiert.`;
+    const savedToDisk=persist([...library,...parsed.tools]);
+    if(savedToDisk)libraryMessage=`${parsed.tools.length} Werkzeug${parsed.tools.length===1?'':'e'} importiert.`;
   }
   function chooseTargetOperation(event:Event){
     const id=(event.currentTarget as HTMLSelectElement).value;
