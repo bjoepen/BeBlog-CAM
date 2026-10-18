@@ -23,7 +23,7 @@
   import { createStepAdvisorContext, screenStepFeasibility } from './lib/advisorStepFeasibility';
   import { stockMaterial } from './lib/materialContext';
   import { advisorToolLibrary } from './lib/advisorToolLibrary';
-  import { initializeAdvisorToolLibrary } from './lib/advisorToolLibraryInit';
+  import { initializeAdvisorToolLibrary, invalidateAdvisorOnExternalLibraryChange } from './lib/advisorToolLibraryInit';
   import { onMount } from 'svelte';
   import { recommendCuttingEngagement } from './lib/cuttingEngagementRecommendation';
   import { prepareEngagementTransfer, isEngagementTransferTargetCurrent } from './lib/engagementTransfer';
@@ -46,7 +46,14 @@
 
   const steps = ['Bauteil', 'Rohling', 'Werkzeuge', 'Bearbeiten', 'Prüfen', 'Fräsen'];
   // 011-E5D: startup initialization is read-only; corrupt storage stays untouched.
-  onMount(() => { initializeAdvisorToolLibrary(localStorage); });
+  onMount(() => {
+    initializeAdvisorToolLibrary(localStorage);
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea === localStorage) invalidateAdvisorOnExternalLibraryChange(event.key);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  });
   let activeStep = 'Bauteil';
   let importSummary: ImportSummary | null = null;
   let sourcePath:string|null=null;
