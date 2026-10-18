@@ -11,11 +11,10 @@
   export let cuttingAdvice: StepCuttingAdvice[] = [];
   export let operationProposals: StepOperationProposal[] = [];
   export let proposalReviews: ProposalReview[] = [];
+  import { toggleExpandedFeature } from './stepAdvisorDisclosure';
   let expandedFeatureIds: string[] = [];
   const toggleFeature = (id: string) => {
-    expandedFeatureIds = expandedFeatureIds.includes(id)
-      ? expandedFeatureIds.filter(value => value !== id)
-      : [...expandedFeatureIds, id];
+    expandedFeatureIds = toggleExpandedFeature(expandedFeatureIds, id);
   };
 </script>
 
