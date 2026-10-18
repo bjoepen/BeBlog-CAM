@@ -27,3 +27,11 @@ export function initializeAdvisorToolLibrary(storage: { getItem(key: string): st
     return false;
   }
 }
+
+/** Another window changed or cleared the persistent library. Never continue
+ * screening against a potentially stale snapshot; a restart reloads storage. */
+export function invalidateAdvisorOnExternalLibraryChange(key: string | null): boolean {
+  if (key !== null && key !== TOOL_LIBRARY_STORAGE_KEY) return false;
+  invalidateAdvisorToolLibrary();
+  return true;
+}
