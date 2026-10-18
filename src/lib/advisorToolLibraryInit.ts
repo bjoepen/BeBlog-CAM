@@ -35,3 +35,10 @@ export function invalidateAdvisorOnExternalLibraryChange(key: string | null): bo
   invalidateAdvisorToolLibrary();
   return true;
 }
+
+/** 011-E5F: explicit, read-only reload. Never trust the old in-memory snapshot.
+ * Invalid storage stays untouched and the Advisor remains blocked. */
+export function reloadAdvisorToolLibrary(storage: { getItem(key: string): string | null }): boolean {
+  invalidateAdvisorToolLibrary();
+  return initializeAdvisorToolLibrary(storage);
+}
