@@ -144,7 +144,8 @@
     "check:011e5e": "node scripts/check-011e5e-library-external-change.mjs",
     "check:011e5f": "node scripts/check-011e5f-library-reload.mjs",
     "check:011f1": "node scripts/check-011f1-step-tool-matching.mjs",
-    "check:011f2": "node scripts/check-011f2-material-cutting-advice.mjs"
+    "check:011f2": "node scripts/check-011f2-material-cutting-advice.mjs",
+    "check:011f3": "node scripts/check-011f3-operation-proposals.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
