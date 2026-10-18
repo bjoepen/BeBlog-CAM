@@ -38,19 +38,19 @@ function wcsOrigin(stock:StockDefinition,stockMode:StockMode,wcs:WorkCoordinateS
 
 function restStockStartZ(args:{stock:StockDefinition;wcs:WorkCoordinateSystem;previousToolpaths:CanonicalToolpath[];path:P2[];toolDiameterMm:number;fallbackZ:number}){
   const {stock,wcs,previousToolpaths,path,toolDiameterMm,fallbackZ}=args;
-  if(!previousToolpaths.length||!path.length)return{z:fallbackZ,source:'model-profile' as const};
+  if(!previousToolpaths.length||!path.length)return{z:0,source:'stock-top' as const};
   const cellSize=Math.max(.25,Math.min(1,toolDiameterMm/4));
   const simulation=simulateStockHeightfield({stock,wcs,operations:previousToolpaths.map((toolpath,index)=>({operationId:toolpath.sourceOperationId??`previous-${index}`,toolpath})),cellSizeMm:cellSize});
-  if(!simulation.ok)return{z:fallbackZ,source:'model-profile' as const};
-  let highest=-Infinity;
-  const sample=(p:P2)=>{const z=sampleStockSurfaceZ({simulation,stock,wcs,x:p.x,y:p.y});if(z!=null)highest=Math.max(highest,z);};
+  if(!simulation.ok)return{z:0,source:'stock-top' as const};
+  let highest=-Infinity,missingSample=false;
+  const sample=(p:P2)=>{const z=sampleStockSurfaceZ({simulation,stock,wcs,x:p.x,y:p.y});if(z==null)missingSample=true;else highest=Math.max(highest,z);};
   for(let i=0;i<path.length;i++){
     sample(path[i]);
     if(i===0)continue;
     const a=path[i-1],b=path[i],length=dist(a,b),steps=Math.max(1,Math.ceil(length/(simulation.cellSizeMm*.5)));
     for(let s=1;s<steps;s++){const u=s/steps;sample({x:a.x+(b.x-a.x)*u,y:a.y+(b.y-a.y)*u});}
   }
-  return Number.isFinite(highest)?{z:Math.max(fallbackZ,highest),source:'rest-stock' as const}:{z:fallbackZ,source:'model-profile' as const};
+  return !missingSample&&Number.isFinite(highest)?{z:Math.max(fallbackZ,highest),source:'rest-stock' as const}:{z:0,source:'stock-top' as const};
 }
 
 const fail=(errors:string[],warnings:string[],candidates:StepContourCandidate[],selected:StepContourCandidate|null,eligibleSideFaceIds:number[],selectedEdgeIds:number[]=[]):StepContourOperationState=>({ok:false,toolpath:null,errors,warnings,candidates,selected,eligibleSideFaceIds,selectedEdgeIds});
@@ -135,7 +135,8 @@ export function buildStepContourOperationState(args:{summary:ImportSummary;stock
     const segments:CanonicalToolpathSegment[]=[];for(let i=1;i<points.length;i++)segments.push({kind:'line',start:points[i-1],end:points[i]});
     runs.push({kind:'cut',z,points,segments});
   }
-  if(autoStart.source==='rest-stock')warnings.push(`STEP-Kontur Start automatisch aus Restmaterial: Z ${startZ.toFixed(3)} mm (Modell-Profilkante Z ${profileStartZ.toFixed(3)} mm), Ende Z ${bottomZ.toFixed(3)} mm.`);
+  if(autoStart.source==='stock-top')warnings.push(`STEP-Kontur startet konservativ an der Rohlingoberseite Z 0.000 mm (Modell-Profilkante Z ${profileStartZ.toFixed(3)} mm), Ende Z ${bottomZ.toFixed(3)} mm. Keine vollständige Restmaterialreferenz verfügbar.`);
+  else if(autoStart.source==='rest-stock')warnings.push(`STEP-Kontur Start automatisch aus Restmaterial: Z ${startZ.toFixed(3)} mm (Modell-Profilkante Z ${profileStartZ.toFixed(3)} mm), Ende Z ${bottomZ.toFixed(3)} mm.`);
   else warnings.push(`STEP-Kontur startet an der Modell-Profilkante Z ${startZ.toFixed(3)} mm und endet bei Z ${bottomZ.toFixed(3)} mm.`);
   const baseToolpath:CanonicalToolpath={version:1,operationKind:'contour',strategy:'contour',tool:{diameterMm:operation.tool.diameterMm},stepoverPercent:0,runs,sourceOperationId:operation.id,targetKey:effective.targetKey};
   const finished=applyContourFinishing(baseToolpath,operation,cutDepth);errors.push(...finished.errors);warnings.push(...finished.warnings);if(errors.length)return fail(errors,warnings,all,chosen,eligibleSideFaceIds,effective.edgeIds);
