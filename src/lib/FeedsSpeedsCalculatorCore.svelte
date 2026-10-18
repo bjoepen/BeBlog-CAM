@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { advisorToolLibrary, publishAdvisorToolLibrary } from './advisorToolLibrary';
-  import { TOOL_LIBRARY_STORAGE_KEY } from './advisorToolLibraryInit';
+  import { TOOL_LIBRARY_STORAGE_KEY, reloadAdvisorToolLibrary } from './advisorToolLibraryInit';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
   import { recommendCuttingEngagement } from './cuttingEngagementRecommendation';
   import { prepareEngagementTransfer } from './engagementTransfer';
@@ -171,6 +171,19 @@
   function editTool(saved:MillingTool){loadTool(saved);libraryMessage='Werkzeug zum Bearbeiten geladen.'}
   function deleteTool(id:string){const savedToDisk=persist(library.filter(item=>item.id!==id));if(selectedToolId===id){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft')}if(savedToDisk)libraryMessage='Werkzeug entfernt.';transferMessage=''}
   function newTool(){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft');activeTab='data';libraryMessage='';transferMessage=''}
+  function reloadLibrary(){
+    // Explicit confirmation: replacing the editor snapshot discards its draft.
+    if(!window.confirm('Werkzeugbibliothek neu laden? Ungespeicherte Werkzeugänderungen werden verworfen.'))return;
+    const ok=reloadAdvisorToolLibrary(localStorage);
+    const snapshot=get(advisorToolLibrary);
+    library=ok&&snapshot.ready?snapshot.tools.map(item=>({...item})):[];
+    selectedToolId=null;
+    tool=createMillingTool('end-mill','tool-draft');
+    transferMessage='';
+    applyAxial=false;applyRadial=false;reviewedContext=null;
+    libraryMessage=ok?'Werkzeugbibliothek neu geladen. Ungespeicherte Änderungen wurden verworfen.':
+      'Neuladen fehlgeschlagen: Bibliothek ungültig oder nicht lesbar. Advisor bleibt gesperrt; gespeicherte Daten wurden nicht verändert.';
+  }
   function exportLibrary(){
     const blob=new Blob([serializePortableToolLibrary(library)],{type:'application/json;charset=utf-8'});
     const url=URL.createObjectURL(blob);
@@ -371,7 +384,7 @@
 
   {:else}
   <div class="library-page">
-    <header class="library-head"><div><h1>Werkzeugbibliothek</h1><p>Fräser mit Typ und typabhängiger Geometrie lokal speichern und wiederverwenden.</p></div><div class="library-head-actions"><input class="import-file" bind:this={importInput} type="file" accept=".json,application/json" onchange={importLibrary}/><button class="quiet" onclick={()=>importInput?.click()}>JSON importieren</button><button class="quiet" disabled={library.length===0} onclick={exportLibrary}>JSON exportieren</button><button class="primary-action" onclick={newTool}>+ Neues Werkzeug</button></div></header>
+    <header class="library-head"><div><h1>Werkzeugbibliothek</h1><p>Fräser mit Typ und typabhängiger Geometrie lokal speichern und wiederverwenden.</p></div><div class="library-head-actions"><input class="import-file" bind:this={importInput} type="file" accept=".json,application/json" onchange={importLibrary}/><button class="quiet" onclick={reloadLibrary}>Bibliothek neu laden</button><button class="quiet" onclick={()=>importInput?.click()}>JSON importieren</button><button class="quiet" disabled={library.length===0} onclick={exportLibrary}>JSON exportieren</button><button class="primary-action" onclick={newTool}>+ Neues Werkzeug</button></div></header>
     {#if library.length===0}
       <section class="library-empty"><strong>Noch keine Werkzeuge gespeichert.</strong><p>Lege unter „Werkzeugdaten“ dein erstes Werkzeug an.</p><button class="wide-button" onclick={()=>activeTab='data'}>Werkzeug anlegen →</button></section>
     {:else}
