@@ -36,7 +36,7 @@
           {/each}
           {#each match.reasons as message}<p>{message}</p>{/each}
           {#each cuttingAdvice.filter(advice => advice.featureId === match.featureId) as advice}
-            <p><strong>Schnittdaten-Richtwert:</strong> {advice.method === 'drill' ? 'Bohren' : 'Helixfräsen'} · Werkzeug {advice.toolId} · {advice.spindleRpm.toFixed(0)} U/min · {advice.feedMmMin.toFixed(0)} mm/min (bedingt)</p>
+            <p><strong>Schnittdaten-Richtwert:</strong> {advice.method === 'drill' ? 'Bohren' : 'Helixfräsen'} · Werkzeug {advice.toolName} ({advice.toolId}) · {advice.spindleRpm.toFixed(0)} U/min · {advice.feedMmMin.toFixed(0)} mm/min (bedingt)</p>
             {#each advice.notes as note}<p>{note}</p>{/each}
           {/each}
         {/each}
