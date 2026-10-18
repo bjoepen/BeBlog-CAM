@@ -181,7 +181,7 @@
     tool=createMillingTool('end-mill','tool-draft');
     transferMessage='';
     applyAxial=false;applyRadial=false;reviewedContext=null;
-    libraryMessage=ok?'Werkzeugbibliothek neu geladen. Ungespeicherte Änderungen wurden verworfen.':
+    libraryMessage=ok&&snapshot.ready?'Werkzeugbibliothek neu geladen. Ungespeicherte Änderungen wurden verworfen.':
       'Neuladen fehlgeschlagen: Bibliothek ungültig oder nicht lesbar. Advisor bleibt gesperrt; gespeicherte Daten wurden nicht verändert.';
   }
   function exportLibrary(){
