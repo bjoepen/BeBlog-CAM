@@ -14,7 +14,6 @@
   import { validateToolCompatibility } from './validationGrammar';
   import {
     createMillingTool,
-    migrateMillingTool,
     millingToolDescriptions,
     millingToolKinds,
     millingToolLabels,
