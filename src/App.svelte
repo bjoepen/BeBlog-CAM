@@ -23,6 +23,8 @@
   import { createStepAdvisorContext, screenStepFeasibility } from './lib/advisorStepFeasibility';
   import { stockMaterial } from './lib/materialContext';
   import { advisorToolLibrary } from './lib/advisorToolLibrary';
+  import { initializeAdvisorToolLibrary } from './lib/advisorToolLibraryInit';
+  import { onMount } from 'svelte';
   import { recommendCuttingEngagement } from './lib/cuttingEngagementRecommendation';
   import { prepareEngagementTransfer, isEngagementTransferTargetCurrent } from './lib/engagementTransfer';
   import type { MaterialKind } from './lib/materialContext';
@@ -43,6 +45,8 @@
   import { defaultTrochoidalContourContract, type TrochoidalContourContract } from './lib/trochoidalContourContract';
 
   const steps = ['Bauteil', 'Rohling', 'Werkzeuge', 'Bearbeiten', 'Prüfen', 'Fräsen'];
+  // 011-E5D: startup initialization is read-only; corrupt storage stays untouched.
+  onMount(() => { initializeAdvisorToolLibrary(localStorage); });
   let activeStep = 'Bauteil';
   let importSummary: ImportSummary | null = null;
   let sourcePath:string|null=null;

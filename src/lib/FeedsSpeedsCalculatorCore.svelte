@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { publishAdvisorToolLibrary } from './advisorToolLibrary';
+  import { get } from 'svelte/store';
+  import { advisorToolLibrary, publishAdvisorToolLibrary } from './advisorToolLibrary';
+  import { TOOL_LIBRARY_STORAGE_KEY } from './advisorToolLibraryInit';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
   import { recommendCuttingEngagement } from './cuttingEngagementRecommendation';
   import { prepareEngagementTransfer } from './engagementTransfer';
@@ -12,7 +14,6 @@
   import { validateToolCompatibility } from './validationGrammar';
   import {
     createMillingTool,
-    migrateMillingTool,
     millingToolDescriptions,
     millingToolKinds,
     millingToolLabels,
@@ -49,7 +50,7 @@
   let reviewedContext:string|null=null;
   let lastSeenContext:string|null=null;
 
-  const STORAGE_KEY='beblog-cam.tool-library.v1';
+  const STORAGE_KEY=TOOL_LIBRARY_STORAGE_KEY;
   $: materialProfile=materialProfiles[$stockMaterial];
   $: if($stockMaterial!==appliedMaterial){appliedMaterial=$stockMaterial;cuttingSpeed=materialProfile.cuttingSpeedMMin;transferMessage='';}
   $: effectiveChipLoad=tool.chipLoadMm*materialProfile.chipLoadFactor;
@@ -106,32 +107,35 @@
   const n=(v:number|null|undefined,d=0)=>v==null?'—':v.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d});
 
   onMount(()=>{
-    try{
-      const raw=localStorage.getItem(STORAGE_KEY);
-      if(raw){
-        const parsed:unknown=JSON.parse(raw);
-        if(!Array.isArray(parsed)) {
-          libraryMessage='Gespeicherte Werkzeugbibliothek ungültig. Keine Advisor-Freigabe.';
-          return;
-        }
-        const migrated=parsed.map(migrateMillingTool);
-        if(migrated.some(item=>item===null) ||
-            new Set(migrated.map(item=>item!.id)).size!==migrated.length) {
-          libraryMessage='Gespeicherte Werkzeugbibliothek ungültig. Daten unverändert; keine Advisor-Freigabe.';
-          return;
-        }
-        library=migrated as MillingTool[];
-        persist(library);
-        return;
-      }
-      publishAdvisorToolLibrary(library);
-    }catch{
-      library=[];
-      libraryMessage='Werkzeugbibliothek konnte nicht gelesen werden. Keine Advisor-Freigabe.';
+    // The Advisor store is canonical within the running app. In particular, do
+    // not reload older disk data after a storage write failed in this session.
+    // A failed startup read stays blocked; opening the editor cannot bypass it.
+    const snapshot=get(advisorToolLibrary);
+    if(snapshot.ready){
+      library=snapshot.tools.map(item=>({...item}));
+    }else{
+      libraryMessage='Werkzeugbibliothek nicht verfügbar oder ungültig. Keine Advisor-Freigabe.';
     }
   });
 
-  function persist(next:MillingTool[]){library=next;publishAdvisorToolLibrary(next);try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next))}catch{/* Web preview may not expose storage */}}
+  function persist(next:MillingTool[]):boolean{
+    // One canonical in-memory source. A storage failure cannot make the
+    // editor revert to older on-disk tools when the tab is reopened.
+    publishAdvisorToolLibrary(next);
+    const snapshot=get(advisorToolLibrary);
+    if(!snapshot.ready){
+      libraryMessage='Werkzeugbibliothek ungültig. Änderung nicht übernommen.';
+      return false;
+    }
+    library=snapshot.tools.map(item=>({...item}));
+    try{
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(library));
+    }catch{
+      libraryMessage='Werkzeugbibliothek nur in dieser Sitzung geändert; Speichern auf Datenträger fehlgeschlagen.';
+      return false;
+    }
+    return true;
+  }
   function setSpindlePreset(v:number){maxSpindleRpm=v;transferMessage=''}
   function chooseMaterial(material:MaterialKind){setStockMaterial(material);transferMessage=''}
   function chooseToolKind(kind:MillingToolKind){
@@ -152,12 +156,14 @@
     const id=selectedToolId??`tool-${Date.now()}`;
     const saved={...tool,id,name:tool.name.trim()||millingToolLabels[tool.kind]} as MillingTool;
     const exists=library.some(item=>item.id===id);
-    persist(exists?library.map(item=>item.id===id?saved:item):[...library,saved]);
-    tool=saved;selectedToolId=id;libraryMessage=exists?'Werkzeug aktualisiert.':'Werkzeug gespeichert.';transferMessage='';
+    const savedToDisk=persist(exists?library.map(item=>item.id===id?saved:item):[...library,saved]);
+    tool=saved;selectedToolId=id;
+    if(savedToDisk)libraryMessage=exists?'Werkzeug aktualisiert.':'Werkzeug gespeichert.';
+    transferMessage='';
   }
   function loadTool(saved:MillingTool){tool={...saved} as MillingTool;selectedToolId=saved.id;libraryMessage=`${saved.name} in Werkzeugdaten geladen.`;transferMessage='';activeTab='data'}
   function editTool(saved:MillingTool){loadTool(saved);libraryMessage='Werkzeug zum Bearbeiten geladen.'}
-  function deleteTool(id:string){persist(library.filter(item=>item.id!==id));if(selectedToolId===id){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft')}libraryMessage='Werkzeug entfernt.';transferMessage=''}
+  function deleteTool(id:string){const savedToDisk=persist(library.filter(item=>item.id!==id));if(selectedToolId===id){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft')}if(savedToDisk)libraryMessage='Werkzeug entfernt.';transferMessage=''}
   function newTool(){selectedToolId=null;tool=createMillingTool('end-mill','tool-draft');activeTab='data';libraryMessage='';transferMessage=''}
   function exportLibrary(){
     const blob=new Blob([serializePortableToolLibrary(library)],{type:'application/json;charset=utf-8'});
@@ -181,8 +187,8 @@
     const existingIds=new Set(library.map(item=>item.id));
     const collision=parsed.tools.find(item=>existingIds.has(item.id));
     if(collision){libraryMessage=`Import abgelehnt: Werkzeug-ID ${collision.id} ist bereits vorhanden. Die Bibliothek wurde nicht verändert.`;return}
-    persist([...library,...parsed.tools]);
-    libraryMessage=`${parsed.tools.length} Werkzeug${parsed.tools.length===1?'':'e'} importiert.`;
+    const savedToDisk=persist([...library,...parsed.tools]);
+    if(savedToDisk)libraryMessage=`${parsed.tools.length} Werkzeug${parsed.tools.length===1?'':'e'} importiert.`;
   }
   function chooseTargetOperation(event:Event){
     const id=(event.currentTarget as HTMLSelectElement).value;

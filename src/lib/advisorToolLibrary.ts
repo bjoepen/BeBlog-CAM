@@ -33,3 +33,9 @@ export function publishAdvisorToolLibrary(entries: readonly MillingTool[]): void
     tools: entries.map(tool => ({ ...tool }))
   });
 }
+
+/** Explicitly revoke a previously published snapshot on failed initialization. */
+export function invalidateAdvisorToolLibrary(): void {
+  revision++;
+  advisorToolLibrary.set({ source: 'local-tool-library-v1', revision, ready: false, tools: [] });
+}
