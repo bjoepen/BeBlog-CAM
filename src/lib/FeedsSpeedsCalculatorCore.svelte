@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { publishAdvisorToolLibrary } from './advisorToolLibrary';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
   import { recommendCuttingEngagement } from './cuttingEngagementRecommendation';
   import { prepareEngagementTransfer } from './engagementTransfer';
@@ -115,9 +116,10 @@
         }
       }
     }catch{library=[]}
+    publishAdvisorToolLibrary(library);
   });
 
-  function persist(next:MillingTool[]){library=next;try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next))}catch{/* Web preview may not expose storage */}}
+  function persist(next:MillingTool[]){library=next;publishAdvisorToolLibrary(next);try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next))}catch{/* Web preview may not expose storage */}}
   function setSpindlePreset(v:number){maxSpindleRpm=v;transferMessage=''}
   function chooseMaterial(material:MaterialKind){setStockMaterial(material);transferMessage=''}
   function chooseToolKind(kind:MillingToolKind){
