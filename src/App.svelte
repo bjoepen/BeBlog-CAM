@@ -99,7 +99,7 @@
   $: contourDepthState=operation.kind==='contour'?resolveContourDepth({operation,stock,stockMode,wcs}):null;
   // 011-E5B: read-only and fail-closed. Assigned operation tools are not assumed
   // to be complete library records; only fully validated tools may be screened.
-  $: advisorTools = operationsProject.operations.map(op=>op.tool).filter((tool):tool is MillingTool=>isMillingTool(tool));
+  $: advisorTools = operationsProject.operations.flatMap(op=>isMillingTool(op.tool) ? [op.tool as MillingTool] : []);
   $: advisorContext = importSummary?.kind==='step' ? createStepAdvisorContext({
     summary:importSummary,sourceContentSha256:importSummary.sourceContentSha256??null,
     capabilityRevision:'011-E5B-assigned-tools-v1',orientation,stockMode,
