@@ -142,7 +142,8 @@
     "check:010f14": "node scripts/check-010f14-grblhal-postprocessor.mjs",
     "check:011b": "node scripts/check-011b-advisor-regression.mjs",
     "check:011e5e": "node scripts/check-011e5e-library-external-change.mjs",
-    "check:011e5f": "node scripts/check-011e5f-library-reload.mjs"
+    "check:011e5f": "node scripts/check-011e5f-library-reload.mjs",
+    "check:011f1": "node scripts/check-011f1-step-tool-matching.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
