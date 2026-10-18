@@ -108,34 +108,33 @@
   const n=(v:number|null|undefined,d=0)=>v==null?'—':v.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d});
 
   onMount(()=>{
-    try{
-      const raw=localStorage.getItem(STORAGE_KEY);
-      if(raw){
-        const parsed:unknown=JSON.parse(raw);
-        if(!Array.isArray(parsed)) {
-          libraryMessage='Gespeicherte Werkzeugbibliothek ungültig. Keine Advisor-Freigabe.';
-          return;
-        }
-        const migrated=parsed.map(migrateMillingTool);
-        if(migrated.some(item=>item===null) ||
-            new Set(migrated.map(item=>item!.id)).size!==migrated.length) {
-          libraryMessage='Gespeicherte Werkzeugbibliothek ungültig. Daten unverändert; keine Advisor-Freigabe.';
-          return;
-        }
-        library=migrated as MillingTool[];
-        // Startup already loaded and published the canonical snapshot.
-        // Reopening the editor must not write to storage or bump the revision.
-        if (!get(advisorToolLibrary).ready) publishAdvisorToolLibrary(library);
-        return;
-      }
-      if (!get(advisorToolLibrary).ready) publishAdvisorToolLibrary(library);
-    }catch{
-      library=[];
-      libraryMessage='Werkzeugbibliothek konnte nicht gelesen werden. Keine Advisor-Freigabe.';
+    // The Advisor store is canonical within the running app. In particular, do
+    // not reload older disk data after a storage write failed in this session.
+    // A failed startup read stays blocked; opening the editor cannot bypass it.
+    const snapshot=get(advisorToolLibrary);
+    if(snapshot.ready){
+      library=snapshot.tools.map(item=>({...item}));
+    }else{
+      libraryMessage='Werkzeugbibliothek nicht verfügbar oder ungültig. Keine Advisor-Freigabe.';
     }
   });
 
-  function persist(next:MillingTool[]){library=next;publishAdvisorToolLibrary(next);try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next))}catch{/* Web preview may not expose storage */}}
+  function persist(next:MillingTool[]){
+    // Publish first: the in-memory store remains the session source of truth
+    // even if browser storage is unavailable. Reopening the editor reuses it.
+    publishAdvisorToolLibrary(next);
+    const snapshot=get(advisorToolLibrary);
+    if(!snapshot.ready){
+      libraryMessage='Werkzeugbibliothek ungültig. Änderung nicht übernommen.';
+      return;
+    }
+    library=snapshot.tools.map(item=>({...item}));
+    try{
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(library));
+    }catch{
+      libraryMessage='Werkzeugbibliothek nur in dieser Sitzung geändert; Speichern auf Datenträger fehlgeschlagen.';
+    }
+  }
   function setSpindlePreset(v:number){maxSpindleRpm=v;transferMessage=''}
   function chooseMaterial(material:MaterialKind){setStockMaterial(material);transferMessage=''}
   function chooseToolKind(kind:MillingToolKind){
