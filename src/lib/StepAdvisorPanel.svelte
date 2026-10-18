@@ -2,11 +2,13 @@
   import type { AdvisorReport } from './advisorStepFeasibility';
   import type { StepToolMatch } from './stepToolMatching';
   import type { StepCuttingAdvice } from './stepCuttingAdvice';
+  import type { StepOperationProposal } from './stepOperationProposals';
   export let report: AdvisorReport | null = null;
   export let reason: string | null = null;
   export let toolCount = 0;
   export let matches: StepToolMatch[] = [];
   export let cuttingAdvice: StepCuttingAdvice[] = [];
+  export let operationProposals: StepOperationProposal[] = [];
 </script>
 
 <section class="placement-section" aria-label="STEP CAM Advisor Vorprüfung">
@@ -19,6 +21,7 @@
     <p class="note"><strong>Status:</strong> {report.status === 'screened' ? 'Vorprüfung durchgeführt' : 'Nicht verfügbar'} · <strong>Features:</strong> {report.features.length}</p>
     <p class="note"><strong>011-F1 · Werkzeugabgleich:</strong> Nur bedingte Kandidaten aus der bestehenden STEP-Vorprüfung. Reihenfolge ist keine Eignungsrangliste. Keine automatische Werkzeugzuweisung.</p>
     <p class="note"><strong>011-F2 · Schnittdaten:</strong> Rechnerische Startwerte nach Materialprofil, keine automatische Übernahme oder Freigabe.</p>
+    <p class="note"><strong>011-F3 · Operationsvorschläge:</strong> Nur lesende Entwürfe, keine Erzeugung oder Änderung von Bearbeitungen.</p>
     {#each report.features as feature (feature.featureId)}
       <div class="note">
         <strong>{feature.kind === 'hole' ? 'Bohrung' : 'Nicht klassifizierter Zylinder'} · {feature.featureId}</strong>
@@ -39,6 +42,10 @@
             <p><strong>Schnittdaten-Richtwert:</strong> {advice.method === 'drill' ? 'Bohren' : 'Helixfräsen'} · Werkzeug {advice.toolName} ({advice.toolId}) · {advice.spindleRpm.toFixed(0)} U/min · {advice.feedMmMin.toFixed(0)} mm/min (bedingt)</p>
             {#each advice.notes as note}<p>{note}</p>{/each}
           {/each}
+        {/each}
+        {#each operationProposals.filter(proposal => proposal.featureId === feature.featureId) as proposal}
+          <p><strong>Operationsvorschlag (bedingt):</strong> {proposal.method === 'drill' ? 'Bohren' : 'Helixfräsen'} · {proposal.toolName} ({proposal.toolId}) · Ø {proposal.diameterMm.toFixed(2)} mm · Tiefe {proposal.depthMm.toFixed(2)} mm · {proposal.spindleRpm.toFixed(0)} U/min · {proposal.feedMmMin.toFixed(0)} mm/min</p>
+          {#each proposal.cautions as caution}<p>{caution}</p>{/each}
         {/each}
         {#each feature.reasons as message}<p>{message}</p>{/each}
       </div>
