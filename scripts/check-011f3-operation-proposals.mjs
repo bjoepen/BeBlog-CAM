@@ -26,6 +26,28 @@ assert.equal(propose(report, matches, [...advice, ...advice]).length, 0);
 assert.equal(propose({ ...report, features: [{ ...feature, kind: 'unclassified-cylinder' }] }, matches, advice).length, 0);
 assert.equal(propose({ ...report, features: [{ ...feature, depthMm: 0 }] }, matches, advice).length, 0);
 assert.equal(propose({ ...report, features: [feature, feature] }, matches, advice).length, 0);
+
+// Helical milling must retain its own method, tool identity, values and warnings.
+const helixMatches = [{ featureId: 'hole-1', status: 'conditional', candidates: [
+  { toolId: 'mill-6', toolName: 'Schaftfräser 6 mm', method: 'helical-mill',
+    reasons: ['Helix-Eintauchfähigkeit prüfen'] }
+] }];
+const helixAdvice = [{ featureId: 'hole-1', toolId: 'mill-6', toolName: 'Schaftfräser 6 mm',
+  method: 'helical-mill', status: 'conditional', spindleRpm: 8200, feedMmMin: 360,
+  notes: ['Helixgeometrie und radiale Zustellung prüfen'] }];
+const helixResult = propose(report, helixMatches, helixAdvice);
+assert.equal(helixResult.length, 1);
+assert.equal(helixResult[0].method, 'helical-mill');
+assert.equal(helixResult[0].toolId, 'mill-6');
+assert.equal(helixResult[0].toolName, 'Schaftfräser 6 mm');
+assert.equal(helixResult[0].spindleRpm, 8200);
+assert.equal(helixResult[0].feedMmMin, 360);
+assert.ok(helixResult[0].cautions.some(c => c.includes('Helix-Eintauchfähigkeit')));
+assert.ok(helixResult[0].cautions.some(c => c.includes('Helixgeometrie')));
+assert.equal(propose(report, helixMatches, [{ ...helixAdvice[0], method: 'drill' }]).length, 0);
+assert.equal(propose(report, matches, [{ ...advice[0], method: 'helical-mill' }]).length, 0);
+assert.equal(propose(report, helixMatches, [{ ...helixAdvice[0], toolId: 'other' }]).length, 0);
+
 const app = fs.readFileSync(new URL('../src/App.svelte', import.meta.url), 'utf8');
 const panel = fs.readFileSync(new URL('../src/lib/StepAdvisorPanel.svelte', import.meta.url), 'utf8');
 assert.match(app, /proposeStepOperations\(advisorReport, advisorMatches, advisorCuttingAdvice\)/);
