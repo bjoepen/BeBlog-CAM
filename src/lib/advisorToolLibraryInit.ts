@@ -5,7 +5,7 @@ import { migrateMillingTool, type MillingTool } from './toolTypes';
 export const TOOL_LIBRARY_STORAGE_KEY = 'beblog-cam.tool-library.v1';
 
 /** 011-E5D: one central, fail-closed startup read; never rewrites stored data. */
-export function initializeAdvisorToolLibrary(storage: Pick<Storage, 'getItem'>): boolean {
+export function initializeAdvisorToolLibrary(storage: { getItem(key: string): string | null }): boolean {
   // Avoid replacing a library already published by the editor.
   if (get(advisorToolLibrary).ready) return true;
   try {
