@@ -181,6 +181,8 @@ jobs:
         run: pnpm check:011b
       - name: Advisor 011-E5E external library change regression
         run: pnpm check:011e5e
+      - name: Advisor 011-E5F explicit library reload regression
+        run: pnpm check:011e5f
       - name: Frontend build
         run: pnpm build
       - name: Rust check
