@@ -4,14 +4,22 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 const source=fs.readFileSync(new URL('../src/lib/stepToolMatching.ts',import.meta.url),'utf8');
+const toolTypesSource=fs.readFileSync(new URL('../src/lib/toolTypes.ts',import.meta.url),'utf8');
+const toolTypesJs=ts.transpileModule(toolTypesSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const toolTypes={};
+vm.runInNewContext(toolTypesJs,{exports:toolTypes});
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const exports={};
 vm.runInNewContext(compiled,{exports,require(name){
   assert.equal(name,'./toolTypes');
-  return {isMillingTool:tool=>tool?.valid===true};
+  return toolTypes;
 }});
 const match=exports.matchStepTools;
-const tools=[{id:'d1',name:'Bohrer',valid:true},{id:'e1',name:'Fräser',valid:true}];
+const tools=[toolTypes.createMillingTool('drill','d1'),toolTypes.createMillingTool('end-mill','e1')];
+assert.equal(toolTypes.isMillingTool(tools[0]),true);
+assert.equal(toolTypes.isMillingTool(tools[1]),true);
+tools[0].name='Bohrer';
+tools[1].name='Fräser';
 const report={status:'screened',features:[
   {featureId:'hole-1',kind:'hole',strategies:[
     {toolId:'e1',toolName:'Fräser',method:'helical-mill',status:'conditional',reasons:['Helix nicht geprüft']},
@@ -22,7 +30,12 @@ const report={status:'screened',features:[
 assert.equal(match(report,tools,false).length,0);
 assert.equal(match({...report,status:'unavailable'},tools,true).length,0);
 assert.equal(match(report,[...tools,{...tools[0]}],true).length,0);
-assert.equal(match(report,[{...tools[0],valid:false}],true).length,0);
+const malformedDrill={...tools[0],cuttingLengthMm:tools[0].stickoutMm+1};
+assert.equal(toolTypes.isMillingTool(malformedDrill),false);
+assert.equal(match(report,[malformedDrill,tools[1]],true).length,0);
+const malformedEndMill={...tools[1],holderDiameterMm:tools[1].diameterMm/2};
+assert.equal(toolTypes.isMillingTool(malformedEndMill),false);
+assert.equal(match(report,[tools[0],malformedEndMill],true).length,0);
 const result=match(report,tools,true);
 assert.equal(result.length,2);
 assert.equal(result[0].status,'conditional');
