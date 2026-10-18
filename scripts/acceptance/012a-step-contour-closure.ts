@@ -36,3 +36,27 @@ if(wrongMode.ok||wrongMode.toolpath!==null)throw Error('closed ring in open mode
 const incomplete=buildStepContourOperationState({...setup,operation:{...operation,stepContourFaceIds:[0,1,2]}});
 if(incomplete.ok||incomplete.toolpath!==null)throw Error('partial side-face chain in closed mode must fail');
 console.log('012-A canonical STEP contour operation target selection: PASS');
+
+// 011-S1 regression: the STEP profile can sit below an unmachined stock top.
+const recessedSummary: ImportSummary = {
+  ...summary,
+  brep: {
+    ...summary.brep!,
+    manufacturingEdges: summary.brep!.manufacturingEdges!.map(edge => ({
+      ...edge,
+      start: [edge.start[0], edge.start[1], -2] as [number,number,number],
+      end: [edge.end[0], edge.end[1], -2] as [number,number,number]
+    })),
+    manufacturingFaces: summary.brep!.manufacturingFaces!.map(face => ({ ...face, origin: [face.origin[0], face.origin[1], -2] as [number,number,number] }))
+  }
+};
+const recessedSetup = {...setup, summary: recessedSummary, stock: {...setup.stock, thickness: 12}};
+const firstClosed = buildStepContourOperationState({...recessedSetup, operation});
+if(!firstClosed.ok || !firstClosed.toolpath)throw Error('011-S1 first closed contour failed: '+firstClosed.errors.join('; '));
+if(!firstClosed.warnings.some(w => w.includes('Rohlingoberseite Z 0.000')))throw Error('011-S1 first contour must use stock top, not recessed profile');
+if(firstClosed.toolpath.runs[0].z >= 0 || firstClosed.toolpath.runs[0].z < -operation.stepDownMm - 1e-6)throw Error('011-S1 first pass must step down from stock top');
+const firstOpen = buildStepContourOperationState({...recessedSetup, operation:{...operation,topology:'open',stepContourFaceIds:[0,1,2]}});
+if(!firstOpen.ok || !firstOpen.toolpath)throw Error('011-S1 first open contour failed: '+firstOpen.errors.join('; '));
+if(!firstOpen.warnings.some(w => w.includes('Rohlingoberseite Z 0.000')))throw Error('011-S1 open contour must use stock top');
+if(firstOpen.toolpath.runs[0].z >= 0 || firstOpen.toolpath.runs[0].z < -operation.stepDownMm - 1e-6)throw Error('011-S1 open first pass must step down from stock top');
+console.log('011-S1 initial stock-top STEP contours: PASS');
