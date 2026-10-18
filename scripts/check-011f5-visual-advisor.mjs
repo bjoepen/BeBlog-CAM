@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { compile } from 'svelte/compiler';
+const panel = fs.readFileSync(new URL('../src/lib/StepAdvisorPanel.svelte', import.meta.url), 'utf8');
+const compiled = compile(panel, { filename: 'StepAdvisorPanel.svelte', generate: 'client' });
+assert.ok(compiled.js.code.length > 0);
+assert.match(panel, /aria-expanded=\{expandedFeatureIds\.includes\(feature\.featureId\)\}/);
+assert.match(panel, /onclick=\{\(\) => toggleFeature\(feature\.featureId\)\}/);
+assert.match(panel, /\{#if expandedFeatureIds\.includes\(feature\.featureId\)\}/);
+assert.match(panel, /proposalReviews\.filter/);
+assert.match(panel, /Keine Bearbeitung wird erzeugt/);
+console.log('011-F5 visual STEP advisor PASS');
