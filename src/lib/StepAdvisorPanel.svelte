@@ -2,11 +2,13 @@
   import type { AdvisorReport } from './advisorStepFeasibility';
   export let report: AdvisorReport | null = null;
   export let reason: string | null = null;
+  export let toolCount = 0;
 </script>
 
 <section class="placement-section" aria-label="STEP CAM Advisor Vorprüfung">
   <p class="placement-title">CAM Advisor · STEP-Vorprüfung (011-E5B)</p>
   <p class="note">Nur lesende Einschätzung erkannter Bohrungen. Keine Bearbeitung wird erzeugt, geändert oder freigegeben; keine NC-Ausgabe.</p>
+  {#if !reason && toolCount === 0}<p class="note"><strong>Werkzeuge:</strong> Keine vollständig validierten Bibliotheksdatensätze im aktuellen Job verfügbar. Es werden keine Werkzeugstrategien als geeignet angenommen.</p>{/if}
   {#if reason}
     <p class="note"><strong>Nicht verfügbar:</strong> {reason}</p>
   {:else if report}
