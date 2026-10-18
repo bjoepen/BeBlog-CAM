@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { publishAdvisorToolLibrary } from './advisorToolLibrary';
+  import { get } from 'svelte/store';
+  import { advisorToolLibrary, publishAdvisorToolLibrary } from './advisorToolLibrary';
   import { TOOL_LIBRARY_STORAGE_KEY } from './advisorToolLibraryInit';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
   import { recommendCuttingEngagement } from './cuttingEngagementRecommendation';
@@ -122,10 +123,12 @@
           return;
         }
         library=migrated as MillingTool[];
-        persist(library);
+        // Startup already loaded and published the canonical snapshot.
+        // Reopening the editor must not write to storage or bump the revision.
+        if (!get(advisorToolLibrary).ready) publishAdvisorToolLibrary(library);
         return;
       }
-      publishAdvisorToolLibrary(library);
+      if (!get(advisorToolLibrary).ready) publishAdvisorToolLibrary(library);
     }catch{
       library=[];
       libraryMessage='Werkzeugbibliothek konnte nicht gelesen werden. Keine Advisor-Freigabe.';
