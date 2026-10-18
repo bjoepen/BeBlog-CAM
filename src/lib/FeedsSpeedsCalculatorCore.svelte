@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { publishAdvisorToolLibrary } from './advisorToolLibrary';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
   import { recommendCuttingEngagement } from './cuttingEngagementRecommendation';
   import { prepareEngagementTransfer } from './engagementTransfer';
@@ -108,16 +109,29 @@
     try{
       const raw=localStorage.getItem(STORAGE_KEY);
       if(raw){
-        const parsed=JSON.parse(raw);
-        if(Array.isArray(parsed)){
-          library=parsed.map(migrateMillingTool).filter((item):item is MillingTool=>item!==null);
-          persist(library);
+        const parsed:unknown=JSON.parse(raw);
+        if(!Array.isArray(parsed)) {
+          libraryMessage='Gespeicherte Werkzeugbibliothek ungültig. Keine Advisor-Freigabe.';
+          return;
         }
+        const migrated=parsed.map(migrateMillingTool);
+        if(migrated.some(item=>item===null) ||
+            new Set(migrated.map(item=>item!.id)).size!==migrated.length) {
+          libraryMessage='Gespeicherte Werkzeugbibliothek ungültig. Daten unverändert; keine Advisor-Freigabe.';
+          return;
+        }
+        library=migrated as MillingTool[];
+        persist(library);
+        return;
       }
-    }catch{library=[]}
+      publishAdvisorToolLibrary(library);
+    }catch{
+      library=[];
+      libraryMessage='Werkzeugbibliothek konnte nicht gelesen werden. Keine Advisor-Freigabe.';
+    }
   });
 
-  function persist(next:MillingTool[]){library=next;try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next))}catch{/* Web preview may not expose storage */}}
+  function persist(next:MillingTool[]){library=next;publishAdvisorToolLibrary(next);try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next))}catch{/* Web preview may not expose storage */}}
   function setSpindlePreset(v:number){maxSpindleRpm=v;transferMessage=''}
   function chooseMaterial(material:MaterialKind){setStockMaterial(material);transferMessage=''}
   function chooseToolKind(kind:MillingToolKind){
