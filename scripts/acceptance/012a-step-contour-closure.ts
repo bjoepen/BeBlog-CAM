@@ -60,3 +60,32 @@ if(!firstOpen.ok || !firstOpen.toolpath)throw Error('011-S1 first open contour f
 if(!firstOpen.warnings.some(w => w.includes('Rohlingoberseite Z 0.000')))throw Error('011-S1 open contour must use stock top');
 if(firstOpen.toolpath.runs[0].z >= 0 || firstOpen.toolpath.runs[0].z < -operation.stepDownMm - 1e-6)throw Error('011-S1 open first pass must step down from stock top');
 console.log('011-S1 initial stock-top STEP contours: PASS');
+
+
+// 011-S1 Greptile P2: exercise the actual rest-stock sampling branch after earlier machining.
+// A broad synthetic prior cut at Z=-1 covers the stock, so every in-bounds sample is -1.
+const sampledSetup = {...recessedSetup, stock: {...recessedSetup.stock, width: 100, height: 80}};
+const previousToolpath = {
+  version: 1 as const, operationKind: 'facing' as const, strategy: 'raster' as const,
+  tool: {diameterMm: 200}, stepoverPercent: 0,
+  runs: [{kind: 'cut' as const, z: -1, points: [{x: 0, y: 0}]}]
+};
+const sampledClosed = buildStepContourOperationState({...sampledSetup, operation, previousToolpaths: [previousToolpath]});
+if(!sampledClosed.ok || !sampledClosed.toolpath)throw Error('011-S1 complete rest-stock sampling failed: '+sampledClosed.errors.join('; '));
+if(!sampledClosed.warnings.some(w => w.includes('Start automatisch aus Restmaterial: Z -1.000')))
+  throw Error('011-S1 complete samples must preserve rest-stock start Z=-1');
+if(Math.abs(sampledClosed.toolpath.runs[0].z - (-1-operation.stepDownMm))>1e-6)
+  throw Error('011-S1 complete samples must step down from rest-stock Z=-1');
+
+// Shift the same contour partially beyond the stock: valid samples coexist with null samples.
+// The full path must fall back to Z=0 rather than trusting the valid subset.
+const partialSamples = buildStepContourOperationState({
+  ...sampledSetup, placement: {...sampledSetup.placement, offsetX: 40},
+  operation, previousToolpaths: [previousToolpath]
+});
+if(!partialSamples.ok || !partialSamples.toolpath)throw Error('011-S1 partial rest-stock sampling failed: '+partialSamples.errors.join('; '));
+if(!partialSamples.warnings.some(w => w.includes('Rohlingoberseite Z 0.000')))
+  throw Error('011-S1 incomplete samples must fall back to stock top');
+if(Math.abs(partialSamples.toolpath.runs[0].z + operation.stepDownMm)>1e-6)
+  throw Error('011-S1 incomplete samples must step down from stock top Z=0');
+console.log('011-S1 complete/incomplete previous-toolpath sampling: PASS');
