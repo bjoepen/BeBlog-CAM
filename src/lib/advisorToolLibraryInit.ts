@@ -21,7 +21,7 @@ export function initializeAdvisorToolLibrary(storage: { getItem(key: string): st
     const tools = migrated as MillingTool[];
     if (new Set(tools.map(tool => tool.id)).size !== tools.length) { invalidateAdvisorToolLibrary(); return false; }
     publishAdvisorToolLibrary(tools);
-    return true;
+    return get(advisorToolLibrary).ready;
   } catch {
     invalidateAdvisorToolLibrary();
     return false;
@@ -40,5 +40,5 @@ export function invalidateAdvisorOnExternalLibraryChange(key: string | null): bo
  * Invalid storage stays untouched and the Advisor remains blocked. */
 export function reloadAdvisorToolLibrary(storage: { getItem(key: string): string | null }): boolean {
   invalidateAdvisorToolLibrary();
-  return initializeAdvisorToolLibrary(storage);
+  return initializeAdvisorToolLibrary(storage) && get(advisorToolLibrary).ready;
 }
