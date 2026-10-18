@@ -8,6 +8,7 @@ import type { StepToolMatch } from './stepToolMatching';
 export type StepCuttingAdvice = {
   featureId: string;
   toolId: string;
+  toolName: string;
   method: 'drill' | 'helical-mill';
   status: 'conditional';
   spindleRpm: number;
@@ -49,7 +50,7 @@ export function adviseStepCuttingData(
         if (![calculated.spindleRpm, calculated.feedMmMin].every(Number.isFinite) ||
             calculated.spindleRpm <= 0 || calculated.feedMmMin <= 0) continue;
         result.push({
-          featureId: match.featureId, toolId: tool.id, method: candidate.method,
+          featureId: match.featureId, toolId: tool.id, toolName: tool.name, method: candidate.method,
           status: 'conditional', spindleRpm: calculated.spindleRpm,
           feedMmMin: calculated.feedMmMin,
           notes: [
