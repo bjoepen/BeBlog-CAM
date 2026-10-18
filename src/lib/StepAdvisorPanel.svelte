@@ -3,12 +3,14 @@
   import type { StepToolMatch } from './stepToolMatching';
   import type { StepCuttingAdvice } from './stepCuttingAdvice';
   import type { StepOperationProposal } from './stepOperationProposals';
+  import type { ProposalReview } from './stepProposalReview';
   export let report: AdvisorReport | null = null;
   export let reason: string | null = null;
   export let toolCount = 0;
   export let matches: StepToolMatch[] = [];
   export let cuttingAdvice: StepCuttingAdvice[] = [];
   export let operationProposals: StepOperationProposal[] = [];
+  export let proposalReviews: ProposalReview[] = [];
 </script>
 
 <section class="placement-section" aria-label="STEP CAM Advisor Vorprüfung">
@@ -22,6 +24,7 @@
     <p class="note"><strong>011-F1 · Werkzeugabgleich:</strong> Nur bedingte Kandidaten aus der bestehenden STEP-Vorprüfung. Reihenfolge ist keine Eignungsrangliste. Keine automatische Werkzeugzuweisung.</p>
     <p class="note"><strong>011-F2 · Schnittdaten:</strong> Rechnerische Startwerte nach Materialprofil, keine automatische Übernahme oder Freigabe.</p>
     <p class="note"><strong>011-F3 · Operationsvorschläge:</strong> Nur lesende Entwürfe, keine Erzeugung oder Änderung von Bearbeitungen.</p>
+    <p class="note"><strong>011-F4 · Offene Prüfungen:</strong> Alle Prüfpunkte bleiben ohne realen Werkzeugweg und Produktions-Preflight offen.</p>
     {#each report.features as feature (feature.featureId)}
       <div class="note">
         <strong>{feature.kind === 'hole' ? 'Bohrung' : 'Nicht klassifizierter Zylinder'} · {feature.featureId}</strong>
@@ -45,6 +48,10 @@
         {/each}
         {#each operationProposals.filter(proposal => proposal.featureId === feature.featureId) as proposal}
           <p><strong>Operationsvorschlag (bedingt):</strong> {proposal.method === 'drill' ? 'Bohren' : 'Helixfräsen'} · {proposal.toolName} ({proposal.toolId}) · Ø {proposal.diameterMm.toFixed(2)} mm · Tiefe {proposal.depthMm.toFixed(2)} mm · {proposal.spindleRpm.toFixed(0)} U/min · {proposal.feedMmMin.toFixed(0)} mm/min</p>
+          {#each proposalReviews.filter(review => review.featureId === proposal.featureId && review.toolId === proposal.toolId && review.method === proposal.method) as review}
+            <p><strong>Prüfstatus:</strong> Freigabe ausstehend · {review.checks.length} offene Punkte</p>
+            {#each review.checks as check}<p>Offen · {check.label}: {check.reason}</p>{/each}
+          {/each}
           {#each proposal.cautions as caution}<p>{caution}</p>{/each}
         {/each}
         {#each feature.reasons as message}<p>{message}</p>{/each}
