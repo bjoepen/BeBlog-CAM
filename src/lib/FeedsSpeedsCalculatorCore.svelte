@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { publishAdvisorToolLibrary } from './advisorToolLibrary';
+  import { TOOL_LIBRARY_STORAGE_KEY } from './advisorToolLibraryInit';
   import { calculateFeedsSpeeds } from './feedsSpeeds';
   import { recommendCuttingEngagement } from './cuttingEngagementRecommendation';
   import { prepareEngagementTransfer } from './engagementTransfer';
@@ -49,7 +50,7 @@
   let reviewedContext:string|null=null;
   let lastSeenContext:string|null=null;
 
-  const STORAGE_KEY='beblog-cam.tool-library.v1';
+  const STORAGE_KEY=TOOL_LIBRARY_STORAGE_KEY;
   $: materialProfile=materialProfiles[$stockMaterial];
   $: if($stockMaterial!==appliedMaterial){appliedMaterial=$stockMaterial;cuttingSpeed=materialProfile.cuttingSpeedMMin;transferMessage='';}
   $: effectiveChipLoad=tool.chipLoadMm*materialProfile.chipLoadFactor;
