@@ -5,7 +5,7 @@
   import type { StepOperationProposal } from './stepOperationProposals';
   import type { ProposalReview } from './stepProposalReview';
   import { toggleExpandedFeature } from './stepAdvisorDisclosure';
-  import { buildStepAdvisorCandidateRows } from './stepAdvisorInspector';
+  import { buildStepAdvisorFeatureDetails } from './stepAdvisorInspector';
   // The display helper verifies candidate.toolName against advice.toolName in addition to identity fields.
 
   export let report: AdvisorReport | null = null;
@@ -30,8 +30,6 @@
     <p class="advisor-context">Werkzeugabgleich, Schnittdaten und Operationsentwürfe dienen nur der Prüfung: keine automatische Übernahme oder Freigabe. Alle Produktionsprüfungen bleiben ohne realen Werkzeugweg und Preflight offen.</p>
     {#each report.features as feature (feature.featureId)}
       {@const featureProposals = operationProposals.filter(proposal => proposal.featureId === feature.featureId)}
-      {@const unresolvedAdvice = cuttingAdvice.filter(advice => advice.featureId === feature.featureId && !matches.some(match => match.featureId === feature.featureId && buildStepAdvisorCandidateRows(match, cuttingAdvice).some(row => row.toolId === advice.toolId && row.toolName === advice.toolName && row.method === advice.method && row.spindleRpm === advice.spindleRpm && row.feedMmMin === advice.feedMmMin)))}
-      {@const unmatchedStrategies = feature.strategies.filter(strategy => !matches.some(match => match.featureId === feature.featureId && match.candidates.some(candidate => candidate.toolId === strategy.toolId && candidate.toolName === strategy.toolName && candidate.method === strategy.method)))}
       <article class="advisor-feature-card">
         <header class="advisor-feature-header">
           <span class="advisor-feature-symbol" aria-hidden="true">{feature.kind === 'hole' ? '◎' : '?'}</span>
@@ -43,11 +41,12 @@
           <button type="button" class="advisor-details-toggle" aria-expanded={expandedFeatureIds.includes(feature.featureId)} aria-controls={`advisor-feature-${feature.featureId}`} onclick={() => toggleFeature(feature.featureId)}>{expandedFeatureIds.includes(feature.featureId) ? 'Details schließen' : 'Details anzeigen'}</button>
         </header>
         {#if expandedFeatureIds.includes(feature.featureId)}
+          {@const detailData = buildStepAdvisorFeatureDetails(feature.featureId, matches, cuttingAdvice)}
+          {@const unmatchedStrategies = feature.strategies.filter(strategy => !detailData.matchRows.some(({ match }) => match.candidates.some(candidate => candidate.toolId === strategy.toolId && candidate.toolName === strategy.toolName && candidate.method === strategy.method)))}
           <div class="advisor-feature-details" id={`advisor-feature-${feature.featureId}`}>
             <section class="advisor-detail-section" aria-labelledby={`tools-${feature.featureId}`}>
               <h3 id={`tools-${feature.featureId}`}>Werkzeugkandidaten</h3>
-              {#each matches.filter(match => match.featureId === feature.featureId) as match}
-                {@const rows = buildStepAdvisorCandidateRows(match, cuttingAdvice)}
+              {#each detailData.matchRows as { match, rows }}
                 {#if rows.length}
                   <div class="advisor-table-scroll"><table>
                     <thead><tr><th scope="col">Werkzeug</th><th scope="col">Methode</th><th scope="col">Drehzahl</th><th scope="col">Vorschub</th><th scope="col">Status</th></tr></thead>
@@ -59,7 +58,7 @@
                 {:else}<p class="advisor-empty">Keine bedingten Werkzeugkandidaten verfügbar.</p>{/if}
                 {#each match.reasons as message}<p class="advisor-inline-warning">{message}</p>{/each}
               {/each}
-              {#if unresolvedAdvice.length}<aside class="advisor-method-warning"><strong>Nicht eindeutig zuordenbare Schnittdatenhinweise</strong>{#each unresolvedAdvice as advice}<p>{advice.toolName} ({advice.toolId}) · {advice.method === 'drill' ? 'Bohren' : 'Helixfräsen'} · Werte nicht verfügbar</p><ul>{#each advice.notes as note}<li>{note}</li>{/each}</ul>{/each}</aside>{/if}
+              {#if detailData.unresolvedAdvice.length}<aside class="advisor-method-warning"><strong>Nicht eindeutig zuordenbare Schnittdatenhinweise</strong>{#each detailData.unresolvedAdvice as advice}<p>{advice.toolName} ({advice.toolId}) · {advice.method === 'drill' ? 'Bohren' : 'Helixfräsen'} · Werte nicht verfügbar</p><ul>{#each advice.notes as note}<li>{note}</li>{/each}</ul>{/each}</aside>{/if}
               {#if unmatchedStrategies.length}<aside class="advisor-method-warning"><strong>Nicht zugeordnete Strategiehinweise</strong>{#each unmatchedStrategies as strategy}<p>{strategy.toolName} ({strategy.toolId}) · {strategy.method === 'drill' ? 'Bohren' : 'Helixfräsen'} · nicht freigegeben</p><ul>{#each strategy.reasons as message}<li>{message}</li>{/each}</ul>{/each}</aside>{/if}
             </section>
             <section class="advisor-detail-section" aria-labelledby={`proposals-${feature.featureId}`}>
