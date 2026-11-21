@@ -148,7 +148,8 @@
     "check:011f3": "node scripts/check-011f3-operation-proposals.mjs",
     "check:011f4": "node scripts/check-011f4-proposal-review.mjs",
     "check:011f5": "node scripts/check-011f5-visual-advisor.mjs",
-    "check:011f6": "node scripts/check-011f6-step-advisor-inspector.mjs"
+    "check:011f6": "node scripts/check-011f6-step-advisor-inspector.mjs",
+    "check:011g1": "node scripts/check-011g1-step-feature-inventory.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

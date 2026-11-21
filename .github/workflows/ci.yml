@@ -21,6 +21,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Svelte check
         run: pnpm check
+      - name: STEP manufacturing feature inventory
+        run: pnpm check:011g1
       - name: Drill completeness contract
         run: pnpm check:004w
       - name: Unified geometry placement contract
