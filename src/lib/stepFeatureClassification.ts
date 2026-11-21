@@ -88,6 +88,8 @@ export type StepFeatureClassificationResult=
 const cloneRefs=(value:StepInventorySourceReferences):StepInventorySourceReferences=>({faceIds:[...value.faceIds],wireIds:[...value.wireIds],edgeIds:[...value.edgeIds]});
 const finiteTuple=(value:unknown)=>Array.isArray(value)&&value.length===3&&value.every(item=>typeof item==='number'&&Number.isFinite(item));
 const finite=(value:unknown)=>typeof value==='number'&&Number.isFinite(value);
+const record=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+const referenceShape=(value:unknown)=>record(value)&&Array.isArray(value.faceIds)&&Array.isArray(value.wireIds)&&Array.isArray(value.edgeIds);
 const validRefs=(value:unknown):value is StepInventorySourceReferences=>{
   if(!value||typeof value!=='object')return false;
   const refs=value as StepInventorySourceReferences;
@@ -96,7 +98,6 @@ const validRefs=(value:unknown):value is StepInventorySourceReferences=>{
 const validTextList=(value:unknown,allowEmpty=false):value is readonly string[]=>Array.isArray(value)&&(allowEmpty||value.length>0)&&value.every(item=>typeof item==='string'&&item.length>0);
 function validateEntry(entry:StepManufacturingInventoryEntry,index:number):string[]{
   const prefix=`STEP inventory entry ${index}`,errors:string[]=[];
-  if(!entry||typeof entry!=='object')return[`${prefix}: entry is missing.`];
   if(typeof entry.featureId!=='string'||!entry.featureId)errors.push(`${prefix}: stable featureId is missing.`);
   if(entry.source!=='step-brep')errors.push(`${prefix}: STEP/BRep source marker is invalid.`);
   if(!validRefs(entry.sourceReferences))errors.push(`${prefix}: native source references are invalid or not deterministically ordered.`);
@@ -136,6 +137,31 @@ function validateEntry(entry:StepManufacturingInventoryEntry,index:number):strin
   }else errors.push(`${prefix}: unsupported inventory feature kind.`);
   return errors;
 }
+
+/** Stage A: validate containers before any nested value is dereferenced. */
+function validateStructure(value:unknown):{inventory:StepManufacturingFeatureInventory|null;errors:string[]}{
+  const errors:string[]=[];
+  if(!record(value))return{inventory:null,errors:['STEP feature classification requires a non-null inventory object.']};
+  if(value.version!==1)errors.push('STEP feature classification requires inventory version 1.');
+  if(value.source!=='step-brep')errors.push('STEP feature classification requires a STEP/BRep inventory source.');
+  if(!record(value.orientation))errors.push('STEP feature classification requires an orientation object.');
+  else if(!finite(value.orientation.rotationXDeg)||!finite(value.orientation.rotationYDeg)||!finite(value.orientation.rotationZDeg))errors.push('STEP feature classification requires finite numeric orientation components.');
+  if(!Array.isArray(value.entries))errors.push('STEP feature classification requires an entries array.');
+  else value.entries.forEach((candidate,index)=>{
+    const prefix=`STEP inventory entry ${index}`;
+    if(!record(candidate)){errors.push(`${prefix}: entry must be a non-null object.`);return;}
+    if(typeof candidate.featureId!=='string')errors.push(`${prefix}: featureId must be a string.`);
+    if(typeof candidate.source!=='string')errors.push(`${prefix}: source must be a string.`);
+    if(typeof candidate.kind!=='string')errors.push(`${prefix}: kind must be a string discriminant.`);
+    if(typeof candidate.classification!=='string')errors.push(`${prefix}: classification must be a string discriminant.`);
+    if(!referenceShape(candidate.sourceReferences))errors.push(`${prefix}: sourceReferences must contain faceIds, wireIds and edgeIds arrays.`);
+    if(candidate.kind==='hole'&&!referenceShape(candidate.recognitionEvidenceReferences))errors.push(`${prefix}: recognized holes require recognitionEvidenceReferences arrays.`);
+    if(!record(candidate.measurements))errors.push(`${prefix}: measurements must be a non-null object.`);
+    if(!Array.isArray(candidate.evidence))errors.push(`${prefix}: evidence must be an array.`);
+    if(!Array.isArray(candidate.limitations))errors.push(`${prefix}: limitations must be an array.`);
+  });
+  return{inventory:errors.length?null:value as unknown as StepManufacturingFeatureInventory,errors};
+}
 const interpretation=(kind:StepManufacturingInterpretationKind,explanation:string,requiredEvidence:StepRequiredEvidence[]):StepManufacturingInterpretation=>({kind,status:'plausible-unproven',explanation,requiredEvidence});
 const unknown=(kind:StepFeatureUnknownKind,statement:string):StepFeatureUnknown=>({kind,statement});
 const verifiedEvidence=(entry:StepManufacturingInventoryEntry):StepClassificationEvidence[]=>entry.evidence.map(statement=>({kind:'verified-geometry',statement,sourceReferences:cloneRefs(entry.sourceReferences)}));
@@ -152,15 +178,12 @@ function classifyEntry(entry:StepManufacturingInventoryEntry):StepClassifiedFeat
 }
 
 /** Stateless 011-G2 classification over the immutable 011-G1 inventory. */
-export function classifyStepManufacturingFeatures(inventory:StepManufacturingFeatureInventory):StepFeatureClassificationResult{
-  const errors:string[]=[];
-  if(!inventory||typeof inventory!=='object'||inventory.version!==1||inventory.source!=='step-brep')errors.push('STEP feature classification requires a version 1 STEP/BRep inventory.');
-  if(!inventory?.orientation||![inventory.orientation.rotationXDeg,inventory.orientation.rotationYDeg,inventory.orientation.rotationZDeg].every(finite))errors.push('STEP feature classification requires a finite supplied part orientation.');
-  if(!Array.isArray(inventory?.entries))errors.push('STEP feature classification requires inventory entries.');
-  else{
-    errors.push(...inventory.entries.flatMap(validateEntry));
-    if(new Set(inventory.entries.map(entry=>entry.featureId)).size!==inventory.entries.length)errors.push('STEP inventory contains duplicate feature identities.');
-  }
+export function classifyStepManufacturingFeatures(value:unknown):StepFeatureClassificationResult{
+  const structural=validateStructure(value);
+  if(!structural.inventory)return{ok:false,classification:null,errors:structural.errors};
+  const inventory=structural.inventory;
+  const errors=inventory.entries.flatMap(validateEntry);
+  if(!errors.length&&new Set(inventory.entries.map(entry=>entry.featureId)).size!==inventory.entries.length)errors.push('STEP inventory contains duplicate feature identities.');
   if(errors.length)return{ok:false,classification:null,errors};
   return{ok:true,errors:[],classification:{version:1,source:'step-manufacturing-feature-inventory',sourceInventoryVersion:1,orientation:{...inventory.orientation},features:inventory.entries.map(classifyEntry)}};
 }

@@ -28,8 +28,17 @@ No percentage confidence is invented. Unknown intent, setup access, collision cl
 
 `classifyStepManufacturingFeatures()` validates inventory version, orientation, stable identity, deterministic native references, geometric evidence and kind-specific measurements. Invalid or incomplete evidence fails closed with no partial classification. Results are not persisted in 011-G2, so no additional identity mechanism is introduced. Any future persistence must use the existing verified Advisor geometry/context identity and invalidation contract.
 
+### 011-G2a staged fail-closed correction
+
+The independent review and [Greptile finding](https://github.com/bjoepen/BeBlog-CAM/pull/172#discussion_r4654346626) identified unsafe dependent dereferences for malformed runtime data. Validation is now explicitly staged:
+
+1. Structural validation proves the inventory, orientation, entries, reference containers, recognition references, measurements, evidence and limitations are safe to inspect. It performs no dependent semantic checks.
+2. Semantic validation runs only after the complete structural pass succeeds. It checks known discriminants, measurement ranges, topology completeness, recognition-reference containment, deterministic reference ordering and feature identity uniqueness.
+
+Malformed plain-data input always returns `{ ok: false, classification: null, errors }`; no partial classification is produced. Errors follow stable inventory and entry order. The correction uses explicit guards rather than a blanket exception handler and never mutates the input.
+
 The classifier does not import Advisor feasibility, operations, tool selection, preflight, simulation, toolpaths or NC generation. Existing `DIRECT`, `ALTERNATIVE`, `CONDITIONAL` and `NOT_COVERED` statuses are not geometric confidence labels and are absent from this contract.
 
 ## Verification
 
-Run `pnpm check:011g2`. The focused gate covers every G1 feature kind, explicit uncertainty, multiple plausible interpretations without automatic choice, invalid evidence, deterministic ordering, source-reference stability, immutability, Advisor separation and absence of production outputs. Existing G1, Advisor and production regression gates remain authoritative for their respective boundaries.
+Run `pnpm check:011g2`. The focused gate covers every G1 feature kind, explicit uncertainty, multiple plausible interpretations without automatic choice, null and missing containers, malformed references, missing measurements for every feature kind, invalid discriminants, nonfinite values, deterministic errors and output, source-reference stability, immutability, Advisor separation and absence of production outputs. Existing G1, Advisor and production regression gates remain authoritative for their respective boundaries.
