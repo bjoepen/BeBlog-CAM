@@ -8,3 +8,17 @@
 .operation-add button{min-width:0}
 .operation-select{grid-template-columns:28px minmax(0,1fr)}
 .operation-select span:last-child,.operation-select strong,.operation-select small{min-width:0;overflow-wrap:anywhere}
+
+.edit-global-error{padding:10px 12px;border:1px solid #d58b68;border-radius:8px;background:#fff2eb;color:#7b2d12;font-size:12px;line-height:1.45}
+.edit-target-status{display:grid;gap:3px;padding:9px 11px;border:1px solid var(--line,#d8d4cc);border-radius:8px;background:var(--surface,#fff);font-size:12px}
+.edit-target-status span,.edit-accordion summary small{color:var(--muted,#686868);font-size:11px;line-height:1.4}
+.edit-accordion{min-width:0;max-width:100%;border:1px solid var(--line,#d8d4cc);border-radius:9px;background:var(--surface,#fff)}
+.edit-accordion+ .edit-accordion{margin-top:10px}
+.edit-accordion>summary{display:flex;align-items:center;min-height:46px;padding:8px 12px;cursor:pointer;list-style:none}
+.edit-accordion>summary::-webkit-details-marker{display:none}
+.edit-accordion>summary::after{content:'+';margin-left:auto;padding-left:10px;color:var(--muted,#686868);font-size:18px}
+.edit-accordion[open]>summary::after{content:'−'}
+.edit-accordion>summary:focus-visible{outline:2px solid var(--accent,#3876c8);outline-offset:2px;border-radius:8px}
+.edit-accordion>summary>span{display:grid;gap:2px;min-width:0}
+.edit-accordion-body{padding:0 12px 12px;min-width:0}
+.edit-accordion-body>.placement-section:first-child{margin-top:0}
