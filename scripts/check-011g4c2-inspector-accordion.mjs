@@ -140,6 +140,45 @@ check('closed summaries accurately reflect geometry, cut data and strategy acros
   }
 });
 
+check('contour summaries use topology-specific side values for every open and closed option', () => {
+  const openCases = [['left', 'links'], ['right', 'rechts'], ['on-line', 'auf Linie']];
+  for (const [openSide, label] of openCases) {
+    const operation = { ...defaults.defaultContourOperation, topology: 'open', openSide, side: 'inside' };
+    assert.ok(summarize(operation, 'step').strategy.includes(`Offene Kontur · ${label} ·`));
+  }
+  const closedCases = [['outside', 'außen'], ['inside', 'innen'], ['on-line', 'auf Linie']];
+  for (const [side, label] of closedCases) {
+    const operation = { ...defaults.defaultContourOperation, topology: 'closed', side, openSide: 'left' };
+    assert.ok(summarize(operation, 'step').strategy.includes(`Geschlossene Kontur · ${label} ·`));
+  }
+});
+
+check('trochoidal summary reports effective stock-bottom or manual depth without stale manual depth', () => {
+  const manual = { ...trochoidExports.defaultTrochoidalContourContract, totalDepthMm: 3, depthMode: 'manual' };
+  const manualResult = summarize(manual, 'dxf');
+  assert.ok(manualResult.toolAndCut.includes('Tiefe 3 mm'));
+  assert.ok(manualResult.strategy.includes('Manuelle Gesamttiefe'));
+  const through = { ...manual, depthMode: 'stock-bottom', totalDepthMm: 3 };
+  const throughResult = summarize(through, 'dxf');
+  assert.ok(throughResult.toolAndCut.includes('Tiefe bis Rohlingunterseite'));
+  assert.ok(!throughResult.toolAndCut.includes('Tiefe 3 mm'));
+  assert.ok(throughResult.strategy.includes('Tiefe bis Rohlingunterseite'));
+});
+
+check('all four target controls are inside Ziel & Geometrie, with strategy controls kept separate', () => {
+  const targetStart = bearbeitung.indexOf('<details class="edit-accordion" open>');
+  const targetEnd = bearbeitung.indexOf('</details>', targetStart) + '</details>'.length;
+  const strategyStart = bearbeitung.indexOf('<details class="edit-accordion"><summary><span><strong>Strategie &amp; Details');
+  const target = bearbeitung.slice(targetStart, targetEnd);
+  const strategy = bearbeitung.slice(strategyStart);
+  for (const text of ['Wirbelfräsen Kontur', 'Schruppziel', 'setZLevelRoughingMode', 'Inneninseln', 'updateZLevelRoughing({islandMode', '3D-Schruppziel', 'STEP/BRep-Zielflächen']) assert.ok(target.includes(text), `target section misses ${text}`);
+  for (const text of ['Bahnseite &amp; Richtung', 'updateTrochoidal({side:', 'updateTrochoidal({direction:', 'Schruppstrategie', 'Schlichtstrategie']) assert.ok(strategy.includes(text), `strategy section misses ${text}`);
+  assert.equal((app.match(/onclick=\{\(\)=>setZLevelRoughingMode\(/g) ?? []).length, 2);
+  assert.equal((app.match(/onclick=\{\(\)=>updateZLevelRoughing\(\{islandMode:/g) ?? []).length, 2);
+  assert.ok(app.includes(`onSelectedFaceIdsChange={operation.kind==='surface-finishing'?updateSurfaceFinishingFaceIds`));
+  assert.ok(app.includes(`selectedFaceIds={activeStep==='Bearbeiten'`));
+});
+
 check('multi-target summaries use the production DXF identity set and respect open-contour selection', () => {
   const pocket = { ...defaults.defaultPocketOperation, contourIds: [7, 3, 7] };
   assert.match(summarize(pocket, 'dxf').target, /^2 DXF-Konturen ausgewählt$/);

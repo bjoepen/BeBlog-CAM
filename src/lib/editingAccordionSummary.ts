@@ -82,7 +82,9 @@ function toolAndCutSummary(operation: CamOperation): string {
   const diameter = operation.tool.diameterMm.toFixed(2);
   const rpm = Math.round(operation.spindleRpm);
   const feed = Math.round(operation.feedMmMin);
-  const cutDepth = operation.kind === 'z-level-roughing' || operation.kind === '3d-roughing' || operation.kind === 'surface-finishing'
+  const cutDepth = operation.kind === 'trochoidal-contour-roughing' && operation.depthMode === 'stock-bottom'
+    ? 'Tiefe bis Rohlingunterseite'
+    : operation.kind === 'z-level-roughing' || operation.kind === '3d-roughing' || operation.kind === 'surface-finishing'
     ? `Zustellung ${operation.stepDownMm} mm`
     : operation.kind === 'drill' && operation.depthMode === 'stock-bottom'
       ? 'Tiefe bis Rohlingunterseite'
@@ -100,10 +102,14 @@ function strategySummary(operation: CamOperation): string {
       return `Geometrie ${operation.selectionMode === 'layer' ? 'nach Ebene' : 'einzeln'} · ${operation.side === 'on-line' ? 'auf Linie' : operation.side === 'left' ? 'links' : 'rechts'}`;
     case 'drill':
       return `${operation.method === 'drill' ? 'Axial bohren' : 'Helixfräsen'} · ${operation.depthMode === 'stock-bottom' ? 'Durch Rohling' : 'Manuelle Tiefe'}`;
-    case 'contour':
-      return `${operation.topology === 'closed' ? 'Geschlossene' : 'Offene'} Kontur · ${operation.side === 'outside' ? 'außen' : operation.side === 'inside' ? 'innen' : 'auf Linie'} · ${operation.direction === 'climb' ? 'Gleichlauf' : 'Gegenlauf'}`;
+    case 'contour': {
+      const side = operation.topology === 'open'
+        ? operation.openSide === 'left' ? 'links' : operation.openSide === 'right' ? 'rechts' : 'auf Linie'
+        : operation.side === 'outside' ? 'außen' : operation.side === 'inside' ? 'innen' : 'auf Linie';
+      return `${operation.topology === 'closed' ? 'Geschlossene' : 'Offene'} Kontur · ${side} · ${operation.direction === 'climb' ? 'Gleichlauf' : 'Gegenlauf'}`;
+    }
     case 'trochoidal-contour-roughing':
-      return `Wirbelradius ${operation.trochoidRadiusMm.toFixed(2)} mm · ${operation.side === 'outside' ? 'außen' : 'innen'} · ${operation.direction === 'climb' ? 'Gleichlauf' : 'Gegenlauf'}`;
+      return `Wirbelradius ${operation.trochoidRadiusMm.toFixed(2)} mm · ${operation.side === 'outside' ? 'außen' : 'innen'} · ${operation.direction === 'climb' ? 'Gleichlauf' : 'Gegenlauf'} · ${operation.depthMode === 'stock-bottom' ? 'Tiefe bis Rohlingunterseite' : 'Manuelle Gesamttiefe'}`;
     case 'pocket':
       return `${operation.strategy === 'auto' ? 'Automatisch' : operation.strategy === 'raster' ? 'Raster' : operation.strategy === 'concentric' ? 'Kreis' : 'Konturparallel'} · ${operation.entry === 'plunge' ? 'senkrecht' : operation.entry === 'ramp' ? 'Rampe' : 'Helix'}`;
     case 'z-level-roughing':
