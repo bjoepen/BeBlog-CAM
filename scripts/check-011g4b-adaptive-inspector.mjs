@@ -88,6 +88,16 @@ check('workspace enforces viewport minimum and preserves the Werkzeug-Vollseiten
   assert.ok(shellCss().includes('.workspace:has(.tools-page) > .inspector .inspector-layout-controls'));
 });
 
+check('sticky inspector controls span the panel despite inherited max-width and keep scroll clipping', () => {
+  const shell = shellCss();
+  const controlBlock = shell.match(/\.inspector-layout-controls\s*\{([^}]+)\}/)?.[1] ?? '';
+  const bearbeitenCss = fs.readFileSync('src/bearbeiten-inspector.css', 'utf8');
+  assert.match(controlBlock, /max-width:\s*none/);
+  assert.match(controlBlock, /position:\s*sticky/);
+  assert.match(controlBlock, /margin:\s*-28px -24px 18px/);
+  assert.match(bearbeitenCss, /\.inspector\{[^}]*overflow-x:hidden/);
+});
+
 function shellCss() {
   return fs.readFileSync('src/lib/InspectorShell.svelte', 'utf8');
 }

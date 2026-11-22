@@ -104,6 +104,7 @@
     top: 0;
     z-index: 10;
     display: flex;
+    max-width: none;
     align-items: center;
     gap: 8px;
     margin: -28px -24px 18px;
