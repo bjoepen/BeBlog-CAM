@@ -38,6 +38,6 @@ const app = fs.readFileSync(new URL('../src/App.svelte', import.meta.url), 'utf8
 const panel = fs.readFileSync(new URL('../src/lib/StepAdvisorPanel.svelte', import.meta.url), 'utf8');
 assert.match(app, /reviewStepProposals\(advisorOperationProposals\)/);
 assert.match(app, /proposalReviews=\{advisorProposalReviews\}/);
-assert.match(panel, /Prüfstatus:/);
+assert.match(panel, /offene Prüfungen/);
 assert.match(panel, /check\.reason/);
 console.log('011-F4 proposal review checklist PASS');

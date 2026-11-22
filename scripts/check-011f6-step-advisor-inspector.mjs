@@ -7,20 +7,20 @@ import { compile } from 'svelte/compiler';
 const panel = fs.readFileSync(new URL('../src/lib/StepAdvisorPanel.svelte', import.meta.url), 'utf8');
 const compiledPanel = compile(panel, { filename: 'StepAdvisorPanel.svelte', generate: 'client' });
 assert.ok(compiledPanel.js.code.length > 0, 'Svelte inspector must compile');
-assert.match(panel, /<table>/);
-assert.match(panel, /<th scope="col">Werkzeug<\/th>/);
-assert.match(panel, /aria-expanded=\{expandedFeatureIds\.includes\(feature\.featureId\)\}/);
+assert.match(panel, /buildStepAdvisorFeatureCards/);
+assert.match(panel, /data-feature-id=\{entry\.featureId\}/);
+assert.match(panel, /<strong>\{row\.toolName\}<\/strong>/);
+assert.match(panel, /row\.spindleRpm===null/);
+assert.match(panel, /row\.feedMmMin===null/);
 assert.match(panel, /Bohren.*Helixfräsen/s);
-assert.match(panel, /Nicht verfügbar/);
+assert.match(panel, /nicht verfügbar/i);
 assert.match(panel, /check\.reason/);
 assert.match(panel, /Allgemeine Advisor-Hinweise/);
-assert.match(panel, /Featurespezifische Warnungen/);
+assert.match(panel, /Geometrische Details und Einschränkungen/);
+assert.match(panel, /Noch keine Bearbeitungsempfehlung verfügbar/);
 assert.doesNotMatch(panel, /Operation (übernehmen|erzeugen)|NC (erzeugen|exportieren)/i);
-const expandedBlock = panel.indexOf('{#if expandedFeatureIds.includes(feature.featureId)}');
-const detailBuild = panel.indexOf('buildStepAdvisorFeatureDetails(feature.featureId, matches, cuttingAdvice)');
-assert.ok(detailBuild > expandedBlock, 'detail-only searches must stay inside the expanded feature block');
-assert.equal(panel.match(/buildStepAdvisorFeatureDetails\(/g)?.length, 1,
-  'feature detail rows must be calculated only once in the component');
+assert.equal(panel.match(/\{#each featureCards as card \(card\.featureId\)\}/g)?.length, 1,
+  'the overview is the only leading feature list');
 
 const loadTs = path => {
   const source = fs.readFileSync(new URL(path, import.meta.url), 'utf8');
