@@ -6,11 +6,10 @@
 
 ## Architecture and data flow
 
-While the **Prüfen** step is active, `App.svelte` creates the existing verified `AdvisorContext` from the imported source-content SHA-256, orientation, stock, WCS, material, tool library and capability revision. From the same context it independently computes:
+While the **Prüfen** step is active, `App.svelte` creates the existing verified `AdvisorContext` from the imported source-content SHA-256, orientation, stock, WCS, material, tool library and capability revision. It also computes two deliberately separate reactive pipelines:
 
-1. the G1 STEP manufacturing feature inventory;
-2. the G2 feature classification;
-3. the existing `screenStepFeasibility()` report and its exact reviewed-context snapshot.
+1. `buildStepAdvisorGeometryPipeline(importSummary, orientation)` computes the G1 STEP manufacturing feature inventory and G2 feature classification from geometry inputs only;
+2. the Advisor pipeline computes the existing `screenStepFeasibility()` report and its exact full-context reviewed snapshot.
 
 `buildStepAdvisorFeatureOverview()` joins these immutable results. The adapter preserves G1 ordering, feature IDs, measurements and native face/wire/edge references. G2 remains the source for recognition status, qualitative confidence, evidence, possible interpretations, unknowns and limitations. The existing Advisor report remains the only source for drill/helical feasibility.
 
@@ -41,6 +40,8 @@ The existing `captureAdvisorContext()` / `isAdvisorContextCurrent()` contract co
 
 The inventory, classification, report, snapshot and overview are reactive values derived from the current context. When that context disappears or changes, the previous overview is not retained. There is no G3 persistence.
 
+G1/G2 recomputation is narrower: the Svelte reactive statement references only the verified imported STEP summary, part orientation and whether the review step is active. Tool-library, material, stock, WCS and capability-revision changes rebuild the Advisor report and invalidate/rejoin the overview, but do not rebuild unchanged geometry. A changed STEP summary or orientation does rebuild G1 and G2. Leaving and returning to **Prüfen** may recompute this transient geometry state; no cross-step or persistent cache is introduced.
+
 ## UI terminology
 
 The STEP Advisor inspector now separates:
@@ -66,4 +67,8 @@ The integration fails closed with an explicit unavailable state when G1 or G2 fa
 
 ## Acceptance evidence
 
-`pnpm check:011g3` covers the complete G1 → G2 → Advisor pipeline, all six feature kinds, source-reference and ordering preservation, multiple interpretations, verified/missing/stale feasibility, unresolved boundaries, G1/G2 errors, full context invalidation, immutability and the absence of operation/toolpath/NC creation. The existing G1, G2, Advisor and production regression gates remain unchanged and are run as part of delivery QA.
+`pnpm check:011g3` retains the isolated adapter cases and additionally executes a native STEP/BRep topology fixture through the actual production functions `buildStepManufacturingFeatureInventory()`, `classifyStepManufacturingFeatures()`, `screenStepFeasibility()` and `buildStepAdvisorFeatureOverview()`. The fixture contains a recognized hole, rejected cylinder, valid planar face/contours/region and a separate unsupported boundary. The gate verifies real feature IDs, measurements, native references, feasibility matching, out-of-scope `not-assessed` results, context invalidation and input immutability.
+
+The gate also wraps the real G1/G2 producers with execution counters at the pure `createStepAdvisorGeometryPipeline()` boundary. It demonstrates that tool, material, stock, WCS and capability changes do not invoke those producers, while changed STEP geometry and orientation do. A source-level assertion confirms that the actual App reactive statement uses the same narrow dependency boundary.
+
+Manual acceptance remains responsible for confirming the compact inspector layout, expansion behavior and terminology in the packaged application, and for observing that feature cards refresh/disappear correctly while interactively changing imports, orientation and Advisor inputs. The automated gates cover the underlying data, freshness and producer-execution contracts; they do not emulate a complete Tauri UI session.

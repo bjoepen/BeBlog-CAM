@@ -21,8 +21,7 @@
   import FeedsSpeedsCalculator from './lib/FeedsSpeedsCalculator.svelte';
   import StepAdvisorPanel from './lib/StepAdvisorPanel.svelte';
   import { captureAdvisorContext, createStepAdvisorContext, screenStepFeasibility } from './lib/advisorStepFeasibility';
-  import { buildStepManufacturingFeatureInventory } from './lib/stepManufacturingFeatureInventory';
-  import { classifyStepManufacturingFeatures } from './lib/stepFeatureClassification';
+  import { buildStepAdvisorGeometryPipeline } from './lib/stepAdvisorGeometryPipeline';
   import { buildStepAdvisorFeatureOverview } from './lib/stepAdvisorFeatureOverview';
   import { matchStepTools } from './lib/stepToolMatching';
   import { adviseStepCuttingData } from './lib/stepCuttingAdvice';
@@ -129,8 +128,9 @@
     material:advisorContext.material,tools:advisorContext.tools
   }) : null;
   $: advisorReviewedContext = advisorContext && advisorReport ? captureAdvisorContext(advisorContext) : null;
-  $: advisorInventoryResult = advisorContext ? buildStepManufacturingFeatureInventory(advisorContext.summary,advisorContext.orientation) : null;
-  $: advisorClassificationResult = advisorInventoryResult?.ok ? classifyStepManufacturingFeatures(advisorInventoryResult.inventory) : null;
+  $: advisorGeometryPipeline = activeStep==='Prüfen'&&importSummary?.kind==='step'&&importSummary.status==='ready'&&importSummary.brep?.nativeBrep&&/^[a-fA-F0-9]{64}$/.test(importSummary.sourceContentSha256??'') ? buildStepAdvisorGeometryPipeline(importSummary,orientation) : null;
+  $: advisorInventoryResult = advisorGeometryPipeline?.inventoryResult??null;
+  $: advisorClassificationResult = advisorGeometryPipeline?.classificationResult??null;
   $: advisorFeatureOverview = buildStepAdvisorFeatureOverview({inventoryResult:advisorInventoryResult,classificationResult:advisorClassificationResult,report:advisorReport,reviewedContext:advisorReviewedContext,currentContext:advisorContext});
   $: advisorMatches = matchStepTools(advisorReport, advisorTools, $advisorToolLibrary.ready);
   $: advisorCuttingAdvice = adviseStepCuttingData(advisorMatches, advisorTools, $stockMaterial, $advisorToolLibrary.ready);
