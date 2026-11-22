@@ -25,6 +25,8 @@ jobs:
         run: pnpm check:011g1
       - name: STEP feature classification and uncertainty
         run: pnpm check:011g2
+      - name: STEP feature Advisor integration
+        run: pnpm check:011g3
       - name: Drill completeness contract
         run: pnpm check:004w
       - name: Unified geometry placement contract
