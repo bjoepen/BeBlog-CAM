@@ -8,6 +8,7 @@ import './app.css';
 import './floh.css';
 import './overlay-fix.css';
 import './bearbeiten-inspector.css';
+import './inspector-layout.css';
 
 mount(App, { target: document.getElementById('app')! });
 
