@@ -1,8 +1,9 @@
 /* Shared STEP/DXF workspace sizing. Keep at the end of the global layout imports. */
 .workspace {
+  position: relative;
   grid-template-columns: minmax(450px, 1fr) var(--inspector-width, 330px);
 }
 
-.inspector-layout-controls {
-  user-select: none;
+.workspace:has(.tools-page) > .inspector-divider {
+  display: none !important;
 }

@@ -1,25 +1,26 @@
 export const INSPECTOR_LAYOUT_STORAGE_KEY = 'beblog-cam.inspector-layout.v1';
-export const INSPECTOR_COMPACT_WIDTH = 330;
-export const INSPECTOR_EXPANDED_WIDTH = 520;
+export const INSPECTOR_DEFAULT_WIDTH = 330;
 export const INSPECTOR_MIN_WIDTH = 330;
 export const INSPECTOR_MAX_WIDTH = 650;
 export const VIEWPORT_MIN_WIDTH = 450;
 
-export type InspectorMode = 'compact' | 'expanded' | 'custom';
-export type InspectorLayoutPreference = { mode: InspectorMode; width: number };
+export type InspectorLayoutPreference = { width: number };
 
-const defaultPreference: InspectorLayoutPreference = { mode: 'compact', width: INSPECTOR_COMPACT_WIDTH };
+const defaultPreference: InspectorLayoutPreference = { width: INSPECTOR_DEFAULT_WIDTH };
 
 export function normalizeInspectorLayoutPreference(value: unknown): InspectorLayoutPreference {
   if (!value || typeof value !== 'object') return { ...defaultPreference };
   const candidate = value as { mode?: unknown; width?: unknown };
-  if (candidate.mode !== 'compact' && candidate.mode !== 'expanded' && candidate.mode !== 'custom') {
+  if (candidate.mode !== undefined && candidate.mode !== 'compact' && candidate.mode !== 'expanded' && candidate.mode !== 'custom') {
     return { ...defaultPreference };
   }
-  if (candidate.mode === 'compact') return { mode: 'compact', width: INSPECTOR_COMPACT_WIDTH };
-  if (candidate.mode === 'expanded') return { mode: 'expanded', width: INSPECTOR_EXPANDED_WIDTH };
-  if (typeof candidate.width !== 'number' || !Number.isFinite(candidate.width)) return { ...defaultPreference };
-  return { mode: 'custom', width: Math.min(INSPECTOR_MAX_WIDTH, Math.max(INSPECTOR_MIN_WIDTH, Math.round(candidate.width))) };
+  let requestedWidth = candidate.width;
+  // Read the previous version's mode-tagged values without requiring a
+  // project migration. Its stored width remains the authoritative preference.
+  if (requestedWidth === undefined && candidate.mode === 'compact') requestedWidth = INSPECTOR_DEFAULT_WIDTH;
+  if (requestedWidth === undefined && candidate.mode === 'expanded') requestedWidth = 520;
+  if (typeof requestedWidth !== 'number' || !Number.isFinite(requestedWidth)) return { ...defaultPreference };
+  return { width: Math.min(INSPECTOR_MAX_WIDTH, Math.max(INSPECTOR_MIN_WIDTH, Math.round(requestedWidth))) };
 }
 
 export function loadInspectorLayoutPreference(storage: Pick<Storage, 'getItem'>): InspectorLayoutPreference {
@@ -45,7 +46,7 @@ export function saveInspectorLayoutPreference(
 
 export function clampInspectorWidth(requestedWidth: number, workspaceWidth: number): number {
   const upper = Math.max(INSPECTOR_MIN_WIDTH, Math.min(INSPECTOR_MAX_WIDTH, Math.floor(workspaceWidth - VIEWPORT_MIN_WIDTH)));
-  const safeRequested = Number.isFinite(requestedWidth) ? requestedWidth : INSPECTOR_COMPACT_WIDTH;
+  const safeRequested = Number.isFinite(requestedWidth) ? requestedWidth : INSPECTOR_DEFAULT_WIDTH;
   return Math.min(upper, Math.max(INSPECTOR_MIN_WIDTH, Math.round(safeRequested)));
 }
 
