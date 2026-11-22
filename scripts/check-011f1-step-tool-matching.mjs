@@ -50,5 +50,5 @@ const app=fs.readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
 const panel=fs.readFileSync(new URL('../src/lib/StepAdvisorPanel.svelte',import.meta.url),'utf8');
 assert.match(app,/matchStepTools\(advisorReport, advisorTools, \$advisorToolLibrary.ready\)/);
 assert.match(app,/matches=\{advisorMatches\}/);
-assert.match(panel,/keine Freigabe/);
+assert.match(panel,/keine CAM-Operation und geben keine Fertigung frei/);
 console.log('011-F1 STEP tool matching PASS');

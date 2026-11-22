@@ -203,6 +203,8 @@ jobs:
         run: pnpm check:011f6
       - name: Adaptive inspector task accordions
         run: pnpm check:011g4c2
+      - name: STEP Advisor inspector consolidation
+        run: pnpm check:011g4c3
       - name: Frontend build
         run: pnpm build
       - name: Rust check

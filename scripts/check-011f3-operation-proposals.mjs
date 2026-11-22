@@ -52,5 +52,5 @@ const app = fs.readFileSync(new URL('../src/App.svelte', import.meta.url), 'utf8
 const panel = fs.readFileSync(new URL('../src/lib/StepAdvisorPanel.svelte', import.meta.url), 'utf8');
 assert.match(app, /proposeStepOperations\(advisorReport, advisorMatches, advisorCuttingAdvice\)/);
 assert.match(app, /operationProposals=\{advisorOperationProposals\}/);
-assert.match(panel, /Operationsvorschlag \(bedingt\)/);
+assert.match(panel, /Operationsvorschlag · bedingt, nicht übernommen/);
 console.log('011-F3 read-only operation proposals PASS');

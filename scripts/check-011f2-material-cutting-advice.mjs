@@ -50,6 +50,6 @@ assert.equal(advice(matches,[{...drill,name:'renamed'},mill],'aluminium',true).l
 const app=fs.readFileSync(new URL('../src/App.svelte',import.meta.url),'utf8');
 const panel=fs.readFileSync(new URL('../src/lib/StepAdvisorPanel.svelte',import.meta.url),'utf8');
 assert.match(app,/adviseStepCuttingData\(advisorMatches, advisorTools, \$stockMaterial, \$advisorToolLibrary.ready\)/);
-assert.match(panel,/keine automatische Übernahme oder Freigabe/);
+assert.match(panel,/keine CAM-Operation und geben keine Fertigung frei/);
 assert.match(panel,/advice\.toolName/);
 console.log('011-F2 material cutting advice PASS');
