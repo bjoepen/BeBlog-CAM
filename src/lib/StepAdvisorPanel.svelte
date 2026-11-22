@@ -4,11 +4,14 @@
   import type { StepCuttingAdvice } from './stepCuttingAdvice';
   import type { StepOperationProposal } from './stepOperationProposals';
   import type { ProposalReview } from './stepProposalReview';
+  import type { StepAdvisorFeatureOverviewResult } from './stepAdvisorFeatureOverview';
+  import type { StepClassifiedFeature } from './stepFeatureClassification';
   import { toggleExpandedFeature } from './stepAdvisorDisclosure';
   import { buildStepAdvisorFeatureDetails } from './stepAdvisorInspector';
   // The display helper verifies candidate.toolName against advice.toolName in addition to identity fields.
 
   export let report: AdvisorReport | null = null;
+  export let featureOverview: StepAdvisorFeatureOverviewResult | null = null;
   export let reason: string | null = null;
   export let toolCount = 0;
   export let matches: StepToolMatch[] = [];
@@ -17,15 +20,45 @@
   export let proposalReviews: ProposalReview[] = [];
   let expandedFeatureIds: string[] = [];
   const toggleFeature = (id: string) => { expandedFeatureIds = toggleExpandedFeature(expandedFeatureIds, id); };
+  const featureLabel=(kind:StepClassifiedFeature['geometryKind'])=>kind==='hole'?'Bohrung':kind==='unclassified-cylinder'?'Nicht klassifizierter Zylinder':kind==='planar-face'?'Planare Fläche':kind==='contour-wire'?'Kontur-Wire':kind==='planar-region'?'Planare Region':'Ungeklärte Begrenzung';
+  const recognitionLabel=(status:StepClassifiedFeature['recognitionStatus'])=>status==='recognized'?'Geometrisch erkannt':status==='candidate'?'Geometrischer Kandidat':status==='unsupported'?'Nicht unterstützt':'Ungeklärt';
+  const confidenceLabel=(confidence:StepClassifiedFeature['confidence'])=>confidence==='verified-conservative-recognition'?'Konservativ verifiziert':confidence==='verified-native-geometry'?'Native Geometrie verifiziert':confidence==='verified-reconstructed-geometry'?'Rekonstruktion verifiziert':'Unvollständige Geometrieevidenz';
+  const measurementLabel=(feature:StepClassifiedFeature)=>feature.geometryKind==='hole'?`Ø ${feature.geometry.diameterMm.toFixed(2)} mm · Tiefe ${feature.geometry.depthMm.toFixed(2)} mm`:feature.geometryKind==='unclassified-cylinder'?`Radius ${feature.geometry.radiusMm.toFixed(2)} mm`:feature.geometryKind==='planar-face'?`${feature.geometry.wireCount} Begrenzungen · Normal [${feature.geometry.normal.map(value=>value.toFixed(3)).join(', ')}]`:feature.geometryKind==='contour-wire'?`${feature.geometry.topology==='closed'?'geschlossen':'offen'} · Z ${feature.geometry.zMm.toFixed(2)} mm`:feature.geometryKind==='planar-region'?`${feature.geometry.areaMm2.toFixed(2)} mm² · ${feature.geometry.islandCount} Inseln`:`${feature.geometry.resolution} · nativ ${feature.geometry.nativeClosed?'geschlossen':'offen'}`;
+  const referencesLabel=(feature:StepClassifiedFeature)=>`Flächen ${feature.sourceReferences.faceIds.join(', ')||'–'} · Wires ${feature.sourceReferences.wireIds.join(', ')||'–'} · Kanten ${feature.sourceReferences.edgeIds.join(', ')||'–'}`;
 </script>
 
 <section class="placement-section advisor-inspector" aria-label="STEP CAM Advisor Vorprüfung">
   <p class="placement-title">CAM Advisor · STEP-Vorprüfung (011-E5B)</p>
   <div class="advisor-notice advisor-notice-general"><strong>Nur lesende Vorprüfung</strong><p>Keine Bearbeitung wird erzeugt, geändert oder freigegeben; keine NC-Ausgabe. Kandidaten, Richtwerte und Vorschläge sind stets bedingt.</p></div>
+  {#if !reason}
+    <section class="advisor-overview" aria-labelledby="step-feature-overview-title">
+      <h3 id="step-feature-overview-title">Feature-Übersicht</h3>
+      {#if !featureOverview || !featureOverview.ok}
+        <div class="advisor-notice advisor-notice-warning"><strong>Geometrische Klassifikation nicht verfügbar</strong><ul>{#each featureOverview?.errors ?? ['Keine aktuelle Klassifikation vorhanden.'] as message}<li>{message}</li>{/each}</ul></div>
+      {:else}
+        <p class="advisor-context">Geometrische Evidenz und mögliche Interpretationen sind keine Bearbeitungsfreigabe. Feasibility wird ausschließlich aus der bestehenden, kontextgleichen Advisor-Vorprüfung zugeordnet.</p>
+        <div class="advisor-overview-list">
+          {#each featureOverview.overview.features as entry (entry.featureId)}
+            <details class="advisor-overview-card">
+              <summary><span><strong>{featureLabel(entry.classification.geometryKind)} · {entry.featureId}</strong><small>{recognitionLabel(entry.classification.recognitionStatus)} · {confidenceLabel(entry.classification.confidence)}</small><small>{measurementLabel(entry.classification)}</small></span><span class:advisor-feasibility-assessed={entry.feasibility.status==='assessed'}>{entry.feasibility.status==='assessed'?`Feasibility: ${entry.feasibility.assessment.coverage}`:'Feasibility: nicht bewertet'}</span></summary>
+              <div class="advisor-overview-details">
+                <p><strong>Native Referenzen:</strong> {referencesLabel(entry.classification)}</p>
+                <section><strong>Verifizierte Evidenz</strong><ul>{#each entry.classification.evidence as evidence}<li>{evidence.statement}</li>{/each}</ul></section>
+                <section><strong>Mögliche Interpretationen · nicht bewiesen</strong>{#if entry.classification.manufacturingInterpretations.length}<ul>{#each entry.classification.manufacturingInterpretations as interpretation}<li>{interpretation.explanation}</li>{/each}</ul>{:else}<p>Keine positive Fertigungsinterpretation.</p>{/if}</section>
+                <section><strong>Unbekannt / offen</strong><ul>{#each entry.classification.unknowns as unknown}<li>{unknown.statement}</li>{/each}{#each entry.classification.limitations as limitation}<li>{limitation}</li>{/each}</ul></section>
+                <section><strong>Feasibility</strong>{#if entry.feasibility.status==='assessed'}<p>Bestehende Advisor-Bewertung: {entry.feasibility.assessment.coverage}. Diese Bewertung ist von der geometrischen Klassifikation unabhängig.</p>{:else}<p>Nicht bewertet: {entry.feasibility.reason}</p>{/if}</section>
+              </div>
+            </details>
+          {/each}
+        </div>
+      {/if}
+    </section>
+  {/if}
   {#if !reason && toolCount === 0}<div class="advisor-notice advisor-notice-warning"><strong>Werkzeuge nicht verfügbar</strong><p>Keine vollständig validierten Bibliotheksdatensätze im aktuellen Job. Es werden keine Werkzeugstrategien als geeignet angenommen.</p></div>{/if}
   {#if reason}
     <div class="advisor-notice advisor-notice-warning"><strong>Nicht verfügbar</strong><p>{reason}</p></div>
   {:else if report}
+    <h3 class="advisor-section-title">Feasibility · bestehende Advisor-Vorprüfung</h3>
     <p class="advisor-summary"><strong>Status:</strong> {report.status === 'screened' ? 'Vorprüfung durchgeführt' : 'Nicht verfügbar'} · <strong>Features:</strong> {report.features.length}</p>
     <p class="advisor-context">Werkzeugabgleich, Schnittdaten und Operationsentwürfe dienen nur der Prüfung: keine automatische Übernahme oder Freigabe. Alle Produktionsprüfungen bleiben ohne realen Werkzeugweg und Preflight offen.</p>
     {#each report.features as feature (feature.featureId)}
@@ -89,6 +122,15 @@
   .advisor-notice-general { background: color-mix(in srgb, var(--panel, #fff) 90%, #4f7da8); }
   .advisor-notice-warning, .advisor-feature-warning { border-left-color: var(--warning, #a66b00); background: color-mix(in srgb, var(--panel, #fff) 90%, #d99a25); }
   .advisor-context, .advisor-summary { font-size: 0.92rem; }
+  .advisor-overview, .advisor-overview-list { display: grid; gap: 0.6rem; }
+  .advisor-overview h3, .advisor-section-title { margin: 0.35rem 0 0; font-size: 1rem; }
+  .advisor-overview-card { border: 1px solid var(--border, #8b8b8b); border-radius: 0.55rem; overflow: hidden; }
+  .advisor-overview-card summary { cursor: pointer; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem; padding: 0.7rem; }
+  .advisor-overview-card summary > span:first-child { display: grid; gap: 0.18rem; }
+  .advisor-overview-card small { font-size: 0.82rem; font-weight: normal; }
+  .advisor-feasibility-assessed { font-weight: 600; }
+  .advisor-overview-details { display: grid; gap: 0.55rem; border-top: 1px solid var(--border, #8b8b8b); padding: 0.7rem; font-size: 0.9rem; }
+  .advisor-overview-details section > p, .advisor-overview-details section > ul { margin-top: 0.2rem; }
   .advisor-feature-card { border: 1px solid var(--border, #8b8b8b); border-radius: 0.65rem; overflow: hidden; }
   .advisor-feature-header { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; padding: 0.8rem; }
   .advisor-feature-symbol { font-size: 1.8rem; line-height: 1; opacity: 0.8; }
