@@ -47,6 +47,15 @@ assert.equal(duplicateProposals[0].proposal,null,'duplicate feature/tool/method 
 assert.equal(duplicateProposals[0].proposalAmbiguous,true);
 const wrongFeature=buildStepAdvisorCandidateRows(match,advice,[{...proposal,featureId:'hole-B'}],[review]);
 assert.equal(wrongFeature[0].proposal,null,'proposal association requires matching feature identity');
+const duplicateAdvice=buildStepAdvisorFeatureDetails('hole-A',[match],[...advice,{...advice[0],spindleRpm:3100}],[proposal],[review]);
+assert.equal(duplicateAdvice.matchRows[0].rows[0].spindleRpm,null,'duplicate advice remains fail-closed');
+assert.equal(duplicateAdvice.matchRows[0].rows[0].proposal,null,'proposal cannot attach to ambiguous advice');
+assert.equal(duplicateAdvice.unresolvedAdvice.length,2,'every ambiguous advice item remains diagnosed');
+const duplicateReviews=buildStepAdvisorFeatureDetails('hole-A',[match],advice,[proposal],[review,{...review,checks:[{label:'Alternative',status:'open',reason:'zweite Prüfung'}]}]);
+assert.equal(duplicateReviews.matchRows[0].rows[0].proposal.toolId,'drill-6','unique proposal remains visible with ambiguous review');
+assert.equal(duplicateReviews.matchRows[0].rows[0].review,null,'duplicate reviews are never chosen by position');
+assert.equal(duplicateReviews.matchRows[0].rows[0].proposalAmbiguous,true);
+assert.equal(duplicateReviews.unmatchedProposals.length,1,'proposal/review ambiguity is retained in diagnostics');
 
 const kinds=['hole','unclassified-cylinder','planar-face','contour-wire','planar-region','unresolved-boundary'];
 const features=kinds.map((geometryKind,index)=>({
@@ -61,12 +70,40 @@ assert.equal(cards[0].details.matchRows[0].rows[0].proposal.toolId,'drill-6');
 for(const card of cards.slice(1))assert.equal(card.details,null,'unassessed features get no recommendation join');
 assert.equal(buildStepAdvisorFeatureCards({ok:false,overview:null,errors:['stale context']},[match],advice,[proposal],[review]).length,0,'failed or stale overview cannot retain previous cards');
 
+const bulkSize=90;
+const bulkMatches=Array.from({length:bulkSize},(_,i)=>({featureId:`bulk-${i}`,status:'conditional',reasons:[],candidates:[
+  {toolId:'drill-shared',toolName:'Bohrer gemeinsam',method:'drill',reasons:[]},
+  {toolId:'mill-shared',toolName:'Fräser gemeinsam',method:'helical-mill',reasons:[]}
+]}));
+const bulkAdvice=bulkMatches.flatMap(item=>[
+  {featureId:item.featureId,toolId:'drill-shared',toolName:'Bohrer gemeinsam',method:'drill',status:'conditional',spindleRpm:3000,feedMmMin:120,notes:[]},
+  {featureId:item.featureId,toolId:'mill-shared',toolName:'Fräser gemeinsam',method:'helical-mill',status:'conditional',spindleRpm:8000,feedMmMin:300,notes:[]}
+]);
+const bulkProposals=bulkMatches.map(item=>({...proposal,featureId:item.featureId,toolId:'drill-shared',toolName:'Bohrer gemeinsam'}));
+const bulkReviews=bulkMatches.map(item=>({...review,featureId:item.featureId,toolId:'drill-shared'}));
+const bulkOverview={ok:true,overview:{features:bulkMatches.map(item=>({featureId:item.featureId,classification:{geometryKind:'hole'},feasibility:{status:'assessed',assessment:{coverage:'CONDITIONAL'}}}))}};
+const traversals={matches:0,advice:0,proposals:0,reviews:0,globalFilters:0};
+const tracked=(values,key)=>new Proxy(values,{get(target,property,receiver){if(property===Symbol.iterator)return function*(){traversals[key]++;yield* target;};if(property==='filter')return()=>{traversals.globalFilters++;throw new Error(`Repeated whole-list filter on ${key}`);};return Reflect.get(target,property,receiver);}});
+const immutableBulk=JSON.stringify([bulkMatches,bulkAdvice,bulkProposals,bulkReviews]);
+const bulkCards=buildStepAdvisorFeatureCards(bulkOverview,tracked(bulkMatches,'matches'),tracked(bulkAdvice,'advice'),tracked(bulkProposals,'proposals'),tracked(bulkReviews,'reviews'));
+assert.deepEqual(traversals,{matches:1,advice:1,proposals:1,reviews:1,globalFilters:0},'each shared input list is indexed once per presentation update');
+assert.equal(bulkCards.length,bulkSize);
+assert.equal(JSON.stringify([bulkMatches,bulkAdvice,bulkProposals,bulkReviews]),immutableBulk,'indexing does not mutate its inputs');
+for(const index of [0,17,bulkSize-1]){
+  const expected=buildStepAdvisorFeatureDetails(`bulk-${index}`,bulkMatches,bulkAdvice,bulkProposals,bulkReviews);
+  assert.equal(JSON.stringify(bulkCards[index].details),JSON.stringify(expected),`bulk display output remains identical for feature ${index}`);
+}
+
 assert.equal((panel.match(/\{#each featureCards as card \(card\.featureId\)\}/g)??[]).length,1,'one feature-ID-keyed leading list');
 assert.ok(panel.includes('data-feature-id={entry.featureId}'),'stable internal feature identity remains on its card');
 assert.ok(panel.includes('Noch keine Bearbeitungsempfehlung verfügbar.'),'unassessed state is explicit and non-prescriptive');
 assert.ok(panel.includes('Werkzeugkandidat · bedingt')&&panel.includes('Operationsvorschlag · bedingt, nicht übernommen'));
 assert.ok(panel.includes('Geometrische Details und Einschränkungen')&&panel.includes('Native Referenzen:'));
 assert.ok(panel.includes('<details class="geometry-details">')&&panel.includes('<details class="option-details">'));
+assert.ok(panel.includes('container-type:inline-size;container-name:advisor-inspector'),'responsive breakpoint is based on actual inspector/container width');
+assert.ok(panel.includes('@container advisor-inspector (max-width:38rem)'),'narrow tool rows reflow at compact inspector widths');
+assert.ok(panel.includes('grid-template-columns:minmax(0,1fr) minmax(0,1fr)')&&panel.includes('overflow-wrap:anywhere'),'tool name, method and cut values can wrap without horizontal clipping');
+assert.ok(!panel.includes('@media(max-width:36rem)'),'tool-row layout does not depend on the application window width');
 assert.ok(!panel.includes('{#each report.features'),'separate duplicate feasibility feature list removed');
 assert.ok(!/onclick=|Operation\s+(?:übernehmen|erzeugen)|NC\s+(?:erzeugen|exportieren)/i.test(panel),'no selection, operation adoption or NC actions are introduced');
 assert.ok(panel.includes('CONDITIONAL')&&panel.includes('NOT_COVERED'),'coverage values are only translated for display');
