@@ -151,7 +151,8 @@
     "check:011f6": "node scripts/check-011f6-step-advisor-inspector.mjs",
     "check:011g1": "node scripts/check-011g1-step-feature-inventory.mjs",
     "check:011g2": "node scripts/check-011g2-step-feature-classification.mjs",
-    "check:011g3": "node scripts/check-011g3-step-advisor-integration.mjs"
+    "check:011g3": "node scripts/check-011g3-step-advisor-integration.mjs",
+    "check:011g4b": "node scripts/check-011g4b-adaptive-inspector.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
