@@ -65,8 +65,8 @@ const isHorizontal=(normal:Point3Tuple)=>Math.abs(Math.abs(normal[2])-1)<=HORIZO
 const wireEdges=(wire:StepManufacturingWireSource,edges:StepManufacturingEdgeSource[])=>wire.edgeIds.map(id=>edges[id]).filter((edge):edge is StepManufacturingEdgeSource=>!!edge);
 const boundaryOnZ=(wire:StepManufacturingWireSource,edges:StepManufacturingEdgeSource[],zMm:number)=>wireEdges(wire,edges).every(edge=>
   Math.abs(edge.start[2]-zMm)<=GEOMETRY_EPS_MM&&Math.abs(edge.end[2]-zMm)<=GEOMETRY_EPS_MM&&
-  (edge.center===undefined||Math.abs(edge.center[2]-zMm)<=GEOMETRY_EPS_MM)&&
-  (edge.kind!=='circle'||edge.axisDirection!==undefined&&Math.abs(Math.abs(edge.axisDirection[2])-1)<=HORIZONTAL_EPS)
+  (edge.center==null||Math.abs(edge.center[2]-zMm)<=GEOMETRY_EPS_MM)&&
+  (edge.kind!=='circle'||edge.axisDirection!=null&&Math.abs(Math.abs(edge.axisDirection[2])-1)<=HORIZONTAL_EPS)
 );
 const geometricallyClosed=(target:StepContourTarget)=>{
   if(target.topology!=='closed'||!target.segments.length)return target.topology==='open';

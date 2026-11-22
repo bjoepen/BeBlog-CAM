@@ -17,9 +17,9 @@ function load(file){
 const {buildStepManufacturingFeatureInventory}=load('src/lib/stepManufacturingFeatureInventory');
 const {buildStepPocketCandidates}=load('src/lib/stepPocketOperation');
 const identity={rotationXDeg:0,rotationYDeg:0,rotationZDeg:0};
-const line=(edgeId,start,end)=>({edgeId,kind:'line',orientation:'forward',start,end,closed:false,degenerated:false});
+const line=(edgeId,start,end)=>({edgeId,kind:'line',orientation:'forward',start,end,closed:false,degenerated:false,center:null,axisDirection:null,radiusMm:null});
 const circle=(edgeId,center,radiusMm)=>({edgeId,kind:'circle',orientation:'forward',start:[center[0]+radiusMm,center[1],center[2]],end:[center[0]+radiusMm,center[1],center[2]],closed:true,degenerated:false,center,axisDirection:[0,0,1],radiusMm});
-const ellipse=(edgeId,center)=>({edgeId,kind:'ellipse',orientation:'forward',start:[center[0]+1,center[1],center[2]],end:[center[0]+1,center[1],center[2]],closed:true,degenerated:false});
+const ellipse=(edgeId,center)=>({edgeId,kind:'ellipse',orientation:'forward',start:[center[0]+1,center[1],center[2]],end:[center[0]+1,center[1],center[2]],closed:true,degenerated:false,center:null,axisDirection:null,radiusMm:null});
 const edges=[
   line(0,[0,0,0],[10,0,0]),line(1,[10,0,0],[10,10,0]),line(2,[10,10,0],[0,10,0]),line(3,[0,10,0],[0,0,0]),
   line(4,[3,3,0],[3,7,0]),line(5,[3,7,0],[7,7,0]),line(6,[7,7,0],[7,3,0]),line(7,[7,3,0],[3,3,0]),
@@ -65,7 +65,10 @@ check('invalid or incomplete topology fails closed',()=>{const invalid=structure
 check('identical inputs produce deterministic output',()=>{assert.deepEqual(buildStepManufacturingFeatureInventory(summary,identity),result);});
 check('references are deduplicated and deterministically ordered',()=>{for(const entry of entries)for(const values of Object.values(entry.sourceReferences))assert.deepEqual([...values],[...new Set(values)].sort((a,b)=>a-b));});
 check('supplied geometry is not mutated',()=>assert.equal(JSON.stringify(summary),snapshot));
+check('native JSON nulls on optional line geometry are normalized without exception',()=>{const fixture=JSON.parse(JSON.stringify(summary));let value;assert.doesNotThrow(()=>{value=buildStepManufacturingFeatureInventory(fixture,identity);});assert.equal(value.ok,true);const outer=value.inventory.entries.find(item=>item.kind==='contour-wire'&&item.sourceReferences.wireIds.includes(0));assert.ok(outer);assert.equal(outer.featureId,'step-wire:0');assert.deepEqual([...outer.sourceReferences.edgeIds],[0,1,2,3]);});
+check('null required circle attributes fail closed without exception',()=>{for(const field of ['center','axisDirection','radiusMm']){const fixture=JSON.parse(JSON.stringify(summary));fixture.brep.manufacturingEdges[9][field]=null;let value;assert.doesNotThrow(()=>{value=buildStepManufacturingFeatureInventory(fixture,identity);});assert.equal(value.ok,false);assert.equal(value.inventory,null);assert.ok(value.errors.some(error=>error.includes(field==='center'?'Kreismittelpunkt':field==='axisDirection'?'Kreisachse':'Kreisradius')));}});
+check('null required edge endpoint returns a controlled validation error',()=>{const fixture=JSON.parse(JSON.stringify(summary));fixture.brep.manufacturingEdges[0].start=null;let value;assert.doesNotThrow(()=>{value=buildStepManufacturingFeatureInventory(fixture,identity);});assert.equal(value.ok,false);assert.equal(value.inventory,null);assert.ok(value.errors.some(error=>error.includes('Start-/Endpunkt')));});
 check('inventory contains no operation or toolpath output',()=>{const text=JSON.stringify(result);assert.ok(!text.includes('toolpath'));assert.ok(!text.includes('operationKind'));});
 check('production pocket candidate eligibility remains unchanged',()=>{const gapped=withTopology(brep=>{brep.manufacturingEdges[3].end=[0,.01,0];});assert.ok(buildStepPocketCandidates(gapped,identity).some(candidate=>candidate.faceId===0));});
 check('explicit production selections remain mandatory',()=>{const contour=fs.readFileSync('src/lib/stepContourOperation.ts','utf8'),pocket=fs.readFileSync('src/lib/stepPocketOperation.ts','utf8'),drill=fs.readFileSync('src/lib/stepDrillOperation.ts','utf8');assert.ok(contour.includes('operation.stepWireId==null'));assert.ok(pocket.includes('operation.stepFaceId==null'));assert.ok(drill.includes('stepHoleFeatureIds'));});
-console.log('PASS 011-G1: 22 focused inventory cases');
+console.log('PASS 011-G1: 25 focused inventory cases');
